@@ -27,7 +27,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from . import bench, fixer, hidden, pipeline, sandbox
+from . import bench, fixer, gitio, hidden, pipeline, sandbox
 from .case import ConfigError, load_case, materialize
 from .holdout import Attack, load_attacks, split_record
 
@@ -60,13 +60,23 @@ class ModeError(Exception):
     pass
 
 
+def hidden_key_available(repo: str, base: str) -> bool:
+    """Si `.cachai.json` de la base declara un paquete reservado y su clave está en el entorno."""
+    try:
+        h = pipeline.target_from_base(repo, gitio.resolve(repo, base)).hidden
+    except (ConfigError, gitio.GitError, ValueError, OSError):
+        return False
+    return h is not None and bool(os.environ.get(h.key_env))
+
+
 def check_mode(args: argparse.Namespace) -> str:
-    """El modo pedido o, si no se pidió, `full` con tests reservados a mano y
-    `visible` sin ellos. En CI no se adivina: un default que degrada a
-    `visible` aprobaría en silencio lo que `full` rechaza."""
+    """El modo pedido o, si no se pidió, `full` con material reservado a mano
+    (tests reservados o la clave del paquete) y `visible` sin él. En CI no se
+    adivina: un default que degrada a `visible` aprobaría en silencio lo que
+    `full` rechaza."""
     if args.mode:
         return args.mode
-    if args.holdout_tests:
+    if args.holdout_tests or hidden_key_available(args.repo, args.base):
         return "full"
     if any(os.environ.get(k) for k in CI_ENV):
         raise ModeError("en CI hay que pasar --mode explícito (full para el veredicto final)")
