@@ -296,6 +296,18 @@ def compare_red_team(pr_found: list[Attack], base_found: list[Attack]) -> Introd
     )
 
 
+def not_external_notes(result: object) -> list[str]:
+    """Tests de la base que usan el código de la app y no se pueden evaluar desde otro contenedor."""
+    suites = result.get("suites") if isinstance(result, dict) else None
+    base = suites.get("base") if isinstance(suites, dict) else None
+    items = (base or {}).get("not_external") or [] if isinstance(base, dict) else []
+    if not items:
+        return []
+    names = ", ".join(str(x.get("nodeid", "")).rsplit("::", 1)[-1] for x in items[:5]) + (f" y {len(items) - 5} más" if len(items) > 5 else "")
+    return [f"{len(items)} tests de la base no se evaluaron desde afuera porque usan el código de la app ({names}); "
+            "no aprueban ni fallan: ver docs/tests-por-http.md"]
+
+
 def existing_note(existing: list[Attack]) -> str:
     routes = sorted({a.public_route() for a in existing})
     shown = ", ".join(routes[:4]) + (f" y {len(routes) - 4} más" if len(routes) > 4 else "")
@@ -507,7 +519,10 @@ def check(
             inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget)
             return _baseline(mode, base_sha, pr_sha, inside)
 
-        if plan is None and holdout_tests is None and target.hidden is not None:
+        # Sin la clave, el modo visible es la revisión local del dev: sigue sin el
+        # paquete en vez de quedar incompleto. En full, la falta de clave sí lo deja incompleto.
+        local_visible = mode == "visible" and target.hidden is not None and not os.environ.get(target.hidden.key_env)
+        if plan is None and holdout_tests is None and target.hidden is not None and not local_visible:
             try:
                 plan, holdout_tests = load_hidden(repo, base_sha, target, tmp_path / "reservado")
             except (hidden.HiddenError, ValueError, OSError) as e:
@@ -520,11 +535,19 @@ def check(
 
         def done(result: dict | None, ev: Evidence) -> CheckResult:
             verdict = decide(ev)
-            return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, verdict.notes, flags,
+            notes = verdict.notes + ([f"sin {target.hidden.key_env}: no se abrió el paquete reservado, ni sus ataques visibles"]
+                                     if local_visible else [])
+            return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, notes, flags,
                                evaluator=result, split=split, outcome=verdict.outcome, typed=verdict.typed,
                                secrets=reserved_secrets(plan if mode == "full" else None, holdout_tests, result))
 
-        flags = integrity.scan(repo, base_sha, pr_sha, target.tests_dir)
+        spec = target.app
+        eval_files = (spec.compose.file,) if spec.compose else ()
+        app_files = (spec.dockerfile,) if spec.dockerfile else ()
+        flags = integrity.scan(repo, base_sha, pr_sha, target.tests_dir, eval_files, app_files)
+        compose_text = gitio.read_blob(repo, base_sha, spec.compose.file) if spec.compose else None
+        if spec.compose and compose_text is None:
+            return done(None, Evidence(False, integrity_flags=flags, incomplete=[f"la rama base no tiene {spec.compose.file}"]))
         if not gitio.is_ancestor(repo, base_sha, pr_sha):
             return done(None, Evidence(False, integrity_flags=flags, incomplete=["la rama del PR no contiene la punta de la base; hay que actualizarla"]))
         workdir = sandbox.prepare_eval_workdir(base_tree, target.tests_dir, tmp_path / "eval")
@@ -537,7 +560,7 @@ def check(
         pr_found: list[Attack] = []
         red_errors: list[str] = []
         try:
-            app = sandbox.start_app(pr_tree, target)
+            app = sandbox.start_app(pr_tree, target, compose_text)
         except sandbox.SandboxError as e:
             return done(None, Evidence(False, integrity_flags=flags, incomplete=[f"la app del PR no se pudo construir o levantar: {e}"]))
         try:
@@ -553,7 +576,7 @@ def check(
         intro = Introduced(incomplete=red_errors)
         if hunt and not red_errors:
             try:
-                base_app = sandbox.start_app(base_tree, target)
+                base_app = sandbox.start_app(base_tree, target, compose_text)
                 try:
                     base_found = red_team(base_app, target, tmp_path, budget / 2)
                 finally:
@@ -565,6 +588,7 @@ def check(
         ev.incomplete += intro.incomplete
         ev.introduced_attacks += [describe_introduced(a, target.inventory or {}) for a in intro.introduced]
         r = done(result, ev)
+        r.notes += not_external_notes(result)
         r.introduced = [a.to_dict() for a in intro.introduced]
         if intro.existing:
             r.notes.append(existing_note(intro.existing))

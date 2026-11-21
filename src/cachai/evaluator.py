@@ -71,6 +71,10 @@ def parse_junit(path: Path) -> list[dict]:
             if child.tag in ("failure", "error", "skipped"):
                 outcome = {"failure": "failed", "error": "error", "skipped": "skipped"}[child.tag]
                 message = (child.get("message") or "").strip().splitlines()[0][:200] if child.get("message") else ""
+                if outcome == "skipped" and NOT_EXTERNAL in (child.text or ""):
+                    # Salto en la colección: el motivo va en el texto, no en el atributo.
+                    text = child.text or ""
+                    message = text[text.index(NOT_EXTERNAL):].rstrip("')\"")[:200]
                 break
         line = tc.get("line")
         results.append({
@@ -83,9 +87,13 @@ def parse_junit(path: Path) -> list[dict]:
     return results
 
 
+NOT_EXTERNAL = "cachai:no-externo"  # lo pone `pytest_http` a los tests que usan el código de la app
+
+
 def summarize(cases: list[dict], exit_code: int | None, timed_out: bool, log: str) -> dict:
     failed = [c["nodeid"] for c in cases if c["outcome"] in ("failed", "error")]
-    skipped = [c["nodeid"] for c in cases if c["outcome"] == "skipped"]
+    outside = [c for c in cases if c["outcome"] == "skipped" and NOT_EXTERNAL in (c.get("message") or "")]
+    skipped = [c["nodeid"] for c in cases if c["outcome"] == "skipped" and c not in outside]
     passed = sum(c["outcome"] == "passed" for c in cases)
     complete = not timed_out and exit_code is not None and passed + len(failed) > 0
     return {
@@ -100,6 +108,8 @@ def summarize(cases: list[dict], exit_code: int | None, timed_out: bool, log: st
             for c in cases if c["outcome"] in ("failed", "error")
         ],
         "skipped": skipped,
+        # Tests que no se pueden evaluar desde afuera: no aprueban ni fallan, se informan.
+        "not_external": [{"nodeid": c["nodeid"], "reason": (c.get("message") or "").split(": ", 1)[-1]} for c in outside],
         "ok": complete and exit_code == 0 and not failed and not skipped,
         "log_tail": log[-2000:],
     }
@@ -117,7 +127,7 @@ def run_suite(base_url: str, rootdir: Path, target: str, budget: float) -> dict:
             "PYTHONDONTWRITEBYTECODE": "1",
         }
         cmd = [
-            sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-o", "junit_family=xunit1",
+            sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-p", "cachai.pytest_http", "-o", "junit_family=xunit1",
             f"--junitxml={junit}", f"--rootdir={rootdir}", str(rootdir / target),
         ]
         try:

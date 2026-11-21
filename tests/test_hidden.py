@@ -99,3 +99,40 @@ def test_pr_that_edits_the_ci_workflow_is_blocked():
     from cachai.integrity import classify
     (f,) = classify([("M", ".github/workflows/cachai.yml")])
     assert f.severity == "block" and "workflow" in f.reason
+
+
+# --- cachai check local (#12) con paquete reservado --------------------------
+
+def _args(repo, **kw):
+    import argparse
+    return argparse.Namespace(mode=None, holdout_tests=None, repo=str(repo), base="main", **kw)
+
+
+def test_local_default_is_full_only_with_the_key(repo, monkeypatch):
+    for k in cli.CI_ENV:
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.delenv("CACHAI_TEST_KEY", raising=False)
+    assert cli.check_mode(_args(repo)) == "visible"
+    monkeypatch.setenv("CACHAI_TEST_KEY", KEY)
+    assert cli.check_mode(_args(repo)) == "full"
+
+
+@pytest.mark.skipif(__import__("os").environ.get("CP_DOCKER") != "1", reason="requiere CP_DOCKER=1")
+def test_local_visible_without_the_key_is_not_incomplete(tmp_path, monkeypatch):
+    """En la máquina del dev no está la clave: el modo visible sigue sin el paquete y lo anota."""
+    from cachai.case import materialize
+    monkeypatch.delenv("CACHAI_TEST_KEY", raising=False)
+    case = load_case(Path(__file__).resolve().parent.parent / "cases" / "facturas")
+    repo = materialize(case, tmp_path / "facturas")
+    r = pipeline.check(repo, "main", "honesto", "visible", target=_with_hidden(case.target()))
+    assert r.outcome == "approved", r.reasons
+    full = pipeline.check(repo, "main", "honesto", "full", target=_with_hidden(case.target()))
+    assert full.outcome == "incomplete"  # en full, sin clave, no hay veredicto
+    assert any("CACHAI_TEST_KEY" in n for n in r.notes)
+
+
+def _with_hidden(target):
+    from dataclasses import replace
+
+    from cachai.case import Hidden
+    return replace(target, hidden=Hidden(".cachai/reservado.cachai", "CACHAI_TEST_KEY"))

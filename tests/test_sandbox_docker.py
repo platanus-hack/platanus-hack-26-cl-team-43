@@ -439,3 +439,43 @@ def test_app_container_cannot_see_hidden_key_or_material(tmp_path, monkeypatch):
         assert "abierto" not in mounts and str(tmp_path) not in mounts
     finally:
         sandbox.stop(app)
+
+
+# --- Arranque con el compose del repo (#20): app con Postgres -----------------------------
+
+def _postgres_repo(tmp_path):
+    import subprocess as sp
+    src = FACTURAS.parent.parent / "examples" / "postgres-notas"
+    repo = tmp_path / "pg"
+    shutil.copytree(src, repo, ignore=shutil.ignore_patterns("__pycache__"))
+
+    def git(*a):
+        return sp.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *a],
+                      check=True, capture_output=True, text=True).stdout.strip()
+    git("init", "-q", "-b", "main")
+    git("add", "-A")
+    git("commit", "-q", "-m", "base")
+    git("checkout", "-q", "-b", "honesto")
+    (repo / "notas" / "main.py").write_text((repo / "notas" / "main.py").read_text().replace('title="Notas"', 'title="Notas v2"'))
+    git("commit", "-q", "-am", "honesto")
+    git("checkout", "-q", "-b", "socket", "main")
+    c = repo / "docker-compose.yml"
+    c.write_text(c.read_text().replace("    depends_on:", "    privileged: true\n    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n    depends_on:"))
+    git("commit", "-q", "-am", "abre el socket")
+    git("checkout", "-q", "main")
+    return repo
+
+
+def test_compose_app_with_postgres_is_evaluated_from_another_container(tmp_path):
+    from cachai import pipeline
+    repo = _postgres_repo(tmp_path)
+    r = pipeline.check(repo, "main", "honesto", "full", budget=120)
+    assert r.approved, r.to_text()
+    assert r.evaluator["suites"]["base"]["passed"] == 4
+
+
+def test_pr_that_opens_the_docker_socket_in_compose_is_blocked(tmp_path):
+    from cachai import pipeline
+    repo = _postgres_repo(tmp_path)
+    r = pipeline.check(repo, "main", "socket", "full", budget=120)
+    assert not r.approved and any("compose de la evaluación" in x for x in r.reasons), r.to_text()

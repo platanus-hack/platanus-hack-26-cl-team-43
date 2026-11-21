@@ -22,7 +22,8 @@ PR_KINDS = ("cheat", "honest", "half_patch", "correct_patch", "breaking_patch", 
 # Parches de seguridad: dicen arreglar la falla, así que deben bloquear los ataques del caso.
 PATCH_KINDS = ("half_patch", "correct_patch", "breaking_patch")
 CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "families", "holdout_tests", "split", "inventory", "prs"}
-APP_KEYS = {"module", "port", "health"}
+APP_KEYS = {"module", "port", "health", "dockerfile", "compose", "env"}
+COMPOSE_KEYS = {"file", "service"}
 PR_KEYS = {"name", "kind", "description", "delete"}
 SPLIT_KEYS = {"shown", "seed"}
 CONFIG_FILE = ".cachai.json"  # configuración de la evaluación; solo vale la de la rama base
@@ -35,6 +36,7 @@ HIDDEN_KEYS = {"package", "key_env"}
 BRANCH_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 MODULE_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$")
 ENV_RE = re.compile(r"^[A-Z_][A-Z0-9_]{0,63}$")
+SERVICE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$")
 
 
 class ConfigError(ValueError):
@@ -46,18 +48,76 @@ class ConfigError(ValueError):
 
 
 @dataclass(frozen=True)
+class ComposeRef:
+    file: str  # compose de la rama base; Cachai lo interpreta, nunca corre `docker compose`
+    service: str  # el servicio que es la app del PR
+
+
+@dataclass(frozen=True)
 class AppSpec:
-    module: str  # objeto ASGI, p. ej. "invoices.main:app"
+    """Cómo levantar la app del PR.
+
+    Tres formas: `module` (ASGI con la imagen Python de Cachai), `dockerfile`
+    (la imagen del repo) o `compose` (la app y sus servicios, como base de
+    datos). Con `dockerfile` o `compose`, `module` es opcional: si está, se usa
+    para el comando de arranque. `env` son variables de prueba que salen de la
+    configuración de la base, nunca del PR.
+    """
+
+    module: str | None = None  # objeto ASGI, p. ej. "invoices.main:app"
     port: int = 8000
     health: str = "/health"
+    dockerfile: str | None = None
+    compose: ComposeRef | None = None
+    env: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
-        if not isinstance(self.module, str) or not MODULE_RE.match(self.module):
+        if self.module is None and self.dockerfile is None and self.compose is None:
+            raise ValueError("falta module, dockerfile o compose")
+        if self.dockerfile is not None and self.compose is not None:
+            raise ValueError("usa dockerfile o compose, no los dos")
+        if self.module is not None and (not isinstance(self.module, str) or not MODULE_RE.match(self.module)):
             raise ValueError(f"módulo ASGI inválido: {self.module!r}")
         if isinstance(self.port, bool) or not isinstance(self.port, int) or not 1 <= self.port <= 65535:
             raise ValueError(f"puerto inválido: {self.port!r}")
         if not isinstance(self.health, str) or not self.health.startswith("/") or self.health.startswith("//"):
             raise ValueError(f"ruta de salud inválida: {self.health!r}")
+        if self.dockerfile is not None:
+            safe_relpath(self.dockerfile, "dockerfile")
+        if self.compose is not None:
+            safe_relpath(self.compose.file, "compose.file")
+            if not SERVICE_RE.match(str(self.compose.service)):
+                raise ValueError(f"nombre de servicio inválido: {self.compose.service!r}")
+        for k, v in self.env:
+            if not ENV_RE.match(k) or not isinstance(v, str):
+                raise ValueError(f"variable de entorno inválida: {k!r}")
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "AppSpec":
+        d = dict(d)
+        if "compose" in d:
+            c = d["compose"]
+            if not isinstance(c, dict) or set(c) != COMPOSE_KEYS:
+                raise ValueError(f"compose necesita exactamente {sorted(COMPOSE_KEYS)}")
+            d["compose"] = ComposeRef(c["file"], c["service"])
+        if "env" in d:
+            if not isinstance(d["env"], dict):
+                raise ValueError("env debe ser un objeto de textos")
+            d["env"] = tuple(sorted(d["env"].items()))
+        return cls(**d)
+
+    def to_dict(self) -> dict:
+        d: dict = {}
+        if self.module is not None:
+            d["module"] = self.module
+        d["port"], d["health"] = self.port, self.health
+        if self.dockerfile is not None:
+            d["dockerfile"] = self.dockerfile
+        if self.compose is not None:
+            d["compose"] = {"file": self.compose.file, "service": self.compose.service}
+        if self.env:
+            d["env"] = dict(self.env)
+        return d
 
 
 @dataclass(frozen=True)
@@ -83,7 +143,7 @@ class Target:
     def to_dict(self) -> dict:
         d: dict = {
             "version": CONFIG_VERSION,
-            "app": {"module": self.app.module, "port": self.app.port, "health": self.app.health},
+            "app": self.app.to_dict(),
             "tests_dir": self.tests_dir,
         }
         if self.inventory is not None:
@@ -132,10 +192,12 @@ def load_target(data: bytes | str) -> Target:
         raise ConfigError("app", "es obligatorio")
     app = _obj(d, "app")
     _known(app, APP_KEYS, "app")
-    if "module" not in app:
-        raise ConfigError("app.module", "es obligatorio")
+    if not {"module", "dockerfile", "compose"} & set(app):
+        raise ConfigError("app.module", "es obligatorio (o app.dockerfile, o app.compose)")
+    if "compose" in app and isinstance(app["compose"], dict):
+        _known(app["compose"], COMPOSE_KEYS, "app.compose")
     try:
-        spec = AppSpec(**app)
+        spec = AppSpec.from_dict(app)
     except ValueError as e:
         raise ConfigError("app", str(e)) from e
     try:
@@ -296,7 +358,7 @@ def load_case(path: str | Path) -> Case:
     case = Case(
         id=d["id"],
         root=root.resolve(),
-        app=AppSpec(**d["app"]),
+        app=AppSpec.from_dict(d["app"]),
         tests_dir=safe_relpath(d.get("tests_dir", "tests"), "tests_dir"),
         attacks_file=safe_relpath(d["attacks"], "attacks") if d.get("attacks") else None,
         holdout_tests_dir=safe_relpath(d["holdout_tests"], "holdout_tests") if d.get("holdout_tests") else None,
