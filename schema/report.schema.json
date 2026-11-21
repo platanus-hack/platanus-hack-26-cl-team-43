@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/platanus-hack/platanus-hack-26-cl-team-43/schema/report.schema.json",
+  "title": "Reporte de veredicto de Cachai v2",
+  "description": "Lo que escribe `cachai check --report`. Es público: se sube como artefacto y se comenta en el PR. De un ataque reservado solo lleva familia y ruta; nunca el pedido exacto, las marcas ni los tests reservados.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "mode", "base", "pr", "approved", "outcome", "checked", "reasons", "notes", "public"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "mode": {"enum": ["ci", "restore", "visible", "full"]},
+    "base": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+    "pr": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+    "approved": {"type": "boolean"},
+    "outcome": {
+      "enum": ["approved", "rejected", "incomplete"],
+      "description": "rejected: hay evidencia de un problema. incomplete: se rechaza solo porque faltó evidencia."
+    },
+    "checked": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Qué se comprobó. Solo en un aprobado; vacío en los demás."
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "text"],
+        "properties": {
+          "kind": {"enum": ["test_base", "integrity", "attack_visible", "attack_hidden", "holdout_test", "incomplete"]},
+          "text": {"type": "string", "minLength": 1},
+          "family": {"type": "string", "description": "Solo attack_hidden: familia del ataque."},
+          "route": {"type": "string", "description": "Solo attack_hidden: método y ruta sin consulta, con los tramos variables ocultos."}
+        }
+      }
+    },
+    "notes": {"type": "array", "items": {"type": "string"}, "description": "Marcas informativas, no bloquean."},
+    "public": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "markdown"],
+      "properties": {
+        "summary": {"type": "string", "description": "Una línea para el check del PR."},
+        "markdown": {"type": "string", "description": "Cuerpo del comentario en el PR."}
+      }
+    }
+  },
+  "allOf": [
+    {"if": {"properties": {"approved": {"const": true}}}, "then": {"properties": {"outcome": {"const": "approved"}, "reasons": {"maxItems": 0}}}},
+    {"if": {"properties": {"approved": {"const": false}}}, "then": {"properties": {"outcome": {"enum": ["rejected", "incomplete"]}, "reasons": {"minItems": 1}, "checked": {"maxItems": 0}}}}
+  ]
+}

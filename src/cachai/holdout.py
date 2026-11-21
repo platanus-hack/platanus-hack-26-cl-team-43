@@ -42,6 +42,16 @@ REDIRECTS = (301, 302, 303, 307, 308)
 REQUEST_KEYS = {"method", "path", "headers", "json"}
 PREDICATE_KEYS = {"status_in", "body_contains", "body_contains_any", "body_not_contains"}
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+SAFE_SEGMENT = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*$")  # tramo de ruta fijo, que no es un id ni un archivo
+MIN_SECRET = 4  # textos más cortos aparecerían por casualidad en cualquier mensaje
+
+
+def _leaves(v: object) -> list:
+    if isinstance(v, dict):
+        return [x for k, val in v.items() for x in [k, *_leaves(val)]]
+    if isinstance(v, list):
+        return [x for val in v for x in _leaves(val)]
+    return [v]
 
 
 def _str_list(d: dict, key: str) -> tuple[str, ...]:
@@ -203,6 +213,31 @@ class Attack:
 
     def describe(self) -> str:
         return f"{self.id} ({self.request['method']} {self.request['path']})"
+
+    def public_route(self) -> str:
+        """Método y ruta sin consulta, con los tramos variables ocultos: lo único
+        de un ataque reservado que se puede mostrar en un PR."""
+        path = self.request["path"].split("?", 1)[0].split("#", 1)[0]
+        parts = [p if SAFE_SEGMENT.match(p) else "{…}" for p in path.split("/")[1:]]
+        return f"{self.request['method']} /" + "/".join(parts)
+
+    def secrets(self) -> set[str]:
+        """Textos de un ataque reservado que no pueden salir en un reporte público:
+        id, pedidos (ruta, headers, cuerpo) y las marcas de los predicados."""
+        out = {self.id, self.group}
+        requests = [self.request] + ([self.control.request] if self.control else [])
+        predicates = [self.succeeded_if] + ([self.control.expect] if self.control else [])
+        for r in requests:
+            out.add(r["path"])
+            out.update(p for p in r["path"].replace("?", "&").split("&")[1:])
+            out.update(str(v) for v in (r.get("headers") or {}).values())
+            if "json" in r:
+                out.add(json.dumps(r["json"], ensure_ascii=False))
+                out.update(str(v) for v in _leaves(r["json"]))
+        for pred in predicates:
+            for v in pred.to_dict().values():
+                out.update(str(x) for x in v if isinstance(x, str))
+        return {x for x in out if len(x) >= MIN_SECRET}
 
     def to_dict(self) -> dict:
         d = {

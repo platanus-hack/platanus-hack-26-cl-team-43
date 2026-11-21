@@ -35,7 +35,7 @@ def use_color(args: argparse.Namespace) -> bool:
 
 def save_report(result: pipeline.CheckResult, args: argparse.Namespace) -> None:
     if getattr(args, "report", None):
-        Path(args.report).write_text(json.dumps(result.to_dict(), ensure_ascii=False, indent=2) + "\n")
+        Path(args.report).write_text(json.dumps(result.report(), ensure_ascii=False, indent=2) + "\n")
 
 
 def _print(result: pipeline.CheckResult, args: argparse.Namespace) -> None:
@@ -208,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--budget", type=float, default=120.0, help="segundos por evaluación")
         p.add_argument("--json", action="store_true")
         p.add_argument("--color", choices=("auto", "always", "never"), default="auto")
-        p.add_argument("--report", help="guarda el reporte de la corrida en este archivo JSON (una sola corrida)")
+        p.add_argument("--report", help="guarda el reporte público v2 (schema/report.schema.json) en este archivo (una sola corrida)")
 
     args = parser.parse_args(argv)
     return args.func(args)

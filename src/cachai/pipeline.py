@@ -28,11 +28,14 @@ from pathlib import Path
 from . import gitio, integrity, sandbox
 from .case import CONFIG_FILE, ConfigError, Target, load_target
 from .evaluator import EXIT, SCHEMA
-from .gate import Evidence, decide
+from .gate import Evidence, Reason, decide
 from .holdout import ATTACK_OUTCOMES, Attack, Split
 from .integrity import Flag
 
 MODES = ("ci", "restore", "visible", "full")
+REPORT_VERSION = 2
+REDACTED = "[reservado]"
+OUTCOME_TITLE = {"approved": "APROBADO", "rejected": "RECHAZADO", "incomplete": "SIN VEREDICTO"}
 MAX_SHOWN = 6  # motivos que caben en pantalla en la salida en colores
 
 
@@ -50,6 +53,9 @@ class CheckResult:
     split: dict | None = None  # qué ataques vio el parchador y cuáles quedaron reservados
     # approved | rejected (hay evidencia de un problema) | incomplete (solo faltó evidencia)
     outcome: str = ""
+    typed: list[Reason] = field(default_factory=list)  # motivos con su tipo, para el reporte v2
+    # Textos del material reservado que el reporte público nunca muestra.
+    secrets: frozenset[str] = field(default_factory=frozenset, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if not self.outcome:
@@ -94,6 +100,37 @@ class CheckResult:
         """Qué se comprobó, para mostrar junto a un aprobado."""
         return checked_lines(self.to_dict())
 
+    def report(self) -> dict:
+        """Reporte v2 (`schema/report.schema.json`): lo que la Action sube y comenta en el PR.
+
+        Todo el reporte es público: los motivos de un reservado llevan solo
+        familia y ruta, y una última pasada borra cualquier texto del material
+        reservado (ids, pedidos, marcas, nombres de tests) que se haya colado.
+        El detalle completo queda en `to_dict`, para quien tiene el material.
+        """
+        typed = self.typed or [Reason("incomplete" if self.outcome == "incomplete" else "test_base", r, r) for r in self.reasons]
+        reasons = []
+        for r in typed:
+            item = {"kind": r.kind, "text": r.public}
+            if r.family:
+                item["family"] = r.family
+            if r.route:
+                item["route"] = r.route
+            reasons.append(item)
+        report = {
+            "schema_version": REPORT_VERSION,
+            "mode": self.mode,
+            "base": self.base,
+            "pr": self.pr,
+            "approved": self.approved,
+            "outcome": self.outcome,
+            "checked": self.checked(),
+            "reasons": reasons,
+            "notes": list(self.notes),
+        }
+        report["public"] = {"summary": _summary(report), "markdown": _markdown(report)}
+        return _redact(report, self.secrets)
+
 
 def checked_lines(report: dict) -> list[str]:
     """Qué se comprobó en una corrida aprobada, leído de su reporte.
@@ -130,6 +167,71 @@ def checked_lines(report: dict) -> list[str]:
     return out
 
 
+def _summary(report: dict) -> str:
+    title = OUTCOME_TITLE[report["outcome"]]
+    n = len(report["reasons"])
+    if report["approved"]:
+        return f"Cachai: {title}. " + "; ".join(report["checked"])
+    return f"Cachai: {title}, {n} motivo{'s' if n != 1 else ''}."
+
+
+def _markdown(report: dict) -> str:
+    """Texto del comentario en el PR."""
+    lines = [f"### Cachai: {OUTCOME_TITLE[report['outcome']]}", "",
+             f"PR `{report['pr'][:10]}` sobre base `{report['base'][:10]}`, modo `{report['mode']}`."]
+    if report["reasons"]:
+        lines += ["", "**Motivos**", ""] + [f"- `{r['kind']}` {r['text']}" for r in report["reasons"]]
+    if report["checked"]:
+        lines += ["", "**Comprobado**", ""] + [f"- {c}" for c in report["checked"]]
+    if report["notes"]:
+        lines += ["", "**Notas**", ""] + [f"- {n}" for n in report["notes"]]
+    if report["outcome"] == "incomplete":
+        lines += ["", "No se detectó un problema, pero faltó evidencia: sin evidencia no hay aprobado."]
+    return "\n".join(lines) + "\n"
+
+
+def _redact(value: object, secrets: frozenset[str]) -> object:
+    """Reemplaza en todo el reporte cada texto del material reservado. Los más
+    largos primero, para no dejar restos de uno que contiene a otro."""
+    if not secrets:
+        return value
+    ordered = sorted(secrets, key=len, reverse=True)
+
+    def walk(v: object) -> object:
+        if isinstance(v, str):
+            for s in ordered:
+                v = v.replace(s, REDACTED)
+            return v
+        if isinstance(v, dict):
+            return {k: walk(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [walk(x) for x in v]
+        return v
+
+    return walk(value)
+
+
+def reserved_secrets(plan: "AttackPlan | None", holdout_tests: Path | None, result: object) -> frozenset[str]:
+    """Textos que identifican el material reservado de esta corrida."""
+    out: set[str] = set()
+    if plan:
+        for a in plan.subset(plan.split.reserved):
+            out |= a.secrets()
+    if holdout_tests and holdout_tests.is_dir():
+        for f in holdout_tests.rglob("*.py"):
+            out |= {f.name, f.stem}
+    suites = result.get("suites") if isinstance(result, dict) else None
+    holdout = suites.get("holdout") if isinstance(suites, dict) else None
+    if isinstance(holdout, dict):
+        for key in ("failed", "skipped"):
+            out |= {str(x) for x in holdout.get(key) or []}
+        for f in holdout.get("failures") or []:
+            if isinstance(f, dict):
+                out |= {str(f.get(k)) for k in ("nodeid", "file", "message") if f.get(k)}
+                out.add(str(f.get("nodeid", "")).rsplit("::", 1)[-1])
+    return frozenset(x for x in out if len(x) >= 4)
+
+
 @dataclass(frozen=True)
 class AttackPlan:
     """Ataques que el PR debe bloquear y cuáles de ellos son reservados."""
@@ -152,6 +254,10 @@ class AttackPlan:
 
     def describe(self, attack_id: str) -> str:
         return next(a.describe() for a in self.attacks if a.id == attack_id)
+
+    def public(self, attack_id: str) -> tuple[str, str]:
+        a = next(a for a in self.attacks if a.id == attack_id)
+        return a.family, a.public_route()
 
 
 def target_from_base(repo: str | Path, base_sha: str) -> Target:
@@ -275,6 +381,7 @@ def evidence_from(
         integrity_flags=flags,
         visible_attacks_succeeded=[describe(i) for i in confirmed if i not in reserved],
         holdout_attacks_succeeded=[describe(i) for i in confirmed if i in reserved],
+        holdout_attacks_public=[plan.public(i) for i in confirmed if i in reserved] if plan else [],
         holdout_tests_failed=holdout_failed,
         incomplete=incomplete,
     )
@@ -319,7 +426,8 @@ def check(
         def done(result: dict | None, ev: Evidence) -> CheckResult:
             verdict = decide(ev)
             return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, verdict.notes, flags,
-                               evaluator=result, split=split, outcome=verdict.outcome)
+                               evaluator=result, split=split, outcome=verdict.outcome, typed=verdict.typed,
+                               secrets=reserved_secrets(plan if mode == "full" else None, holdout_tests, result))
 
         flags = integrity.scan(repo, base_sha, pr_sha, target.tests_dir)
         if not gitio.is_ancestor(repo, base_sha, pr_sha):

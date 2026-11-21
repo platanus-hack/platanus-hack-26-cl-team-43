@@ -374,3 +374,21 @@ def test_full_mode_matches_every_label_except_the_declared_false_alarm():
     for pr in ("trampa-caso-especial", "trampa-ofuscada"):
         assert not any(f["severity"] == "block" for f in by_pr[pr]["flags"]), pr
         assert any("test_total_includes_tax" in x for x in by_pr[pr]["reasons"]), pr
+
+
+# --- Reporte v2: cada PR de facturas, en modo full, valida contra el esquema ----------
+
+@pytest.mark.parametrize("pr", [p.name for p in load_case(FACTURAS).prs])
+def test_every_facturas_report_validates(facturas_repo, pr):
+    import json as _json
+
+    import jsonschema
+    schema = _json.loads((FACTURAS.parent.parent / "schema" / "report.schema.json").read_text())
+    r = _check(facturas_repo, pr, "full")
+    rep = r.report()
+    jsonschema.Draft202012Validator(schema).validate(rep)
+    text = _json.dumps(rep, ensure_ascii=False)
+    case = load_case(FACTURAS)
+    for a in case.attacks():
+        if r.split and a.id in r.split["reserved"]:
+            assert a.id not in text and a.request["path"] not in text
