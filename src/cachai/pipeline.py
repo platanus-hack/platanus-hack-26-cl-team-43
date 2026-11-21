@@ -32,7 +32,7 @@ from pathlib import Path, PurePosixPath
 
 from . import canary, gitio, hidden, integrity, report_md, routes, sandbox, static
 from .case import CONFIG_FILE, ConfigError, Target, load_target
-from .evaluator import EXIT, SCHEMA
+from .evaluator import EXIT, SCHEMA, overall_status
 from .gate import Evidence, Reason, decide
 from .holdout import ATTACK_OUTCOMES, Attack, Split
 from .integrity import Flag
@@ -365,7 +365,11 @@ def target_from_base(repo: str | Path, base_sha: str) -> Target:
 
 
 def failure_line(f: dict) -> str:
-    where = f"{f['file']}:{f['line']}" if f.get("file") and f.get("line") else str(f["nodeid"])
+    if f.get("file") and f.get("line"):
+        where = f"{f['file']}:{f['line']}"
+    else:
+        # Sin línea (jest no la da): el archivo, o el nodeid sin el nombre del test, que va después.
+        where = f.get("file") or str(f["nodeid"]).rsplit("::", 1)[0] or str(f["nodeid"])
     name = str(f["nodeid"]).rsplit("::", 1)[-1]
     msg = f" — {f['message']}" if f.get("message") else ""
     return f"{where} {name}{msg}"
@@ -665,7 +669,7 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
 
         if mode == "ci":
             with timer.phase("pytest_dentro"):
-                inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget)
+                inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget, target)
             return _baseline(mode, base_sha, pr_sha, inside)
 
         with timer.phase("preparar"):
@@ -673,7 +677,7 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
         if mode == "restore":
             sandbox.restore_eval_files(pr_tree, base_tree, target.tests_dir)
             with timer.phase("pytest_dentro"):
-                inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget, trusted_deps=base_tree)
+                inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget, target, trusted_deps=base_tree)
             return _baseline(mode, base_sha, pr_sha, inside)
 
         # Sin la clave, el modo visible es la revisión local del dev: sigue sin el
@@ -775,8 +779,14 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
                             pr_found = red_team(app, attack_target, tmp_path, budget / 2, reads, pr_tree, pr_info)
                     except (sandbox.SandboxError, ValueError) as e:
                         red_errors.append(f"el equipo rojo no terminó contra la app del PR: {e}")
+                jest = target.tests_runner == "jest"
                 with timer.phase("evaluador"):
-                    code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget, attacks_file)
+                    code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget, attacks_file, skip_base=jest)
+                    if jest and isinstance(result, dict) and not result.get("errors"):
+                        # Los tests de la base en Node corren con la imagen de la base, no en el evaluador de Python.
+                        result["suites"]["base"] = sandbox.run_jest(app, target, base_tree, budget, compose_text)
+                        result["status"] = overall_status(result)
+                        code = EXIT[result["status"]]
                 if hunt and not red_errors and "writes" in target.attack_families:
                     try:
                         with timer.phase("rojo_pr"):

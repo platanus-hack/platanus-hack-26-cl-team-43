@@ -389,10 +389,44 @@ def restore_eval_files(pr_tree: Path, base_tree: Path, tests_dir: str) -> Path:
     return pr_tree
 
 
-def run_pytest_inside(context: Path, tests_dir: str, budget: float = 120.0, trusted_deps: Path | None = None) -> dict:
-    """Líneas base: corre pytest dentro del mismo contenedor que el código.
+def build_target_image(context: Path, target: Case | Target, image: str, compose_text: str | bytes | None = None,
+                       trusted_deps: Path | None = None) -> str | None:
+    """Imagen de la app de `context` según la configuración: la de Cachai (Python), el
+    Dockerfile del repo o el servicio de la app en el compose.
 
-    Devuelve lo que vería un CI: `passed` es verdadero si pytest salió con 0.
+    Devuelve la etiqueta de la imagen temporal de dependencias que hay que borrar
+    (solo con la imagen de Cachai), o None."""
+    spec = target.app
+    if spec.compose is not None:
+        try:
+            text = compose_text if compose_text is not None else _plain_path(context, spec.compose.file).read_bytes()
+            plan = compose_mod.parse(text, spec.compose.service)
+        except (compose_mod.ComposeError, OSError) as e:
+            raise SandboxError(f"compose inválido: {e}") from e
+        ctx = context if plan.app.build_context == "." else _plain_path(context, plan.app.build_context)
+        _build_repo_image(ctx, plan.app.dockerfile or "Dockerfile", image)
+        return None
+    if spec.dockerfile is not None:
+        _build_repo_image(context, spec.dockerfile, image)
+        return None
+    return _build_app_image(context, image, trusted_deps)
+
+
+JEST = "./node_modules/.bin/jest"
+
+
+def tests_command(target: Case | Target | None, tests_dir: str) -> list[str]:
+    if target is not None and getattr(target, "tests_runner", "pytest") == "jest":
+        return [JEST, "--ci", "--cacheDirectory=/tmp/jest", tests_dir]
+    return ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", tests_dir]
+
+
+def run_pytest_inside(context: Path, tests_dir: str, budget: float = 120.0, target: Case | Target | None = None,
+                      trusted_deps: Path | None = None) -> dict:
+    """Líneas base: corre los tests dentro del mismo contenedor que el código.
+
+    Devuelve lo que vería un CI: `passed` es verdadero si los tests salieron con 0.
+    Con `target`, la imagen y el runner salen de su configuración (p. ej. jest).
     `trusted_deps`: árbol de la base; con él se reutiliza la imagen de
     dependencias cacheada si el PR no las cambió.
     """
@@ -401,14 +435,17 @@ def run_pytest_inside(context: Path, tests_dir: str, budget: float = 120.0, trus
     temp: list[str] = []
 
     def build() -> None:
-        deps = _build_app_image(context, image, trusted_deps)
+        if target is None:
+            deps = _build_app_image(context, image, trusted_deps)
+        else:
+            deps = build_target_image(context, target, image, trusted_deps=trusted_deps)
         if deps:
             temp.append(deps)
 
     build()
     cmd = [
-        "run", "--rm", "--name", run_id, "--network", "none", *HARDENING,
-        image, "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", tests_dir,
+        "run", "--rm", "--name", run_id, "--network", "none", *HARDENING, "-e", "HOME=/tmp",
+        image, *tests_command(target, tests_dir),
     ]
     try:
         try:
@@ -605,7 +642,7 @@ def _last_json(stdout: str) -> dict | None:
 
 
 def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_dir: Path | None = None,
-                  budget: float = 120.0, attacks_file: Path | None = None) -> tuple[int, dict]:
+                  budget: float = 120.0, attacks_file: Path | None = None, skip_base: bool = False) -> tuple[int, dict]:
     """Corre el evaluador contra la app. Devuelve (código de salida, JSON del evaluador).
 
     Si el contenedor no termina en `budget` + margen, se mata y se devuelve una
@@ -619,6 +656,8 @@ def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_di
     if attacks_file is not None:
         mounts.append((attacks_file, "/work/attacks.json"))
         args += ["--attacks", "/work/attacks.json"]
+    if skip_base:
+        args.append("--skip-base")
     code, out, err = _run_trusted(app, f"{app.run_id}-eval", mounts, args, budget)
     if code is None:
         return 2, {**INCOMPLETE, "errors": ["el evaluador no terminó a tiempo"]}
@@ -626,6 +665,43 @@ def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_di
     if result is None:
         return 2, {**INCOMPLETE, "errors": [f"salida ilegible del evaluador: {err.strip()[-500:]}"]}
     return code, result
+
+
+def run_jest(app: AppHandle, target: Case | Target, base_tree: Path, budget: float = 120.0,
+             compose_text: str | bytes | None = None) -> dict:
+    """Tests de la base con jest, por HTTP contra la app del PR.
+
+    Corren con la imagen construida desde el árbol de la base (con sus
+    dependencias de desarrollo, su configuración de jest y sus tests), en otro
+    contenedor de la misma red. Nada del PR entra en esa imagen.
+    """
+    from .evaluator import parse_junit, summarize
+
+    tag = f"{app.run_id}-tests"
+    with tempfile.TemporaryDirectory(prefix="cachai-jest-") as tmp:
+        out = Path(tmp) / "out"
+        out.mkdir()
+        os.chmod(out, 0o777)  # el usuario de la imagen (p. ej. node) escribe el junit
+        try:
+            build_target_image(base_tree, target, tag, compose_text)
+            cmd = ["run", "--rm", "--name", tag, "--network", app.network, *HARDENING,
+                   "-v", f"{out.resolve()}:/out", "-e", f"BASE_URL={app.base_url}", "-e", "HOME=/tmp",
+                   "-e", "JEST_JUNIT_OUTPUT_DIR=/out", "-e", "JEST_JUNIT_ADD_FILE_ATTRIBUTE=true",
+                   "-e", "JEST_JUNIT_CLASSNAME={filepath}", "-e", "JEST_JUNIT_TITLE={title}",
+                   # La carpeta va antes de las opciones: --reporters acepta varios valores y se la tragaría.
+                   tag, JEST, target.tests_dir, "--ci", "--cacheDirectory=/tmp/jest", "--reporters=default",
+                   "--reporters=jest-junit"]
+            try:
+                proc = _docker(*cmd, timeout=budget, check=False)
+                code, timed_out, log = proc.returncode, False, proc.stdout + proc.stderr
+            except subprocess.TimeoutExpired:
+                _docker("rm", "-f", tag, check=False, timeout=60)
+                code, timed_out, log = None, True, ""
+            junit = out / "junit.xml"
+            cases = parse_junit(junit) if junit.is_file() else []
+        finally:
+            _remove_image(tag)
+    return summarize(cases, code, timed_out, log)
 
 
 def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budget: float = 60.0,
