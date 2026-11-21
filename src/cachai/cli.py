@@ -4,7 +4,7 @@
     cachai case <carpeta del caso> [--pr <nombre>|all] [--mode <modo>|all]
     cachai redteam <carpeta del caso> [--write]
     cachai bench [carpeta de casos] [--out results]
-    cachai fix <carpeta del caso> [--agent claude|codex] [--runs 3]
+    cachai fix <carpeta del caso> [--agent claude|codex|llm] [--runs 3]
 
 `check` revisa un PR de un repo cuya rama base tiene `.cachai.json`. Si
 el PR es un parche de seguridad, `--attacks` son los ataques que debe bloquear.
@@ -14,6 +14,9 @@ que reproduce lo que vio sin que lo reservado salga del CI.
 `case` arma el repo de un caso de `cases/` y lo revisa; con `all` imprime la
 tabla de modos por PR. `redteam` genera las variantes de ataque del caso y las
 confirma contra su rama base. `check` y `case` salen con 0 si todo se aprueba.
+`fix --agent llm` usa un modelo servido con la API de OpenAI (Hugging Face,
+vLLM...) configurado con `CACHAI_LLM_BASE_URL`, `CACHAI_LLM_API_KEY` y
+`CACHAI_BLUE_MODEL` (el equipo rojo usa `CACHAI_RED_MODEL`).
 """
 
 from __future__ import annotations
@@ -27,7 +30,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from . import bench, fixer, gitio, hidden, pipeline, sandbox
+from . import bench, fixer, gitio, hidden, llm, pipeline, redteam, sandbox
 from .case import ConfigError, load_case, materialize
 from .holdout import Attack, load_attacks, split_record
 
@@ -198,7 +201,13 @@ def cmd_redteam(args: argparse.Namespace) -> int:
         with tempfile.TemporaryDirectory(prefix="cachai-rojo-") as tmp:
             inv = Path(tmp) / "inventory.json"
             inv.write_text(json.dumps(case.inventory))
-            found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, case, inv, args.budget)]
+            # El modelo (si está configurado) se consulta aquí, en el host; el contenedor solo recibe el resultado validado.
+            cfg = llm.load_config()
+            inventory = redteam.Inventory.from_dict(case.inventory)
+            # Las rutas salen de la app de la base (por su red interna), no de código que corra en el host.
+            routes = sandbox.fetch_routes(app, case, inv) if cfg and cfg.red_model else []
+            variants = redteam.llm_variants(cfg, inventory, routes)
+            found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, case, inv, args.budget, llm_variants=variants)]
     finally:
         sandbox.stop(app)
     text = json.dumps([a.to_dict() for a in found], ensure_ascii=False, indent=2) + "\n"
@@ -213,7 +222,11 @@ def cmd_redteam(args: argparse.Namespace) -> int:
 
 def cmd_fix(args: argparse.Namespace) -> int:
     case = load_case(args.case)
-    rows = fixer.run(case, args.agent, args.runs, args.model, args.out, args.budget, policy=args.policy, isolate=not args.no_isolation)
+    try:
+        rows = fixer.run(case, args.agent, args.runs, args.model, args.out, args.budget, policy=args.policy, isolate=not args.no_isolation)
+    except (llm.LLMError, fixer.ConfigError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     fixer.write_summary(case, rows, args.out)
     for r in rows:
         if r["error"] and not r["approved"]:
@@ -336,8 +349,8 @@ def main(argv: list[str] | None = None) -> int:
 
     f = sub.add_parser("fix", help="pide parches a un agente de código real y los revisa")
     f.add_argument("case")
-    f.add_argument("--agent", choices=sorted(fixer.AGENTS), default="claude")
-    f.add_argument("--model", help="modelo del agente; por defecto, el habitual de cada uno")
+    f.add_argument("--agent", choices=[*sorted(fixer.AGENTS), fixer.LLM_AGENT], default="claude")
+    f.add_argument("--model", help="modelo del agente; por defecto, el habitual de cada uno (con llm, CACHAI_BLUE_MODEL; el nombre de un adaptador LoRA sirve)")
     f.add_argument("--runs", type=int, default=3)
     f.add_argument("--policy", choices=sorted(fixer.POLICIES), default="normal",
                    help="normal: arreglar la falla; minimo: parchador instruido para tapar solo lo que vio")

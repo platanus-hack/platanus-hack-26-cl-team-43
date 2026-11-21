@@ -514,9 +514,53 @@ def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_di
 
 
 def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budget: float = 60.0,
-                families: tuple[str, ...] | None = None) -> list[dict]:
-    """Genera y confirma variantes de ataque contra la app (que debe ser la de la rama base)."""
-    args = ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json", "--budget", str(budget)]
+                families: tuple[str, ...] | None = None, llm_variants: list[dict] | None = None) -> list[dict]:
+    """Genera y confirma variantes de ataque contra la app (que debe ser la de la rama base).
+
+    `llm_variants` son variantes del modelo ya validadas en el host. Se montan
+    como archivo de solo lectura: el contenedor no recibe clave ni variables
+    del modelo (y su red es interna).
+    """
+    with tempfile.TemporaryDirectory(prefix="cachai-variantes-") as tmp:
+        mounts = [(inventory_file, "/work/inventory.json")]
+        extra_args: list[str] = []
+        if llm_variants:
+            variants_file = Path(tmp) / "llm_variants.json"
+            variants_file.write_text(json.dumps({"variants": llm_variants}, ensure_ascii=False))
+            mounts.append((variants_file, "/work/llm_variants.json"))
+            extra_args = ["--llm-variants", "/work/llm_variants.json"]
+        return _run_redteam(app, case, mounts, budget, families, extra_args)
+
+
+def fetch_routes(app: AppHandle, case: Case | Target, inventory_file: Path, budget: float = 30.0) -> list[tuple[str, list[str], list[str]]]:
+    """Plantillas de ruta GET de la app, leídas de su `/openapi.json` desde el contenedor de Cachai.
+
+    La app corre solo en su red interna, así que el host no la alcanza; el
+    contenedor de confianza sí, y devuelve únicamente plantillas (sin datos).
+    Lo que llega se trata como texto no confiable: se descarta lo que no tenga
+    la forma esperada. Ante cualquier falla devuelve [] (el modelo trabaja sin rutas).
+    """
+    args = ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json",
+            "--budget", str(budget), "--routes-only"]
+    code, out, _ = _run_trusted(app, f"{app.run_id}-routes", [(inventory_file, "/work/inventory.json")], args, budget,
+                                entrypoint=["python", "-m", "cachai.redteam"])
+    data = _last_json(out) if code == 0 else None
+    routes, size = [], 0
+    for item in (data or {}).get("routes", [])[:200]:
+        if not (isinstance(item, list) and len(item) == 3 and isinstance(item[0], str) and item[0].startswith("/") and not item[0].startswith("//")
+                and all(isinstance(x, list) and all(isinstance(n, str) and len(n) <= 60 for n in x) for x in item[1:])):
+            continue
+        # Topes en el host: el contenedor no es confiable y esto entra al prompt del modelo.
+        if len(item[0]) > 200 or len(item[1]) + len(item[2]) > 20 or size + len(json.dumps(item)) > 16_384:
+            continue
+        size += len(json.dumps(item))
+        routes.append((item[0], item[1], item[2]))
+    return routes
+
+
+def _run_redteam(app: AppHandle, case: Case | Target, mounts: list[tuple[Path, str]], budget: float,
+                 families: tuple[str, ...] | None, extra_args: list[str]) -> list[dict]:
+    args = ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json", "--budget", str(budget), *extra_args]
     if families:
         args += ["--families", ",".join(families)]
     nonce = uuid.uuid4().hex[:12] if not families or "cmdi" in families else ""
@@ -528,7 +572,7 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
         args += ["--canary-host", CANARY_ALIAS]
         aliases = (CANARY_ALIAS,)
     code, out, err = _run_trusted(
-        app, f"{app.run_id}-red", [(inventory_file, "/work/inventory.json")],
+        app, f"{app.run_id}-red", mounts,
         args,
         budget, entrypoint=["python", "-m", "cachai.redteam"], aliases=aliases,
     )

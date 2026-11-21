@@ -39,6 +39,16 @@ en `authn`) también. El ataque
 guarda las marcas que aparecieron y el pedido del dueño como control. No fija el
 status: los datos de otro usuario son una fuga con cualquier código de respuesta.
 
+- `llm` (opcional): si hay un modelo configurado (`CACHAI_LLM_BASE_URL` y
+  `CACHAI_RED_MODEL`), propone variantes extra de `authz` y `files`. Se consulta
+  en el host, antes de lanzar el contenedor del equipo rojo (que no tiene clave
+  ni red externa), y las variantes validadas se montan como archivo de solo
+  lectura. El modelo no es confiable: solo elige ruta, usuario y recurso del
+  inventario; los headers, el dueño y las marcas salen del inventario. El
+  contenedor trata el archivo como no confiable y lo revalida, y cada variante
+  pasa por `confirm` contra la app como cualquier otra. Sin modelo, o ante
+  cualquier falla del modelo, queda solo lo de las plantillas.
+
 Cada ataque lleva su grupo (la ruta, o la forma de escribir la ruta del
 archivo), que es la unidad que se reserva.
 """
@@ -58,7 +68,8 @@ import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 
-from .holdout import Attack, Clients, Control, Predicate, Unverifiable, exchange, searchable
+from . import llm
+from .holdout import Attack, Clients, Control, Predicate, Unverifiable, exchange, searchable, validate_request
 
 INVENTORY_KEYS = {"users", "records", "files", "files_root"}
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,30}$")
@@ -144,6 +155,11 @@ def get_routes(openapi: dict) -> list[tuple[str, list[str], list[str]]]:
             [p["name"] for p in params if p.get("in") == "query"],
         ))
     return routes
+
+
+def routes_payload(openapi: dict) -> dict:
+    """Las plantillas de ruta GET como JSON, para el prompt del equipo rojo (que se arma en el host)."""
+    return {"routes": [[t, p, q] for t, p, q in get_routes(openapi)]}
 
 
 WRITE_METHODS = ("put", "patch", "post", "delete")
@@ -492,6 +508,101 @@ def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]],
     return out
 
 
+def _normalized_group(path: str, inv: Inventory) -> str:
+    """Forma de la ruta sin datos, por segmentos: un segmento igual a un id de registro pasa a `{id}` y uno igual
+    a un archivo del inventario, a `{file}` (también codificados). De la consulta solo quedan las claves, ordenadas:
+    así el modelo no puede fabricar grupos cambiando valores. Es el grupo que se reserva y lo decide Cachai."""
+    route, _, query = path.partition("?")
+    q = urllib.parse.quote
+    files = {x for f in inv.files for x in (f["path"], f["path"].split("/", 1)[-1])}
+    forms = {**{v: "{id}" for r in inv.records for v in (r["id"], q(r["id"], safe=""))},
+             **{v: "{file}" for n in files for v in (n, q(n, safe=""), q(n, safe="/."))}}
+    if forms:
+        alt = "|".join(re.escape(f) for f in sorted(forms, key=len, reverse=True))
+        route = re.sub(rf"(?<![^/])(?:{alt})(?![^/])", lambda m: forms[m.group(0)], route)
+    keys = sorted({kv.split("=", 1)[0] for kv in query.split("&") if kv})
+    return route + ("?" + "&".join(keys) if keys else "")
+
+
+def _accepted(variants: list[dict], inv: Inventory, taken: set[str]) -> list[tuple[dict, Candidate]]:
+    """Las variantes que cumplen las reglas del inventario, con su candidato.
+
+    Los headers, el dueño y las marcas salen del inventario, nunca de la
+    variante, y el grupo se deriva de la ruta. Descarta las que nombran un usuario o recurso inexistente, un
+    atacante que es el dueño, un pedido inválido o un id repetido.
+    """
+    owners = {("authz", r["id"]): r for r in inv.records} | {("files", f["path"]): f for f in inv.files}
+    out: list[tuple[dict, Candidate]] = []
+    seen = set(taken)
+    for v in variants:
+        res = owners.get((v["family"], v["target"]))
+        if res is None or v["attacker"] not in inv.users or v["attacker"] == res["owner"]:
+            continue
+        request = {"method": "GET", "path": v["path"], "headers": inv.users[v["attacker"]]}
+        owner_request = {"method": "GET", "path": v["owner_path"], "headers": inv.users[res["owner"]]}
+        try:
+            validate_request(request)
+            validate_request(owner_request)
+        except ValueError:
+            continue
+        cid = make_id("llm", v["family"], v["path"], v["attacker"])
+        if cid in seen:
+            continue
+        seen.add(cid)
+        out.append((v, Candidate(cid, v["family"], make_id("llm", v["family"], _normalized_group(v["path"], inv)), request, owner_request, tuple(res["markers"]))))
+    return out
+
+
+def variant_candidates(variants: list[dict], inv: Inventory, taken: set[str]) -> list[Candidate]:
+    return [c for _, c in _accepted(variants, inv, taken)]
+
+
+def llm_variants(cfg: llm.LLMConfig | None, inv: Inventory, routes: list[tuple[str, list[str], list[str]]] | None = None) -> list[dict]:
+    """Variantes de `authz` y `files` propuestas por el modelo del equipo rojo. Corre en el host.
+
+    El modelo es la única parte que usa red y clave, y por eso se consulta
+    fuera del contenedor del equipo rojo; ahí solo llega el resultado ya
+    validado (`variant_candidates`). Devuelve [] sin red cuando no hay
+    configuración o modelo. Ante cualquier falla del modelo (red, tiempo, JSON
+    o esquema inválido) avisa por stderr y devuelve [] para seguir con las plantillas.
+    """
+    if cfg is None or not cfg.red_model:
+        return []
+    listing = {
+        "users": sorted(inv.users),
+        "record_ids": [r["id"] for r in inv.records],
+        "file_paths": [f["path"] for f in inv.files],
+        "files_root": inv.files_root,
+        "get_routes": [{"template": t, "path_params": p, "query_params": q} for t, p, q in routes or []],  # solo plantillas, sin datos
+    }
+    system = ("Eres parte de un equipo rojo que prueba una API propia dentro de un sandbox. Propones pedidos GET en que un usuario "
+              "accede al recurso de otro (authz) o a un archivo ajeno escribiendo la ruta de forma alternativa (files). "
+              "Responde solo con el JSON pedido. `path` es el pedido del atacante, `owner_path` el mismo pedido como lo hace el dueño, "
+              "ambos relativos al origen (empiezan con una sola `/`). `target` es un id de recurso o ruta de archivo del inventario.")
+    try:
+        data = llm.complete_json(cfg, cfg.red_model, system, json.dumps(listing, ensure_ascii=False), "attack_variants", llm.VARIANTS_SCHEMA)
+    except llm.LLMError as e:
+        llm.warn(f"el modelo del equipo rojo falló, se usan solo las plantillas: {e}")
+        return []
+    return [v for v, _ in _accepted(data["variants"], inv, set())]
+
+
+def load_variants(path: str | Path | None, inv: Inventory) -> list[dict]:
+    """Lee el archivo de variantes que montó el host. Es un archivo no confiable: se
+    valida de nuevo (esquema y reglas del inventario). Ante cualquier problema devuelve []."""
+    if path is None:
+        return []
+    try:
+        data = json.loads(Path(path).read_text())
+        if not isinstance(data, dict):
+            raise llm.LLMError("no es un objeto")
+        llm.validate_schema(data, llm.VARIANTS_SCHEMA)
+    except (OSError, ValueError, RecursionError, llm.LLMError) as e:
+        llm.warn(f"se ignora el archivo de variantes del modelo: {type(e).__name__}")
+        return []
+    return [v for v, _ in _accepted(data["variants"], inv, set())]
+
+
 def confirm(base_url: str, cands: list[Candidate], budget: float = 60.0, canary: Canary | None = None) -> list[Attack]:
     """Conserva los candidatos que funcionan contra la app.
 
@@ -601,7 +712,7 @@ def _confirm_sqli(clients, base_url: str, c: Candidate, deadline: float) -> Atta
 
 
 def generate(base_url: str, inv: Inventory, budget: float = 60.0, families: tuple[str, ...] | None = None,
-             canary: Canary | None = None, canary_host: str | None = None) -> list[Attack]:
+             canary: Canary | None = None, canary_host: str | None = None, variants: list[dict] | None = None) -> list[Attack]:
     deadline = time.monotonic() + budget
     with Clients() as clients:
         request = {"method": "GET", "path": "/openapi.json"}
@@ -614,6 +725,11 @@ def generate(base_url: str, inv: Inventory, budget: float = 60.0, families: tupl
     marker = f"CNR-WRITE-{secrets.token_hex(6)}"  # aleatoria por corrida: el PR no la conoce
     cands = candidates(inv, get_routes(openapi), families, canary_base, get_write_routes(openapi),
                        openapi.get("components") or {}, marker)
+    if variants and (families is None or {"authz", "files"} & set(families)):
+        extra = [c for c in variant_candidates(variants, inv, {c.id for c in cands}) if families is None or c.family in families]
+        # Antes de las escrituras: esas van siempre al final.
+        first_write = next((i for i, c in enumerate(cands) if c.family == "writes"), len(cands))
+        cands = cands[:first_write] + extra + cands[first_write:]
     return confirm(base_url, cands, deadline - time.monotonic(), canary)
 
 
@@ -628,17 +744,29 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--budget", type=float, default=60.0)
     p.add_argument("--families", default="", help="familias a generar, separadas por coma (todas si se omite)")
     p.add_argument("--canary-host", default="", help="nombre con el que la app llega a este contenedor (activa ssrf)")
+    p.add_argument("--llm-variants", default="", help="archivo con variantes propuestas por el modelo (las valida el host; aquí se revalidan)")
+    p.add_argument("--routes-only", action="store_true", help="solo imprime las plantillas de ruta GET de la app y termina")
     p.add_argument("--cmdi-nonce", default="", help="parte aleatoria de los archivos testigo (activa cmdi)")
     args = p.parse_args(argv)
     inv = Inventory.from_dict(json.loads(Path(args.inventory).read_text()))
     if not wait_for(args.base_url.rstrip("/") + args.health, time.monotonic() + min(30.0, args.budget)):
         print(json.dumps({"error": "la app no respondió"}))
         return 2
+    if args.routes_only:
+        with Clients() as clients:
+            req = {"method": "GET", "path": "/openapi.json"}
+            hops, _ = exchange(clients.for_request(req), args.base_url, req, time.monotonic() + args.budget)
+        if hops[-1][0] != 200:
+            print(json.dumps({"error": f"la app no publica /openapi.json (status {hops[-1][0]})"}))
+            return 2
+        print(json.dumps(routes_payload(json.loads(hops[-1][1])), ensure_ascii=False))
+        return 0
     families = tuple(f for f in args.families.split(",") if f) or None
     canary = Canary() if args.canary_host and (families is None or "ssrf" in families) else None
     deadline = time.monotonic() + args.budget
     try:
-        attacks = generate(args.base_url, inv, args.budget, families, canary, args.canary_host or None)
+        attacks = generate(args.base_url, inv, args.budget, families, canary, args.canary_host or None,
+                           load_variants(args.llm_variants or None, inv))
     finally:
         if canary is not None:
             canary.close()

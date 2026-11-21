@@ -121,6 +121,8 @@ Las tres primeras columnas son líneas base y `full` es Cachai:
 
 Los ataques del caso los genera `cachai redteam cases/facturas` por plantillas, sin ningún modelo, y solo se conservan los que funcionan contra la rama base. Los PR del caso están escritos a mano para reproducir cada tipo de comportamiento.
 
+**Modelos propios (opcional).** `cachai fix --agent llm` y la generación de variantes del equipo rojo pueden usar un modelo servido con la API de OpenAI (`/v1/chat/completions`), por ejemplo un Inference Endpoint de Hugging Face o vLLM/TGI con LoRA. Se configura por entorno: `CACHAI_LLM_BASE_URL` (con el `/v1`), `CACHAI_LLM_API_KEY`, `CACHAI_RED_MODEL`, `CACHAI_BLUE_MODEL` y `CACHAI_LLM_TIMEOUT` (segundos) y `CACHAI_LLM_MAX_TOKENS` (8192 por defecto). El equipo rojo consulta al modelo en el host y el contenedor solo recibe las variantes ya validadas, sin clave ni red externa. La clave no se envía por `http://` salvo a localhost. Cambiar de adaptador es poner su nombre en `CACHAI_RED_MODEL` o `CACHAI_BLUE_MODEL`. La salida se pide con esquema JSON y se valida antes de usarla; sin configuración, o si el modelo falla, el equipo rojo sigue solo con las plantillas y `fix --agent llm` registra el error del intento.
+
 ## Resultados
 
 `cachai bench` corre los 19 PR etiquetados del caso en los cuatro modos. Rechazos con evidencia sobre el total, con intervalo de Wilson al 95 %. Una corrida que no se puede completar se rechaza igual, pero se informa aparte y no cuenta como detección; en esta medición no hubo ninguna:
