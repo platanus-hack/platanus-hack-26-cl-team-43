@@ -69,12 +69,22 @@ def in_dir(path: str, directory: str) -> bool:
     return PurePosixPath(path).parts[: len(d)] == d
 
 
-def classify(changes: list[tuple[str, str]], test_dirs: tuple[str, ...] = ("tests",)) -> list[Flag]:
-    """Marca los cambios por nombre y ubicación, sin mirar el contenido (conservador)."""
+def classify(changes: list[tuple[str, str]], test_dirs: tuple[str, ...] = ("tests",),
+             eval_files: tuple[str, ...] = (), app_files: tuple[str, ...] = ()) -> list[Flag]:
+    """Marca los cambios por nombre y ubicación, sin mirar el contenido (conservador).
+
+    `eval_files`: archivos que la configuración de la base usa para evaluar (el
+    compose): cambiarlos bloquea. `app_files`: los que construyen la app (su
+    Dockerfile): se informa.
+    """
     flags = []
     for status, path in changes:
         name = PurePosixPath(path).name
-        if is_hook(path):
+        if path in eval_files:
+            flags.append(Flag(path, status, "compose de la evaluación (se usa el de la base)"))
+        elif path in app_files:
+            flags.append(Flag(path, status, "Dockerfile de la app cambiado: la imagen se construye con el del PR", "info"))
+        elif is_hook(path):
             flags.append(Flag(path, status, "hook de evaluación"))
         elif any(in_dir(path, d) for d in CI_DIRS):
             flags.append(Flag(path, status, "workflow de CI que corre la revisión"))
@@ -164,11 +174,12 @@ def _scan_pytest_refs(path: str, status: str, pr: bytes, base: bytes | None) -> 
     return flags
 
 
-def scan(repo: str | Path, base_sha: str, pr_sha: str, tests_dir: str = "tests") -> list[Flag]:
+def scan(repo: str | Path, base_sha: str, pr_sha: str, tests_dir: str = "tests",
+         eval_files: tuple[str, ...] = (), app_files: tuple[str, ...] = ()) -> list[Flag]:
     """Marcas de un PR: por nombre (`classify`) y por contenido."""
     changes = gitio.changed_files(repo, base_sha, pr_sha)
     flags = []
-    for f in classify(changes, (tests_dir,)):
+    for f in classify(changes, (tests_dir,), eval_files, app_files):
         name = PurePosixPath(f.path).name
         if f.reason == "configuración de pytest" and name in SHARED_CONFIG:
             try:

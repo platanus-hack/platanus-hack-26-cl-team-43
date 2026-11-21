@@ -529,7 +529,13 @@ def check(
                                evaluator=result, split=split, outcome=verdict.outcome, typed=verdict.typed,
                                secrets=reserved_secrets(plan if mode == "full" else None, holdout_tests, result))
 
-        flags = integrity.scan(repo, base_sha, pr_sha, target.tests_dir)
+        spec = target.app
+        eval_files = (spec.compose.file,) if spec.compose else ()
+        app_files = (spec.dockerfile,) if spec.dockerfile else ()
+        flags = integrity.scan(repo, base_sha, pr_sha, target.tests_dir, eval_files, app_files)
+        compose_text = gitio.read_blob(repo, base_sha, spec.compose.file) if spec.compose else None
+        if spec.compose and compose_text is None:
+            return done(None, Evidence(False, integrity_flags=flags, incomplete=[f"la rama base no tiene {spec.compose.file}"]))
         if not gitio.is_ancestor(repo, base_sha, pr_sha):
             return done(None, Evidence(False, integrity_flags=flags, incomplete=["la rama del PR no contiene la punta de la base; hay que actualizarla"]))
         workdir = sandbox.prepare_eval_workdir(base_tree, target.tests_dir, tmp_path / "eval")
@@ -542,7 +548,7 @@ def check(
         pr_found: list[Attack] = []
         red_errors: list[str] = []
         try:
-            app = sandbox.start_app(pr_tree, target)
+            app = sandbox.start_app(pr_tree, target, compose_text)
         except sandbox.SandboxError as e:
             return done(None, Evidence(False, integrity_flags=flags, incomplete=[f"la app del PR no se pudo construir o levantar: {e}"]))
         try:
@@ -558,7 +564,7 @@ def check(
         intro = Introduced(incomplete=red_errors)
         if hunt and not red_errors:
             try:
-                base_app = sandbox.start_app(base_tree, target)
+                base_app = sandbox.start_app(base_tree, target, compose_text)
                 try:
                     base_found = red_team(base_app, target, tmp_path, budget / 2)
                 finally:

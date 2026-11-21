@@ -13,10 +13,12 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import compose as compose_mod
 from .case import Case, Target
 from .integrity import EVAL_CONFIG, is_hook
 
@@ -30,6 +32,17 @@ HARDENING = [
     "--read-only",
     "--tmpfs", "/tmp",
 ]
+
+
+# Servicios del compose de la base (base de datos, colas): imágenes que eligió la
+# base, no el PR. Necesitan escribir y cambiar de usuario, así que no llevan
+# `--read-only` ni `--cap-drop ALL`; siguen sin red externa ni privilegios nuevos.
+SERVICE_HARDENING = [
+    "--security-opt", "no-new-privileges",
+    "--memory", "1g",
+    "--pids-limit", "512",
+]
+SERVICE_BUDGET = 90.0  # segundos para que los servicios queden sanos
 
 
 class SandboxError(RuntimeError):
@@ -50,6 +63,7 @@ class AppHandle:
     container: str
     image: str
     base_url: str
+    extra: tuple[str, ...] = ()  # contenedores de los servicios del compose
 
 
 # Dos revisiones del mismo árbol producen la misma imagen. Si una la borra justo
@@ -214,30 +228,105 @@ def run_pytest_inside(context: Path, tests_dir: str, budget: float = 120.0) -> d
         _remove_image(image)
 
 
-def start_app(context: Path, case: Case | Target) -> AppHandle:
-    """Construye y levanta la app de `context` en un contenedor aislado, sin salida a internet."""
+def _build_repo_image(context: Path, dockerfile: str, image: str) -> None:
+    """Imagen con el Dockerfile del repo. El contexto es el árbol del PR (no confiable)."""
+    df = _plain_path(context, dockerfile)
+    if not df.is_file():
+        raise SandboxError(f"no existe el Dockerfile {dockerfile}")
+    with _image_lock:
+        _docker("build", "-q", "-f", str(df), "-t", image, str(context))
+
+
+def _wait_services(names: list[tuple[str, bool]], budget: float) -> None:
+    """Espera a que cada servicio esté sano (si tiene healthcheck) o corriendo."""
+    deadline = time.monotonic() + budget
+    for name, has_health in names:
+        while True:
+            fmt = "{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}"
+            status, _, health = _docker("inspect", "-f", fmt, name, timeout=30).stdout.strip().partition(" ")
+            if status in ("exited", "dead"):
+                logs = _docker("logs", "--tail", "20", name, check=False, timeout=30)
+                raise SandboxError(f"el servicio {name} terminó: {(logs.stdout + logs.stderr).strip()[-400:]}")
+            if (health == "healthy") if has_health else status == "running":
+                break
+            if time.monotonic() > deadline:
+                raise SandboxError(f"el servicio {name} no quedó sano a tiempo")
+            time.sleep(1)
+
+
+def start_app(context: Path, case: Case | Target, compose_text: str | bytes | None = None) -> AppHandle:
+    """Construye y levanta la app de `context` en un contenedor aislado, sin salida a internet.
+
+    Con `app.compose`, levanta antes los servicios del compose en la misma red
+    interna. `compose_text` es el compose de la rama base; si no se pasa, se lee
+    de `context` (solo para casos locales confiables).
+    """
+    spec = case.app
     run_id = f"cp-{uuid.uuid4().hex[:10]}"
     image = f"{run_id}-app"
-    _build_app_image(context, image)
     container = f"{run_id}-app"
-    cmd = [
-        "run", "-d", "--name", container, "--network", run_id, "--network-alias", "app", *HARDENING,
-        image, "uvicorn", case.app.module, "--host", "0.0.0.0", "--port", str(case.app.port),
-    ]
+    plan = None
+    if spec.compose is not None:
+        try:
+            text = compose_text if compose_text is not None else _plain_path(context, spec.compose.file).read_bytes()
+            plan = compose_mod.parse(text, spec.compose.service)
+        except (compose_mod.ComposeError, OSError) as e:
+            raise SandboxError(f"compose inválido: {e}") from e
+
+    def build() -> None:
+        if plan is not None:
+            ctx = context if plan.app.build_context == "." else _plain_path(context, plan.app.build_context)
+            _build_repo_image(ctx, plan.app.dockerfile or "Dockerfile", image)
+        elif spec.dockerfile is not None:
+            _build_repo_image(context, spec.dockerfile, image)
+        else:
+            _build_app_image(context, image)
+
+    if spec.module is not None:
+        command = ["uvicorn", spec.module, "--host", "0.0.0.0", "--port", str(spec.port)]
+    else:
+        command = list(plan.app.command) if plan else []
+    env = dict(plan.app.environment) if plan else {}
+    env.update(dict(spec.env))
+    aliases = ["--network-alias", "app"] + (["--network-alias", plan.app.name] if plan else [])
+    cmd = ["run", "-d", "--name", container, "--network", run_id, *aliases, *HARDENING]
+    for k, v in env.items():
+        cmd += ["-e", f"{k}={v}"]
+    cmd += [image, *command]
+
+    extra: list[str] = []
+    handle = AppHandle(run_id, run_id, container, image, "", tuple(extra))
     try:
+        build()
         _docker("network", "create", "--internal", run_id)
+        if plan is not None:
+            waits = []
+            for svc in plan.services:
+                name = f"{run_id}-{svc.name}"
+                extra.append(name)
+                handle.extra = tuple(extra)
+                scmd = ["run", "-d", "--name", name, "--network", run_id, "--network-alias", svc.name, *SERVICE_HARDENING]
+                for k, v in svc.environment:
+                    scmd += ["-e", f"{k}={v}"]
+                if svc.health_cmd:
+                    scmd += ["--health-cmd", svc.health_cmd, "--health-interval", "1s", "--health-timeout", "5s",
+                             "--health-retries", "90", "--health-start-period", "1s"]
+                _docker("pull", "-q", svc.image, check=False, timeout=600)
+                _docker(*scmd, svc.image, *svc.command)
+                waits.append((name, bool(svc.health_cmd)))
+            _wait_services(waits, SERVICE_BUDGET)
         try:
             _docker(*cmd)
         except SandboxError as e:
             if not any(m in str(e) for m in MISSING_IMAGE):
                 raise
             _docker("rm", "-f", container, check=False, timeout=60)
-            _build_app_image(context, image)  # otra corrida fuera de este proceso la borró
+            build()  # otra corrida fuera de este proceso la borró
             _docker(*cmd)
     except SandboxError:
-        stop(AppHandle(run_id, run_id, container, image, ""))
+        stop(handle)
         raise
-    return AppHandle(run_id, run_id, container, image, f"http://app:{case.app.port}")
+    return AppHandle(run_id, run_id, container, image, f"http://app:{spec.port}", tuple(extra))
 
 
 INCOMPLETE = {"schema": 1, "status": "incomplete", "suites": {}, "attacks": None}
@@ -307,6 +396,6 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
 
 
 def stop(app: AppHandle) -> None:
-    _docker("rm", "-f", app.container, check=False, timeout=60)
+    _docker("rm", "-f", app.container, *app.extra, check=False, timeout=60)
     _docker("network", "rm", app.network, check=False, timeout=60)
     _remove_image(app.image)

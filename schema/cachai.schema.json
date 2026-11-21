@@ -5,7 +5,10 @@
   "description": "Configuración de la revisión de Cachai. Solo vale la de la rama base: un PR no puede cambiar con qué se lo juzga. Describe dónde está el material reservado, nunca el material.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "app"],
+  "required": [
+    "version",
+    "app"
+  ],
   "properties": {
     "version": {
       "const": 2,
@@ -14,21 +17,83 @@
     "app": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["module"],
-      "description": "Cómo levantar la app del PR dentro de su contenedor.",
+      "description": "Cómo levantar la app del PR: module (ASGI con la imagen Python de Cachai), dockerfile (la imagen del repo) o compose (la app y sus servicios).",
       "properties": {
         "module": {
           "type": "string",
           "pattern": "^[A-Za-z_][\\w.]*:[A-Za-z_]\\w*$",
-          "description": "Objeto ASGI, p. ej. invoices.main:app."
+          "description": "Objeto ASGI, p. ej. invoices.main:app. Con dockerfile o compose es opcional: si está, define el comando de arranque."
         },
-        "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 8000},
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 8000
+        },
         "health": {
           "type": "string",
           "pattern": "^/(?!/)",
           "default": "/health",
           "description": "Ruta que responde cuando la app está lista."
+        },
+        "dockerfile": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dockerfile del repo, relativo, sin .. ni .git. Se construye con el árbol del PR."
+        },
+        "compose": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "file",
+            "service"
+          ],
+          "description": "Compose de la rama base. Cachai lo interpreta (subconjunto permitido); nunca corre docker compose con él.",
+          "properties": {
+            "file": {
+              "type": "string",
+              "minLength": 1
+            },
+            "service": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$",
+              "description": "Servicio que es la app del PR."
+            }
+          }
+        },
+        "env": {
+          "type": "object",
+          "description": "Variables de prueba para la app; salen de la base, nunca del PR.",
+          "propertyNames": {
+            "pattern": "^[A-Z_][A-Z0-9_]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
         }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "module"
+          ]
+        },
+        {
+          "required": [
+            "dockerfile"
+          ]
+        },
+        {
+          "required": [
+            "compose"
+          ]
+        }
+      ],
+      "not": {
+        "required": [
+          "dockerfile",
+          "compose"
+        ]
       }
     },
     "tests_dir": {
@@ -39,29 +104,61 @@
     "inventory": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["users"],
+      "required": [
+        "users"
+      ],
       "description": "Identidades de prueba y recursos con dueño que el equipo rojo usa para atacar. Las marcas son textos que solo aparecen en el recurso de su dueño.",
       "properties": {
         "users": {
           "type": "object",
           "minProperties": 2,
-          "propertyNames": {"pattern": "^[a-z0-9][a-z0-9_-]{0,30}$"},
+          "propertyNames": {
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,30}$"
+          },
           "additionalProperties": {
             "type": "object",
             "minProperties": 1,
-            "additionalProperties": {"type": "string"},
+            "additionalProperties": {
+              "type": "string"
+            },
             "description": "Headers de autenticación de ese usuario."
           }
         },
-        "records": {"type": "array", "items": {"$ref": "#/$defs/owned", "required": ["id", "owner", "markers"]}},
-        "files": {"type": "array", "items": {"$ref": "#/$defs/owned", "required": ["path", "owner", "markers"]}},
-        "files_root": {"type": "string", "pattern": "^/", "description": "Raíz absoluta de los adjuntos dentro del contenedor de la app."}
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/owned",
+            "required": [
+              "id",
+              "owner",
+              "markers"
+            ]
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/owned",
+            "required": [
+              "path",
+              "owner",
+              "markers"
+            ]
+          }
+        },
+        "files_root": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "Raíz absoluta de los adjuntos dentro del contenedor de la app."
+        }
       }
     },
     "attacks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["families"],
+      "required": [
+        "families"
+      ],
       "description": "Familias de ataque activas. Requiere inventory.",
       "properties": {
         "families": {
@@ -75,11 +172,21 @@
     "hidden": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["package", "key_env"],
+      "required": [
+        "package",
+        "key_env"
+      ],
       "description": "Dónde está el paquete reservado (cifrado) y qué variable del CI tiene su clave.",
       "properties": {
-        "package": {"type": "string", "minLength": 1, "description": "Ruta absoluta, o relativa al repo sin .. ni .git."},
-        "key_env": {"type": "string", "pattern": "^[A-Z_][A-Z0-9_]{0,63}$"}
+        "package": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Ruta absoluta, o relativa al repo sin .. ni .git."
+        },
+        "key_env": {
+          "type": "string",
+          "pattern": "^[A-Z_][A-Z0-9_]{0,63}$"
+        }
       }
     }
   },
@@ -88,10 +195,25 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "id": {"type": "string", "minLength": 1},
-        "path": {"type": "string", "minLength": 1},
-        "owner": {"type": "string"},
-        "markers": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 4}}
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "type": "string"
+        },
+        "markers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 4
+          }
+        }
       }
     }
   }
