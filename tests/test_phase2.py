@@ -439,19 +439,25 @@ def test_control_ok_and_attack_blocked():
     assert [h["Authorization"] for h in seen] == ["Bearer dueno", "Bearer x"]
 
 
-def test_attack_client_looks_like_the_test_client():
-    """Mismos headers que el cliente httpx de los tests: la app no puede distinguirlos."""
+def test_attack_client_looks_like_the_test_client(monkeypatch):
+    """Mismos headers que el cliente httpx de los tests en el evaluador (con el perfil de
+    navegador de la corrida, #18): la app no puede distinguirlos."""
     import httpx
+
+    from cachai import holdout, pytest_http
+    profile = holdout.browser_headers()
+    monkeypatch.setattr(httpx.Client, "__init__", httpx.Client.__init__)
+    pytest_http.use_default_headers(profile)
     seen = []
     srv = Server({}, seen)
     try:
-        run_attacks(srv.url, [attack("a", "/a")])
+        run_attacks(srv.url, [attack("a", "/a")], headers=profile)
         with httpx.Client(base_url=srv.url, timeout=10) as c:
             c.get("/a", headers={"Authorization": "Bearer x"})
     finally:
         srv.close()
     assert seen[0] == seen[1]
-    assert seen[0]["User-Agent"].startswith("python-httpx/")
+    assert seen[0]["User-Agent"] == profile["User-Agent"]
 
 
 def test_json_escapes_do_not_hide_the_marker():

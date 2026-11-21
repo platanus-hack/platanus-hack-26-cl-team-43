@@ -496,23 +496,50 @@ def check(predicate: Predicate, hops: list[tuple[int, str]], pending: str | None
     return False, hops[-1][0]
 
 
+# Perfiles de navegador reales (#18). Un PR que se porta bien solo con clientes de
+# prueba (`python-httpx`, `testclient`) o sin cabeceras de navegador recibe los
+# ataques como los recibiría en producción. Se elige uno al azar por corrida, para
+# que tampoco sirva reconocer un único perfil fijo.
+BROWSER_PROFILES: tuple[dict[str, str], ...] = (
+    {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+     "Accept-Language": "es-CL,es;q=0.9,en;q=0.8"},
+    {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+     "Accept-Language": "es-419,es;q=0.9"},
+    {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0",
+     "Accept-Language": "es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3"},
+    {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1",
+     "Accept-Language": "es-CL,es;q=0.9"},
+)
+# Variable con la que el evaluador le pasa el perfil a los tests (cachai.pytest_http).
+CLIENT_HEADERS_ENV = "CACHAI_CLIENT_HEADERS"
+BROWSER_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.9,*/*;q=0.8"
+
+
+def browser_headers(rng: random.Random | None = None) -> dict[str, str]:
+    profile = (rng or random.SystemRandom()).choice(BROWSER_PROFILES)
+    return {**profile, "Accept": BROWSER_ACCEPT}
+
+
 class Clients:
-    """Un cliente por identidad, igual al que usan los tests (httpx por defecto).
+    """Un cliente por identidad, con las cabeceras de un navegador real.
 
     Cada usuario conserva su propia sesión (cookies, conexión) entre pedidos, y
     nunca la comparte con otro: la respuesta que recibe el dueño en un control
-    no puede darle acceso al otro usuario en el ataque.
+    no puede darle acceso al otro usuario en el ataque. Todas las identidades de
+    una corrida usan el mismo perfil de navegador; los headers del ataque
+    (p. ej. Authorization) se suman encima.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, rng: random.Random | None = None, headers: dict[str, str] | None = None) -> None:
         self._clients: dict[str, object] = {}
+        self.headers = dict(headers) if headers else browser_headers(rng)
 
     def for_request(self, request: dict):
         import httpx
 
         key = json.dumps(sorted((k.lower(), v) for k, v in request.get("headers", {}).items()))
         if key not in self._clients:
-            self._clients[key] = httpx.Client(timeout=10)
+            self._clients[key] = httpx.Client(timeout=10, headers=self.headers)
         return self._clients[key]
 
     def __enter__(self) -> "Clients":
@@ -523,7 +550,8 @@ class Clients:
             c.close()
 
 
-def run_attacks(base_url: str, attacks: list[Attack], deadline: float | None = None, timeout: float = 10.0) -> AttackReport:
+def run_attacks(base_url: str, attacks: list[Attack], deadline: float | None = None, timeout: float = 10.0,
+                headers: dict[str, str] | None = None) -> AttackReport:
     """Ejecuta los ataques contra la app y devuelve un resultado por ataque.
 
     Antes de cada ataque corre su control. Queda como `error`, no como
@@ -533,7 +561,7 @@ def run_attacks(base_url: str, attacks: list[Attack], deadline: float | None = N
     """
     deadline = time.monotonic() + timeout * max(len(attacks), 1) * 2 if deadline is None else deadline
     report = AttackReport(tuple(a.id for a in attacks))
-    with Clients() as clients:
+    with Clients(headers=headers) as clients:
         for a in attacks:
             try:
                 if a.control is not None:
