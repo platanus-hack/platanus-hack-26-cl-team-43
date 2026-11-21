@@ -53,6 +53,12 @@ async function publish({ github, context, core, env, readFile = (p) => fs.readFi
   } catch (e) {
     report = null;
   }
+  // Un reporte sin la parte pública (v1, o escrito a medias) se trata como ausente:
+  // así el comentario anterior pasa a «sin veredicto» en vez de quedar mostrando el veredicto viejo.
+  const pub = report && report.public;
+  if (!pub || typeof pub.markdown !== 'string' || typeof pub.summary !== 'string' || typeof report.outcome !== 'string') {
+    report = null;
+  }
   const params = { owner, repo, issue_number: pr.number };
   const result = { comment: null, check: null };
 

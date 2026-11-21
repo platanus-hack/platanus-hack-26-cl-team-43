@@ -150,3 +150,11 @@ test('sin reporte y sin comentario previo no publica nada', async () => {
   const { calls } = await run({ rep: null });
   assert.equal(calls.create.length + calls.update.length, 0);
 });
+
+test('un reporte sin parte pública cuenta como ausente: el comentario viejo pasa a «sin veredicto»', async () => {
+  const own = { id: 8, user: { login: BOT }, body: body('APROBADO') };
+  const { calls, result } = await run({ pages: [[own]], rep: JSON.stringify({ approved: true, outcome: 'approved' }) });
+  assert.equal(result.comment, 'stale');
+  assert.ok(!calls.update[0].body.includes('APROBADO'));
+  assert.equal(calls.checks.length, 0);
+});

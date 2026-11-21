@@ -124,3 +124,13 @@ def test_action_and_example_workflow_are_valid_yaml():
     assert "--public" in step["run"] and "pull_request_target" not in (ROOT / "examples" / "workflow.yml").read_text().split("#")[0]
     wf = yaml.safe_load((ROOT / "examples" / "workflow.yml").read_text())
     assert list(wf[True]) == ["pull_request"]  # `on:` se lee como True en YAML 1.1
+
+
+def test_a_short_reserved_text_never_breaks_a_reason_kind():
+    """Un texto reservado como «test» no puede convertir test_base en [reservado]_base y perder el motivo."""
+    r, _ = run()
+    r.secrets = r.secrets | {"test", "attack", "base"}
+    rep = r.report()
+    kinds = [x["kind"] for x in rep["reasons"]]
+    assert set(kinds) <= set(REASON_KINDS)
+    VALIDATOR.validate(rep)

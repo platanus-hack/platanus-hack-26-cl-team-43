@@ -1,9 +1,11 @@
 """Texto público del veredicto: la línea del check y el comentario del PR.
 
 Se arma solo con el reporte v2 ya público (`CheckResult.report`): de un ataque
-reservado, familia y ruta; de un test reservado, cuántos fallan. `pipeline`
-pasa después todo el reporte por `_redact`, así que si un texto reservado se
-colara por un motivo, igual sale como `[reservado]`.
+reservado, familia y ruta; de un test reservado, cuántos fallan. Antes de
+armar el texto, `pipeline` redacta los campos que vienen de datos (`checked`,
+`notes` y el texto, la familia y la ruta de cada motivo): si un texto
+reservado se colara, sale como `[reservado]`. El texto fijo de este módulo
+(títulos, comando, marcador) no pasa por la redacción.
 
 El detalle de cada motivo viene del código del PR (mensajes de assert, rutas de
 archivos), así que va dentro de bloques de código: así no puede inyectar HTML,

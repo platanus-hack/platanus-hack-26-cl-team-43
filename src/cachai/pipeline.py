@@ -131,7 +131,9 @@ class CheckResult:
             # Solo los campos que vienen de datos se redactan, y antes de armar el texto: el texto fijo
             # del comentario (títulos, comando, marcador) no se toca aunque un secreto coincida con él.
             "checked": _redact(self.checked(), self.secrets),
-            "reasons": _redact(reasons, self.secrets),
+            # De cada motivo se redacta lo que viene de datos; `kind` es un valor fijo del esquema y no se toca:
+            # un texto reservado corto (p. ej. «test») no puede romperlo y hacer que el motivo se pierda.
+            "reasons": [{k: (v if k == "kind" else _redact(v, self.secrets)) for k, v in r.items()} for r in reasons],
             "notes": _redact(list(self.notes), self.secrets),
         }
         report["public"] = {"summary": report_md.summary(report), "markdown": report_md.markdown(report)}
