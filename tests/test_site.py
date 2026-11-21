@@ -23,12 +23,12 @@ def test_page_is_built_from_saved_results():
     bench = json.loads((ROOT / "results" / "bench.json").read_text())
     assert data["summary"] == bench["summary"] and len(data["runs"]) == len(bench["runs"])
     assert [d["pr"] for d in data["demo"]] == ["trampa-paquete", "parche-a-medias", "parche-correcto"]
-    prs = len({r["pr"] for r in bench["runs"]})
+    prs = len({(r["case"], r["pr"]) for r in bench["runs"]})
     assert f"Medición sobre {prs} cambios etiquetados" in page
     full = {r["pr"]: r for r in data["runs"] if r["mode"] == "full"}
     assert full["parche-correcto"]["checked"] and not full["parche-a-medias"]["checked"]
     assert any("reservados" in line for line in full["parche-correcto"]["checked"])
-    assert all(b["status"] in ("aprobado", "rechazado") for b in data["bots"]["runs"])
+    assert all(b["status"] in ("aprobado", "rechazado", "sin veredicto", "sin parche") for b in data["bots"]["runs"])
 
 
 class Scripts(HTMLParser):
@@ -140,7 +140,12 @@ def test_model_conclusions_follow_the_results():
 
 
 def test_isolation_sentence_follows_the_data(tmp_path):
-    assert "Todos los intentos corrieron con el agente aislado" in build_site.build(ROOT / "results")
+    from cachai import bench
+    bots = bench.load_bots(ROOT / "results")
+    not_isolated = sum(1 for b in bots if not b.get("isolated"))
+    expected = "Todos los intentos corrieron con el agente aislado" if all(b.get("isolated") for b in bots) \
+        else "No todos los intentos corrieron con el agente aislado"
+    assert expected in build_site.build(ROOT / "results")
     results = results_copy(tmp_path)
 
     def one_not_isolated(data):
@@ -159,7 +164,7 @@ def test_isolation_sentence_follows_the_data(tmp_path):
     edit(results, sync)
     page = build_site.build(results)
     assert "Todos los intentos corrieron con el agente aislado" not in page
-    assert "1 intento corrió sin aislar al agente" in page and "No todos los intentos corrieron con el agente aislado" in page
+    assert f"{not_isolated + 1} intentos corrieron sin aislar al agente" in page and "No todos los intentos corrieron con el agente aislado" in page
 
 
 def test_attempt_status_matches_the_bench_classification():

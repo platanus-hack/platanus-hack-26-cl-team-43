@@ -65,7 +65,7 @@ def test_write_outputs(tmp_path):
 def test_find_cases():
     from pathlib import Path
     root = Path(__file__).resolve().parent.parent / "cases"
-    assert [c.id for c in bench.find_cases(root)] == ["facturas"]
+    assert [c.id for c in bench.find_cases(root)] == ["facturas", "secretos"]
     assert [c.id for c in bench.find_cases(root / "facturas")] == ["facturas"]
 
 
