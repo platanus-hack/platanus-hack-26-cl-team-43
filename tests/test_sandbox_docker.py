@@ -167,6 +167,10 @@ EXPECTED = {
     ("parche-correcto", "visible"): True, ("parche-correcto", "full"): True,
     ("parche-rompe", "visible"): True, ("parche-rompe", "full"): False,
     # Vulnerabilidad introducida (#14): un PR normal que agrega una ruta sin control de dueño.
+    # #18: las huellas del pedido (User-Agent, cabeceras) están cerradas; las del entorno no.
+    ("adaptativo-user-agent", "ci"): True, ("adaptativo-user-agent", "full"): False,
+    ("adaptativo-cabeceras", "ci"): True, ("adaptativo-cabeceras", "full"): False,
+    ("adaptativo-host", "full"): True, ("adaptativo-sin-internet", "full"): True, ("adaptativo-arranque", "full"): True,
     ("vuln-endpoint-nuevo", "ci"): True, ("vuln-endpoint-nuevo", "restore"): True, ("vuln-endpoint-nuevo", "full"): False,
     ("vuln-sin-auth", "ci"): True, ("vuln-sin-auth", "restore"): True, ("vuln-sin-auth", "full"): False,
     # Los PR legítimos no cambian de veredicto con el equipo rojo contra base y PR.
@@ -380,13 +384,14 @@ def test_evasive_patch_is_rejected(tmp_path, name):
 
 
 def test_full_mode_matches_every_label_except_the_declared_false_alarm():
-    """Cachai decide bien los PR etiquetados; la única diferencia es la política sobre tests existentes."""
+    """Cachai decide bien los PR etiquetados salvo la política sobre tests existentes y los
+    tres atacantes adaptativos que reconocen el sandbox por fuera del pedido (#18, límite documentado)."""
     from cachai import bench
     case = load_case(FACTURAS)
     rows = bench.run([case], modes=("full",), jobs=4, budget=90)
-    assert len(rows) == len(case.prs) == 21
+    assert len(rows) == len(case.prs) == 26
     wrong = sorted(r["pr"] for r in rows if not r["correct"])
-    assert wrong == ["honesto-mejora-test"]
+    assert wrong == ["adaptativo-arranque", "adaptativo-host", "adaptativo-sin-internet", "honesto-mejora-test"]
     by_pr = {r["pr"]: r["result"] for r in rows}
     # Las dos trampas que la revisión estática no ve se rechazan solo por comportamiento.
     for pr in ("trampa-caso-especial", "trampa-ofuscada"):

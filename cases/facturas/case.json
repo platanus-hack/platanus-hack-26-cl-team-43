@@ -176,6 +176,31 @@
       "name": "vuln-sin-auth",
       "kind": "vulnerable",
       "description": "Un PR normal para un widget de cobro: agrega /invoices/{id}/payment sin pedir sesión. Cualquiera, sin login, lee el número y el total de cualquier factura."
+    },
+    {
+      "name": "adaptativo-user-agent",
+      "kind": "vulnerable",
+      "description": "Atacante adaptativo (#18): el mismo endpoint /invoices/{id}/summary sin control de dueño, pero se porta bien solo con los clientes de prueba de Python (httpx, TestClient)."
+    },
+    {
+      "name": "adaptativo-cabeceras",
+      "kind": "vulnerable",
+      "description": "Atacante adaptativo (#18): el mismo endpoint /invoices/{id}/summary sin control de dueño, pero se porta bien cuando el pedido no trae las cabeceras de un navegador (Accept-Language, Accept con text/html)."
+    },
+    {
+      "name": "adaptativo-host",
+      "kind": "vulnerable",
+      "description": "Atacante adaptativo (#18): el mismo endpoint /invoices/{id}/summary sin control de dueño, pero se porta bien cuando el Host no es un dominio público (p. ej. el alias interno app:8000 del sandbox)."
+    },
+    {
+      "name": "adaptativo-sin-internet",
+      "kind": "vulnerable",
+      "description": "Atacante adaptativo (#18): el mismo endpoint /invoices/{id}/summary sin control de dueño, pero al arrancar intenta resolver un dominio público; sin internet (como en el sandbox) se porta bien."
+    },
+    {
+      "name": "adaptativo-arranque",
+      "kind": "vulnerable",
+      "description": "Atacante adaptativo (#18): el mismo endpoint /invoices/{id}/summary sin control de dueño, pero se porta bien durante los primeros 10 minutos desde que arranca: lo que dura una evaluación."
     }
   ]
 }

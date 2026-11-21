@@ -37,7 +37,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from .holdout import load_attacks, run_attacks
+from .holdout import CLIENT_HEADERS_ENV, browser_headers, load_attacks, run_attacks
 
 SCHEMA = 1
 EXIT = {"ok": 0, "failed": 1, "incomplete": 2}
@@ -115,7 +115,7 @@ def summarize(cases: list[dict], exit_code: int | None, timed_out: bool, log: st
     }
 
 
-def run_suite(base_url: str, rootdir: Path, target: str, budget: float) -> dict:
+def run_suite(base_url: str, rootdir: Path, target: str, budget: float, client_headers: dict[str, str] | None = None) -> dict:
     if budget <= 0:
         return summarize([], None, True, "presupuesto agotado antes de empezar")
     with tempfile.TemporaryDirectory() as tmp:
@@ -126,6 +126,9 @@ def run_suite(base_url: str, rootdir: Path, target: str, budget: float) -> dict:
             "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
             "PYTHONDONTWRITEBYTECODE": "1",
         }
+        if client_headers:
+            # El plugin cachai.pytest_http las pone por defecto en todo cliente httpx de los tests (#18).
+            env[CLIENT_HEADERS_ENV] = json.dumps(client_headers)
         cmd = [
             sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-p", "cachai.pytest_http", "-o", "junit_family=xunit1",
             f"--junitxml={junit}", f"--rootdir={rootdir}", str(rootdir / target),
@@ -160,15 +163,18 @@ def evaluate(
     if not (isinstance(budget, (int, float)) and math.isfinite(budget) and budget > 0):
         raise ValueError(f"presupuesto inválido: {budget!r}")
     deadline = time.monotonic() + budget
+    # Un solo perfil de navegador por corrida para tests y ataques: la app no puede
+    # distinguir unos de otros, ni a ninguno de un usuario real (#18).
+    headers = browser_headers()
     result: dict = {"schema": SCHEMA, "base_url": base_url, "errors": [], "suites": {"base": None, "holdout": None}, "attacks": None}
     if not wait_for(base_url.rstrip("/") + health, deadline):
         result["errors"].append("la app no respondió en la ruta de salud dentro del plazo")
     else:
-        result["suites"]["base"] = run_suite(base_url, base_dir, tests_dir, remaining(deadline))
+        result["suites"]["base"] = run_suite(base_url, base_dir, tests_dir, remaining(deadline), headers)
         if holdout_dir is not None:
-            result["suites"]["holdout"] = run_suite(base_url, holdout_dir, ".", remaining(deadline))
+            result["suites"]["holdout"] = run_suite(base_url, holdout_dir, ".", remaining(deadline), headers)
         if attacks_file is not None:
-            result["attacks"] = run_attacks(base_url, load_attacks(attacks_file), deadline).to_dict()
+            result["attacks"] = run_attacks(base_url, load_attacks(attacks_file), deadline, headers=headers).to_dict()
     if remaining(deadline) < 0:
         result["errors"].append("la evaluación terminó fuera de plazo")
     result["status"] = overall_status(result)

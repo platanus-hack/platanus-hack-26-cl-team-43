@@ -36,6 +36,7 @@ import importlib
 import importlib.abc
 import importlib.machinery
 import itertools
+import json
 import os
 import re
 import sys
@@ -44,6 +45,8 @@ from pathlib import Path
 
 import httpx
 import pytest
+
+from .holdout import CLIENT_HEADERS_ENV
 
 MARK = "cachai:no-externo"
 CLIENT_MODULES = ("fastapi.testclient", "starlette.testclient")
@@ -258,10 +261,33 @@ class StubFinder(importlib.abc.MetaPathFinder):
 _finder: StubFinder | None = None
 
 
+def use_default_headers(headers: dict[str, str]) -> None:
+    """Todo cliente httpx que creen los tests (también el del conftest del repo)
+    manda estas cabeceras salvo que el test fije las suyas: el mismo perfil de
+    navegador que los ataques, así la app no distingue tests de ataques (#18)."""
+    defaults = httpx.Headers({"User-Agent": f"python-httpx/{httpx.__version__}", "Accept": "*/*"})
+    for cls in (httpx.Client, httpx.AsyncClient):
+        if getattr(cls.__init__, "_cachai", False):
+            continue
+        original = cls.__init__
+
+        def __init__(self, *args, _original=original, **kwargs):
+            _original(self, *args, **kwargs)
+            for k, v in headers.items():
+                # Solo donde el cliente tiene el valor por defecto de httpx: lo que fijó el test se respeta.
+                if self.headers.get(k) in (None, defaults.get(k)):
+                    self.headers[k] = v
+
+        __init__._cachai = True
+        cls.__init__ = __init__
+
+
 def _install(rootpath) -> None:
     global _finder
     if _finder is not None or not os.environ.get("BASE_URL"):
         return
+    if os.environ.get(CLIENT_HEADERS_ENV):
+        use_default_headers(json.loads(os.environ[CLIENT_HEADERS_ENV]))
     for name in CLIENT_MODULES:
         sys.modules[name] = _client_module(name)
     _finder = StubFinder([Path(str(rootpath))])
