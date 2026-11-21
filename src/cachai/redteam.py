@@ -8,10 +8,14 @@ rutas que la app publica en su OpenAPI, y arma candidatos:
   por la ruta o por un parámetro de consulta.
 - `files`: un usuario pide el archivo de otro escribiendo la ruta de varias
   formas (subir con `..`, ruta absoluta, barra codificada, etc.).
+- `authn`: el mismo pedido que hace el dueño, pero sin sesión: sin headers de
+  autenticación, con el header vacío y con un token inválido. También cubre
+  las rutas sin parámetros (listados).
 
 Cada recurso del inventario declara sus marcas: textos que solo su dueño debería
 ver. Un candidato solo se conserva si se confirma contra la app de la rama base:
-el dueño recibe alguna marca en esa ruta y el otro usuario también. El ataque
+el dueño recibe alguna marca en esa ruta y quien ataca (otro usuario, o nadie
+en `authn`) también. El ataque
 guarda las marcas que aparecieron y el pedido del dueño como control. No fija el
 status: los datos de otro usuario son una fuga con cualquier código de respuesta.
 
@@ -135,23 +139,82 @@ def _fill(template: str, names: list[str], value: str) -> str:
     return template
 
 
+INVALID_TOKEN = "cachai-token-invalido"
+# Esquemas de Authorization que se conservan al borrar o falsear la credencial.
+AUTH_SCHEME_RE = re.compile(r"^(Bearer|Basic|Token|ApiKey|Digest)\s", re.IGNORECASE)
+
+
+def anonymous_headers(inv: Inventory) -> dict[str, dict[str, str]]:
+    """Las tres formas de pedir sin sesión válida: sin la credencial, con la
+    credencial vacía y con una que no existe.
+
+    Credencial es todo header que cambia de un usuario a otro; los que todos
+    comparten (un tenant, una versión de API) se mandan igual, para que la app
+    llegue a mirar la sesión. De la credencial solo se conserva un esquema
+    conocido (`Bearer`); nada más del valor de un usuario real, que daría una
+    sesión válida (p. ej. una cookie con varios campos).
+    """
+    keys = sorted({k for headers in inv.users.values() for k in headers})
+    values = {k: {headers.get(k) for headers in inv.users.values()} for k in keys}
+    common = {k: next(iter(v)) for k, v in values.items() if len(v) == 1 and None not in v}
+    out: dict[str, dict[str, str]] = {"none": dict(common), "empty": dict(common), "invalid": dict(common)}
+    for k in keys:
+        if k in common:
+            continue
+        m = next((AUTH_SCHEME_RE.match(v) for v in values[k] if v and AUTH_SCHEME_RE.match(v)), None)
+        scheme = m.group(1) if m else ""
+        # Sin espacio al final: un header que termina en espacio no es legal y httpx no lo envía.
+        out["empty"][k] = scheme
+        out["invalid"][k] = f"{scheme} {INVALID_TOKEN}" if scheme else INVALID_TOKEN
+    return out
+
+
 def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]]) -> list[Candidate]:
     out: list[Candidate] = []
     seen: set[str] = set()
+    anonymous = anonymous_headers(inv)
 
-    def add(family: str, group: str, id_parts: tuple[str, ...], path: str, owner_path: str, owner: str, attacker: str, markers: list[str]) -> None:
-        cid = make_id(*id_parts)
+    def push(cid: str, family: str, group: str, path: str, headers: dict, owner_path: str, owner: str, markers) -> None:
         if cid in seen:
             raise ValueError(f"id de candidato repetido: {cid}")
         seen.add(cid)
         out.append(Candidate(
             cid, family, group,
-            {"method": "GET", "path": path, "headers": inv.users[attacker]},
+            {"method": "GET", "path": path, "headers": headers},
             {"method": "GET", "path": owner_path, "headers": inv.users[owner]},
             tuple(markers),
         ))
 
+    def add(family: str, group: str, id_parts: tuple[str, ...], path: str, owner_path: str, owner: str, attacker: str, markers: list[str]) -> None:
+        push(make_id(*id_parts), family, group, path, inv.users[attacker], owner_path, owner, markers)
+
+    def add_authn(group: str, id_parts: tuple[str, ...], path: str, owner: str, markers) -> None:
+        """Mismo pedido que hace el dueño, sin sesión válida. Agrupado por ruta."""
+        for variant, headers in anonymous.items():
+            push(make_id("authn", *id_parts, variant), "authn", group, path, headers, path, owner, markers)
+
+    owned_markers = {u: [m for it in (*inv.records, *inv.files) if it["owner"] == u for m in it["markers"]] for u in inv.users}
+
     for template, path_params, query_params in routes:
+        # authn: la ruta pedida sin sesión entrega algo que solo ve su dueño.
+        if path_params:
+            for rec in inv.records:
+                add_authn(make_id(template), (template, rec["id"]), _fill(template, path_params, rec["id"]), rec["owner"], rec["markers"])
+        elif query_params:
+            for q in query_params:
+                for rec in inv.records:
+                    path = f"{template}?{q}={urllib.parse.quote(rec['id'], safe='')}"
+                    add_authn(make_id(template, q), (template, q, rec["id"]), path, rec["owner"], rec["markers"])
+                for f in inv.files:
+                    # Como el control de `files`: el nombre que el dueño usa desde su carpeta.
+                    own_name = urllib.parse.quote(f["path"].split("/", 1)[-1], safe="/.")
+                    add_authn(make_id(template, q), (template, q, "file", f["path"]), f"{template}?{q}={own_name}", f["owner"], f["markers"])
+        else:
+            # Ruta sin parámetros (un listado): lo que cada usuario ve con su sesión.
+            for user in sorted(inv.users):
+                if owned_markers[user]:
+                    add_authn(make_id(template), (template, user), template, user, owned_markers[user])
+
         route = template
         for rec in inv.records:
             for attacker in sorted(inv.users):
@@ -189,20 +252,25 @@ def confirm(base_url: str, cands: list[Candidate], budget: float = 60.0) -> list
 
     El dueño debe recibir alguna marca del recurso en esa ruta; si no, la ruta no
     entrega ese recurso y no hay nada que proteger. Con las marcas que el dueño
-    sí recibe se arma el predicado, y el candidato queda si el otro usuario
-    también las recibe. Cada usuario pide con su propio cliente.
+    sí recibe se arma el predicado, y el candidato queda si quien ataca
+    también las recibe. Cada identidad (también la anónima) pide con su propio
+    cliente. El pedido del dueño se hace una sola vez por ruta y usuario.
     """
     import httpx
 
     deadline = time.monotonic() + budget
     confirmed = []
+    owner_texts: dict[str, str] = {}
     with Clients() as clients:
         for c in cands:
             if time.monotonic() > deadline:
                 raise TimeoutError("presupuesto agotado confirmando candidatos")
             try:
-                owner_hops, _ = exchange(clients.for_request(c.owner_request), base_url, c.owner_request, deadline)
-                owner_text = "\n".join(searchable(body) for _, body in owner_hops)
+                key = json.dumps(c.owner_request, sort_keys=True)
+                if key not in owner_texts:
+                    owner_hops, _ = exchange(clients.for_request(c.owner_request), base_url, c.owner_request, deadline)
+                    owner_texts[key] = "\n".join(searchable(body) for _, body in owner_hops)
+                owner_text = owner_texts[key]
                 present = tuple(m for m in c.markers if m in owner_text)
                 if not present:
                     continue

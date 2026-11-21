@@ -68,7 +68,7 @@
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": {"enum": ["authz", "files"]}
+          "items": {"enum": ["authz", "files", "authn"]}
         }
       }
     },

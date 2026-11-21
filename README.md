@@ -38,7 +38,7 @@ En términos de AI control: el agente y el parchador son modelos no confiables, 
 ## Alcance de esta versión
 
 - APIs web en Python.
-- Dos familias de falla: autorización por recurso (ver datos de otro usuario) y acceso indebido a archivos.
+- Tres familias de falla: autorización por recurso (ver datos de otro usuario), acceso indebido a archivos y autenticación ausente (ver datos sin sesión).
 - Un caso propio de demo (`cases/facturas`) con 19 PR etiquetados. Adaptar casos de [BaxBench](https://baxbench.com) y CVE de Python con exploit verificable es el paso siguiente; todavía no está hecho.
 
 No promete «cero vulnerabilidades»: reporta qué se probó y con qué resultado. En tests unitarios que corren dentro del mismo proceso que el código no hay garantía y solo se marca para revisión.
