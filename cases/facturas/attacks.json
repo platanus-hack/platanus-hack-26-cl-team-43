@@ -1,0 +1,192 @@
+[
+  {
+    "id": "authz-invoice-1",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/1",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "status_in": [
+        200
+      ],
+      "body_contains": [
+        "FAC-A-001"
+      ]
+    }
+  },
+  {
+    "id": "authz-invoice-2",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/2",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "status_in": [
+        200
+      ],
+      "body_contains": [
+        "FAC-A-002"
+      ]
+    }
+  },
+  {
+    "id": "authz-invoice-reverse",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/3",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "status_in": [
+        200
+      ],
+      "body_contains": [
+        "FAC-B-001"
+      ]
+    }
+  },
+  {
+    "id": "authz-pdf",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/1/pdf",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "status_in": [
+        200
+      ],
+      "body_contains": [
+        "FAC-A-001"
+      ]
+    }
+  },
+  {
+    "id": "authz-total",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/1/total",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "status_in": [
+        200
+      ],
+      "body_contains": [
+        "1428.0"
+      ]
+    }
+  },
+  {
+    "id": "authz-v2",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/v2/invoices/1",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "status_in": [
+        200
+      ],
+      "body_contains": [
+        "FAC-A-001"
+      ]
+    }
+  },
+  {
+    "id": "authz-export",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/export?ids=1",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "status_in": [
+        200
+      ],
+      "body_contains": [
+        "FAC-A-001"
+      ]
+    }
+  },
+  {
+    "id": "files-traversal",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=../alice/contrato.txt",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "status_in": [
+        200
+      ],
+      "body_contains": [
+        "FAC-A-001"
+      ]
+    }
+  },
+  {
+    "id": "files-encoded",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=..%2Falice%2Fcontrato.txt",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "status_in": [
+        200
+      ],
+      "body_contains": [
+        "FAC-A-001"
+      ]
+    }
+  },
+  {
+    "id": "files-dot-prefix",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=./../alice/contrato.txt",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "status_in": [
+        200
+      ],
+      "body_contains": [
+        "FAC-A-001"
+      ]
+    }
+  }
+]

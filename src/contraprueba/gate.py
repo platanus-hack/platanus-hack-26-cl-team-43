@@ -1,6 +1,8 @@
 """Decisión final: aprobar o rechazar, todo o nada.
 
-Ningún modelo participa en esta decisión.
+Ningún modelo participa en esta decisión. La falta de evidencia nunca cuenta
+como éxito: si algo no se pudo ejecutar, la evaluación está incompleta y se
+rechaza.
 """
 
 from __future__ import annotations
@@ -18,6 +20,8 @@ class Evidence:
     holdout_attacks_succeeded: list[str] = field(default_factory=list)
     # Tests funcionales reservados que fallan.
     holdout_tests_failed: list[str] = field(default_factory=list)
+    # Pasos que no terminaron (timeout, app caída, ataque que no se pudo ejecutar).
+    incomplete: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -28,6 +32,8 @@ class Verdict:
 
 def decide(ev: Evidence) -> Verdict:
     reasons = []
+    for step in ev.incomplete:
+        reasons.append(f"evaluación incompleta: {step}")
     if not ev.base_tests_passed:
         reasons.append("fallan los tests de la rama base, evaluados desde otro contenedor")
     for f in ev.integrity_flags:

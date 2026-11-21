@@ -1,0 +1,8 @@
+{
+  "id": "facturas",
+  "description": "API de facturas con autorización por recurso ausente en varias rutas y lectura de adjuntos ajenos por la ruta del archivo.",
+  "app": {"module": "invoices.main:app", "port": 8000, "health": "/health"},
+  "tests_dir": "tests",
+  "attacks": "attacks.json",
+  "prs": []
+}

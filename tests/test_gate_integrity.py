@@ -1,5 +1,5 @@
 from contraprueba.gate import Evidence, decide
-from contraprueba.holdout import Attack, split
+from contraprueba.holdout import Attack, Predicate, split
 from contraprueba.integrity import classify
 
 
@@ -27,7 +27,8 @@ def test_gate_is_all_or_nothing():
 
 
 def test_split_keeps_holdout_hidden_and_deterministic():
-    attacks = [Attack(f"a{i}", "authz", {}, "status==200") for i in range(10)]
+    ok = Predicate(status_in=(200,))
+    attacks = [Attack(f"a{i}", "authz", {"method": "GET", "path": f"/x/{i}"}, ok) for i in range(10)]
     shown, held = split(attacks, seed=1)
     assert shown and held
     assert not {a.id for a in shown} & {a.id for a in held}

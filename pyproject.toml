@@ -18,3 +18,6 @@ contraprueba = "contraprueba.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/contraprueba"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

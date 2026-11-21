@@ -1,0 +1,164 @@
+"""Punto de entrada del contenedor evaluador.
+
+Corre dentro de la imagen fija de Contraprueba, nunca junto al código del PR.
+Espera a que la app responda, corre los tests de la rama base (y los reservados,
+si hay) contra ella por HTTP y escribe en stdout un JSON con esquema versionado.
+
+Contrato de salida (`schema` 1):
+
+- `status`: `ok` (todo pasó), `failed` (la evaluación terminó y algo falló) o
+  `incomplete` (algo no se pudo ejecutar: app caída, timeout, sin tests).
+- `suites.<nombre>`: resultado por suite (`base`, `holdout`).
+- `attacks`: resultado por ataque (fase 2), o `null`.
+- `errors`: errores de infraestructura.
+- `log_tail` en cada suite es solo informativo; no es parte del contrato.
+
+Código de salida: 0 = ok, 1 = failed, 2 = incomplete.
+
+Política: una suite pasa solo si terminó dentro del presupuesto, corrió al
+menos un test y no hubo fallos, errores ni tests omitidos (las suites del
+evaluador son obligatorias; `skip` y `xfail` cuentan como no ejecutados).
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import os
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+SCHEMA = 1
+EXIT = {"ok": 0, "failed": 1, "incomplete": 2}
+
+
+def remaining(deadline: float) -> float:
+    return deadline - time.monotonic()
+
+
+def wait_for(url: str, deadline: float) -> bool:
+    """Espera a que `url` responda, sin pasarse del plazo: una respuesta tardía no cuenta."""
+    while (left := remaining(deadline)) > 0:
+        try:
+            with urllib.request.urlopen(url, timeout=min(2.0, left)) as r:
+                if r.status < 500 and remaining(deadline) > 0:
+                    return True
+        except (urllib.error.URLError, OSError):
+            pass
+        time.sleep(min(0.5, max(remaining(deadline), 0)))
+    return False
+
+
+def parse_junit(path: Path) -> list[dict]:
+    """Devuelve un resultado por test: nodeid y outcome (passed, failed, error, skipped)."""
+    results = []
+    for tc in ET.parse(path).getroot().iter("testcase"):
+        nodeid = f"{tc.get('classname', '')}::{tc.get('name', '')}"
+        outcome = "passed"
+        for child in tc:
+            if child.tag in ("failure", "error", "skipped"):
+                outcome = {"failure": "failed", "error": "error", "skipped": "skipped"}[child.tag]
+                break
+        results.append({"nodeid": nodeid, "outcome": outcome})
+    return results
+
+
+def summarize(cases: list[dict], exit_code: int | None, timed_out: bool, log: str) -> dict:
+    failed = [c["nodeid"] for c in cases if c["outcome"] in ("failed", "error")]
+    skipped = [c["nodeid"] for c in cases if c["outcome"] == "skipped"]
+    passed = sum(c["outcome"] == "passed" for c in cases)
+    complete = not timed_out and exit_code is not None and passed + len(failed) > 0
+    return {
+        "complete": complete,
+        "timed_out": timed_out,
+        "exit_code": exit_code,
+        "total": len(cases),
+        "passed": passed,
+        "failed": failed,
+        "skipped": skipped,
+        "ok": complete and exit_code == 0 and not failed and not skipped,
+        "log_tail": log[-2000:],
+    }
+
+
+def run_suite(base_url: str, rootdir: Path, target: str, budget: float) -> dict:
+    if budget <= 0:
+        return summarize([], None, True, "presupuesto agotado antes de empezar")
+    with tempfile.TemporaryDirectory() as tmp:
+        junit = Path(tmp) / "junit.xml"
+        env = {
+            **os.environ,
+            "BASE_URL": base_url,
+            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+        cmd = [
+            sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+            f"--junitxml={junit}", f"--rootdir={rootdir}", str(rootdir / target),
+        ]
+        try:
+            proc = subprocess.run(cmd, cwd=rootdir, env=env, capture_output=True, text=True, timeout=budget)
+            exit_code, timed_out, log = proc.returncode, False, proc.stdout + proc.stderr
+        except subprocess.TimeoutExpired as e:
+            out = e.stdout or ""
+            exit_code, timed_out, log = None, True, out if isinstance(out, str) else out.decode(errors="replace")
+        cases = parse_junit(junit) if junit.exists() else []
+    return summarize(cases, exit_code, timed_out, log)
+
+
+def overall_status(result: dict) -> str:
+    if result["errors"]:
+        return "incomplete"
+    suites = [s for s in result["suites"].values() if s is not None]
+    attacks = result.get("attacks")
+    if not suites or any(not s["complete"] for s in suites) or (attacks and not attacks["complete"]):
+        return "incomplete"
+    if all(s["ok"] for s in suites) and not (attacks and attacks["confirmed"]):
+        return "ok"
+    return "failed"
+
+
+def evaluate(base_url: str, health: str, base_dir: Path, tests_dir: str, holdout_dir: Path | None, budget: float) -> dict:
+    """Toda la evaluación (salud, suites) cabe en `budget` segundos o queda incompleta."""
+    if not (isinstance(budget, (int, float)) and math.isfinite(budget) and budget > 0):
+        raise ValueError(f"presupuesto inválido: {budget!r}")
+    deadline = time.monotonic() + budget
+    result: dict = {"schema": SCHEMA, "base_url": base_url, "errors": [], "suites": {"base": None, "holdout": None}, "attacks": None}
+    if not wait_for(base_url.rstrip("/") + health, deadline):
+        result["errors"].append("la app no respondió en la ruta de salud dentro del plazo")
+    else:
+        result["suites"]["base"] = run_suite(base_url, base_dir, tests_dir, remaining(deadline))
+        if holdout_dir is not None:
+            result["suites"]["holdout"] = run_suite(base_url, holdout_dir, ".", remaining(deadline))
+    if remaining(deadline) < 0:
+        result["errors"].append("la evaluación terminó fuera de plazo")
+    result["status"] = overall_status(result)
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="contraprueba-evaluator")
+    p.add_argument("--base-url", required=True)
+    p.add_argument("--health", default="/health")
+    p.add_argument("--base-dir", default="/work/base", help="tests y configuración de la rama base")
+    p.add_argument("--tests-dir", default="tests")
+    p.add_argument("--holdout-dir", default=None, help="tests funcionales reservados")
+    p.add_argument("--budget", type=float, default=120.0, help="segundos para toda la evaluación")
+    args = p.parse_args(argv)
+    result = evaluate(
+        args.base_url, args.health, Path(args.base_dir), args.tests_dir,
+        Path(args.holdout_dir) if args.holdout_dir else None, args.budget,
+    )
+    print(json.dumps(result, ensure_ascii=False))
+    return EXIT[result["status"]]
+
+
+if __name__ == "__main__":
+    sys.exit(main())

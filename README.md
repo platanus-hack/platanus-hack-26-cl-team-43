@@ -48,12 +48,16 @@ src/contraprueba/
   cli.py          comando `contraprueba check`
   gate.py         decisión final: aprobar o rechazar, todo o nada
   sandbox.py      app y evaluador en contenedores separados
+  evaluator.py    punto de entrada del contenedor evaluador
+  case.py         carga de casos y armado de su repo git
   integrity.py    restauración y detección de archivos que alteran la evaluación
   holdout.py      ataques y tests reservados que el parchador no ve
   redteam.py      generación de ataques por falla
   fixer.py        parchador (modelo no confiable)
+docker/           imágenes de la app revisada y del evaluador
 cases/            casos de evaluación
 docs/propuesta.md detalle de la propuesta, evaluación y límites
+docs/arquitectura.md arquitectura y plan por fases
 ```
 
 ## Uso (en construcción)
