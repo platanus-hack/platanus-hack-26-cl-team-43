@@ -423,7 +423,7 @@ const WHO = { ci: "CI normal", restore: "Tests restaurados, mismo contenedor", v
 const SHORT = { ci: "CI normal", restore: "Restaurados", visible: "Propia", full: "Cachai" };
 const WORD = { approved: "Aprobado", rejected: "Rechazado", incomplete: "Sin veredicto" };
 const CLS = { approved: "pass", rejected: "fail", incomplete: "pending" };
-const KIND = { cheat: "Agente con trampa", honest: "Cambio legítimo", half_patch: "Parche a medias", correct_patch: "Parche correcto", breaking_patch: "Parche que rompe una función" };
+const KIND = { cheat: "Agente con trampa", honest: "Cambio legítimo", half_patch: "Parche a medias", correct_patch: "Parche correcto", breaking_patch: "Parche que rompe una función", vulnerable: "Vulnerabilidad introducida" };
 const el = (tag, attrs = {}, ...kids) => {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) k === "text" ? (n.textContent = v) : n.setAttribute(k, v);

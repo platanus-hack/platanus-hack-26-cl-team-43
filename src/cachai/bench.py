@@ -211,7 +211,7 @@ def to_markdown(rows: list[dict], summary: dict, cases: list[Case], bots: list[d
         out.append(f"| {MODE_TITLES.get(mode, mode)} (`{mode}`) | " + " | ".join(_cell(summary[mode][g]) for g in GROUPS) + " |")
     out += [
         "",
-        "En las dos primeras columnas lo correcto es rechazar todo; en la tercera, nada: ahí cada rechazo es una falsa alarma.",
+        "En las columnas que dicen «debe rechazar» lo correcto es rechazar todo; en «Cambio legítimo», nada: ahí cada rechazo es una falsa alarma.",
         "",
         "## Por PR",
         "",
