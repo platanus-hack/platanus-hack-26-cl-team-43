@@ -31,7 +31,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-FAMILIES = ("authz", "files")
+FAMILIES = ("authz", "files", "authn")
 METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD")
 ATTACK_KEYS = {"id", "family", "request", "succeeded_if"}
 ATTACK_OPTIONAL_KEYS = {"group", "control"}
@@ -169,7 +169,7 @@ class Control:
 @dataclass(frozen=True)
 class Attack:
     id: str
-    family: str  # "authz" (datos de otro usuario) o "files" (acceso indebido a archivos)
+    family: str  # "authz" (datos de otro usuario), "files" (acceso indebido a archivos) o "authn" (datos sin sesión)
     request: dict  # pedido HTTP: method, path, headers, json (opcional)
     succeeded_if: Predicate
     # Variante a la que pertenece (una ruta, una forma de escribir la ruta del archivo).

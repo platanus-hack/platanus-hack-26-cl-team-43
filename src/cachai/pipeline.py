@@ -250,10 +250,28 @@ def who(attack: Attack, inventory: dict) -> str:
     return next((u for u, h in (inventory.get("users") or {}).items() if h == headers), "?")
 
 
+VARIANT_TEXT = {"none": "sin credencial", "empty": "con la credencial vacía", "invalid": "con un token inválido"}
+
+
+def anonymous_variant(attack: Attack, inventory: dict) -> str:
+    """Cómo pidió un ataque `authn`: la variante del equipo rojo con esos headers."""
+    from .redteam import Inventory, anonymous_headers
+
+    headers = attack.request.get("headers") or {}
+    try:
+        variants = anonymous_headers(Inventory.from_dict(inventory))
+    except ValueError:
+        variants = {}
+    name = next((v for v, h in variants.items() if h == headers), None)
+    return f"sin sesión válida ({VARIANT_TEXT[name]})" if name else "sin sesión válida"
+
+
 def describe_introduced(attack: Attack, inventory: dict) -> str:
     """Evidencia de una vulnerabilidad introducida: pedido, usuario y marca que recibió."""
     pred = attack.succeeded_if
     marks = ", ".join(pred.body_contains_any + pred.body_contains)
+    if attack.family == "authn":
+        return f"authn: {attack.request['method']} {attack.request['path']} {anonymous_variant(attack, inventory)} recibe datos de un usuario ({marks})"
     return f"{attack.family}: {attack.request['method']} {attack.request['path']} como {who(attack, inventory)} recibe datos ajenos ({marks})"
 
 

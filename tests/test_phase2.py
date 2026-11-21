@@ -347,7 +347,7 @@ def test_generator_confirms_a_leak_that_needs_the_callers_own_session():
         found = redteam.confirm(app.url, redteam.candidates(inv, [("/docs/{id}", ["id"], [])]))
     finally:
         app.srv.shutdown()
-    assert [a.request["path"] for a in found] == ["/docs/2"]
+    assert [a.request["path"] for a in found if a.family == "authz"] == ["/docs/2"]
 
 
 def test_generator_uses_separate_sessions_too():
@@ -569,7 +569,7 @@ OPENAPI = {"paths": {
 
 
 def test_candidates_cover_routes_and_file_templates():
-    cands = redteam.candidates(INV, redteam.get_routes(OPENAPI))
+    cands = [c for c in redteam.candidates(INV, redteam.get_routes(OPENAPI)) if c.family != "authn"]
     groups = {(c.family, c.group) for c in cands}
     assert ("authz", redteam.make_id("/docs/{doc_id}")) in groups and ("authz", redteam.make_id("/files", "name")) in groups
     assert {g for f, g in groups if f == "files"} == {t[0] for t in redteam.FILE_TEMPLATES}
@@ -591,7 +591,7 @@ def test_long_ids_stay_unique():
 
 @pytest.mark.parametrize("one,two", [("/a-b/{id}", "/a/b/{id}"), ("/Docs/{id}", "/docs/{id}"), ("/a_b/{id}", "/a.b/{id}")])
 def test_routes_that_read_alike_do_not_collide(one, two):
-    cands = redteam.candidates(INV, [(one, ["id"], []), (two, ["id"], [])])
+    cands = [c for c in redteam.candidates(INV, [(one, ["id"], []), (two, ["id"], [])]) if c.family == "authz"]
     assert len({c.id for c in cands}) == len(cands) == 2
     assert len({c.group for c in cands}) == 2
     assert redteam.make_id(one) != redteam.make_id(two)
@@ -643,9 +643,14 @@ class App:
 def test_generate_keeps_only_what_works_on_base():
     app = App()
     try:
-        found = redteam.generate(app.url, INV)
+        everything = redteam.generate(app.url, INV)
     finally:
         app.srv.shutdown()
+    found = [a for a in everything if a.family != "authn"]
+    # /docs no mira la sesión: también sale sin ella, en sus tres variantes. /safe y /files sí la piden.
+    authn = [a for a in everything if a.family == "authn"]
+    assert {a.group for a in authn} == {redteam.make_id("/docs/{doc_id}"), redteam.make_id("/docs/{doc_id}/total")}
+    assert len(authn) == 6
     by_group = {a.group.rsplit("-", 1)[0] if a.family == "authz" else a.group: a for a in found}
     # /public y /exists no entregan ninguna marca del recurso: no hay nada que proteger.
     # /safe ya está protegida: el otro usuario no recibe la marca.

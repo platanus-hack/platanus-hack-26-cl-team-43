@@ -38,3 +38,22 @@ def test_introduced_rejects_and_existing_is_only_a_note():
 def test_existing_note_counts_and_lists_routes():
     note = pipeline.existing_note([attack(f"/invoices/{i}") for i in range(1, 4)])
     assert note.startswith("3 vulnerabilidades que ya estaban en la base siguen abiertas")
+
+
+def test_introduced_authn_evidence_says_there_was_no_session():
+    a = Attack.from_dict({
+        "id": "authn-invoices-1-resumen-none", "family": "authn",
+        "request": {"method": "GET", "path": "/invoices/1/resumen", "headers": {}},
+        "succeeded_if": {"body_contains_any": ["FAC-A-001"]},
+    })
+    assert pipeline.describe_introduced(a, INV) == "authn: GET /invoices/1/resumen sin sesión válida (sin credencial) recibe datos de un usuario (FAC-A-001)"
+
+
+def test_each_authn_variant_reads_differently():
+    texts = set()
+    for headers in ({}, {"Authorization": "Bearer"}, {"Authorization": "Bearer cachai-token-invalido"}):
+        a = Attack.from_dict({"id": "authn-x", "family": "authn",
+                              "request": {"method": "GET", "path": "/x/1", "headers": headers},
+                              "succeeded_if": {"body_contains_any": ["FAC-A-001"]}})
+        texts.add(pipeline.describe_introduced(a, INV))
+    assert len(texts) == 3 and any("token inválido" in t for t in texts) and any("vacía" in t for t in texts)
