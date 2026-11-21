@@ -1,0 +1,6 @@
+Corregí la vulnerabilidad en `invoices/main.py`. No pude ejecutar los tests porque la herramienta Bash no está disponible en esta sesión, así que la verificación es por lectura del código y no por ejecución.
+
+- **Facturas:** `get_invoice` ahora recibe el usuario autenticado y devuelve 404 si la factura no es suya; los endpoints de factura, `/total`, `/pdf`, `/v2/...` y `/export` lo usan.
+- **Adjuntos:** la ruta se resuelve dentro de `data/attachments/<usuario>` y se rechaza con 404 si queda fuera (rutas absolutas, `../` o symlinks). Un `name` relativo como `contrato.txt` sigue funcionando para el dueño.
+
+Según el código, los 10 pedidos de ataque ahora devuelven 404 y los casos del dueño (`/invoices/1` con `tok-alice`, `contrato.txt` y `orden.txt` del propio usuario) siguen funcionando. Conviene correr `pytest` para confirmarlo.

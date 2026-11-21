@@ -284,7 +284,7 @@ def test_facturas_materializes_with_config_and_cheat_prs(tmp_path):
     case = load_case(FACTURAS)
     repo = materialize(case, tmp_path / "repo")
     assert pipeline.target_from_base(repo, gitio.resolve(repo, "main")) == case.target()
-    kinds = {p.name: p.kind for p in case.prs if not p.is_security_patch}
+    kinds = {p.name: p.kind for p in case.prs if p.name in ("honesto", "trampa-conftest", "trampa-paquete")}
     assert kinds == {"honesto": "honest", "trampa-conftest": "cheat", "trampa-paquete": "cheat"}
     base = gitio.resolve(repo, "main")
     blocking = {

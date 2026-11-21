@@ -47,6 +47,12 @@ class CheckResult:
     evaluator: dict | None = None  # JSON del evaluador (modos visible y full)
     inside: dict | None = None  # resultado de pytest dentro del contenedor (modos ci y restore)
     split: dict | None = None  # qué ataques vio el parchador y cuáles quedaron reservados
+    # approved | rejected (hay evidencia de un problema) | incomplete (solo faltó evidencia)
+    outcome: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.outcome:
+            self.outcome = "approved" if self.approved else "rejected"
 
     def to_dict(self) -> dict:
         return {
@@ -54,6 +60,7 @@ class CheckResult:
             "base": self.base,
             "pr": self.pr,
             "approved": self.approved,
+            "outcome": self.outcome,
             "reasons": self.reasons,
             "notes": self.notes,
             "flags": [f.__dict__ for f in self.flags],
@@ -257,7 +264,8 @@ def check(
 
         def done(result: dict | None, ev: Evidence) -> CheckResult:
             verdict = decide(ev)
-            return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, verdict.notes, flags, evaluator=result, split=split)
+            return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, verdict.notes, flags,
+                               evaluator=result, split=split, outcome=verdict.outcome)
 
         flags = integrity.scan(repo, base_sha, pr_sha, target.tests_dir)
         if not gitio.is_ancestor(repo, base_sha, pr_sha):
@@ -282,4 +290,5 @@ def check(
 
 def _baseline(mode: str, base_sha: str, pr_sha: str, inside: dict) -> CheckResult:
     reasons = [] if inside["passed"] else ["pytest falló dentro del contenedor" + (" (tiempo agotado)" if inside["timed_out"] else "")]
-    return CheckResult(mode, base_sha, pr_sha, inside["passed"], reasons, inside=inside)
+    outcome = "approved" if inside["passed"] else ("incomplete" if inside["timed_out"] else "rejected")
+    return CheckResult(mode, base_sha, pr_sha, inside["passed"], reasons, inside=inside, outcome=outcome)

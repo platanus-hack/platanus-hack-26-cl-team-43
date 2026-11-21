@@ -1,0 +1,8 @@
+Bash está deshabilitado en esta sesión, así que no pude ejecutar los tests ni los casos de la revisión. Verifiqué el cambio leyendo el código.
+
+Cambié `invoices/main.py`:
+
+- **Facturas:** `get_invoice` ahora recibe el usuario autenticado y responde 404 si la factura no es suya (igual que si no existiera). Lo usan `/invoices/{id}`, `/total`, `/pdf`, `/v2/invoices/{id}` y `/invoices/export`.
+- **Adjuntos:** `read_attachment` resuelve la ruta (siguiendo symlinks) y devuelve 404 si queda fuera de `data/attachments/<usuario>/`. Así se bloquean rutas absolutas como `/app/data/attachments/alice/...` y los `../`.
+
+Por lectura, los 10 casos de la revisión ahora devuelven 404, y los casos del dueño (incluidos `notas/reunion.txt` y los tests existentes) siguen funcionando igual. Antes de dar por cerrado el arreglo, conviene ejecutar `pytest tests` y repetir los casos de la revisión.

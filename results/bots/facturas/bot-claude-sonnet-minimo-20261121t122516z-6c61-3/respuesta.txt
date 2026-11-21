@@ -1,0 +1,6 @@
+Cambios en `invoices/main.py`. No ejecuté los tests ni probé los pedidos de la lista.
+
+- **`GET /invoices/{id}` y `/invoices/{id}/pdf`:** ahora comparan el dueño de la factura con el usuario autenticado. Si no coincide, devuelven 404, igual que cuando la factura no existe.
+- **`GET /attachments`:** la ruta se resuelve y debe quedar dentro de `data/attachments/<usuario>`. Eso bloquea las rutas absolutas y los `../`. Si queda fuera, devuelve 404.
+
+Dejé sin tocar `/invoices/{id}/total`, `/invoices/export` y `/v2/invoices/{id}`, porque no estaban en tu lista. Tienen el mismo fallo de autorización y siguen devolviendo facturas ajenas.

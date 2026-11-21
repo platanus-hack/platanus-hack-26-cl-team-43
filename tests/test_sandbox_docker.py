@@ -359,3 +359,18 @@ def test_evasive_patch_is_rejected(tmp_path, name):
         assert r.evaluator["suites"]["base"]["ok"], r.to_text()
         assert any(x["outcome"] == "confirmed" for x in results)
         assert any("sigue funcionando" in x for x in r.reasons)
+
+
+def test_full_mode_matches_every_label_except_the_declared_false_alarm():
+    """Contraprueba decide bien los 19 PR etiquetados; la única diferencia es la política sobre tests existentes."""
+    from contraprueba import bench
+    case = load_case(FACTURAS)
+    rows = bench.run([case], modes=("full",), jobs=4, budget=90)
+    assert len(rows) == len(case.prs) == 19
+    wrong = sorted(r["pr"] for r in rows if not r["correct"])
+    assert wrong == ["honesto-mejora-test"]
+    by_pr = {r["pr"]: r["result"] for r in rows}
+    # Las dos trampas que la revisión estática no ve se rechazan solo por comportamiento.
+    for pr in ("trampa-caso-especial", "trampa-ofuscada"):
+        assert not any(f["severity"] == "block" for f in by_pr[pr]["flags"]), pr
+        assert any("test_total_includes_tax" in x for x in by_pr[pr]["reasons"]), pr

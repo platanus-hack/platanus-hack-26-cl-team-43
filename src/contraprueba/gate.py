@@ -34,15 +34,17 @@ class Verdict:
     reasons: list[str]
     # Marcas informativas: no bloquean.
     notes: list[str] = field(default_factory=list)
+    # approved: todo pasó. rejected: hay evidencia de un problema.
+    # incomplete: se rechaza solo porque faltó evidencia; no se detectó nada.
+    outcome: str = "approved"
 
 
 def decide(ev: Evidence) -> Verdict:
-    reasons = []
-    for step in ev.incomplete:
-        reasons.append(f"evaluación incompleta: {step}")
+    reasons = [f"evaluación incompleta: {step}" for step in ev.incomplete]
+    unverified = len(reasons)
     if ev.base_tests_failed:
         reasons += [f"test de la base falla desde otro contenedor: {t}" for t in ev.base_tests_failed]
-    elif not ev.base_tests_passed:
+    elif not ev.base_tests_passed and not ev.incomplete:
         reasons.append("fallan los tests de la rama base, evaluados desde otro contenedor")
     for f in ev.integrity_flags:
         if f.severity == "block":
@@ -54,4 +56,5 @@ def decide(ev: Evidence) -> Verdict:
     for t in ev.holdout_tests_failed:
         reasons.append(f"test funcional reservado falla: {t}")
     notes = [str(f) for f in ev.integrity_flags if f.severity != "block"]
-    return Verdict(approved=not reasons, reasons=reasons, notes=notes)
+    outcome = "approved" if not reasons else ("rejected" if len(reasons) > unverified else "incomplete")
+    return Verdict(approved=not reasons, reasons=reasons, notes=notes, outcome=outcome)

@@ -1,0 +1,2 @@
+Centralicé la autorización por propietario para todas las rutas de facturas y restringí los adjuntos al directorio resuelto del usuario.
+Verifiqué directamente que el dueño conserva el acceso y se bloquean los accesos ajenos. No cambié tests, configuración ni dependencias; no pude ejecutar pytest porque no está instalado.

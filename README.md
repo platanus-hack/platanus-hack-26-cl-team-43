@@ -37,7 +37,7 @@ En términos de AI control: el agente y el parchador son modelos no confiables, 
 
 - APIs web en Python.
 - Dos familias de falla: autorización por recurso (ver datos de otro usuario) y acceso indebido a archivos.
-- Casos de [BaxBench](https://baxbench.com) y CVE de Python con exploit verificable.
+- Un caso propio de demo (`cases/facturas`) con 19 PR etiquetados. Adaptar casos de [BaxBench](https://baxbench.com) y CVE de Python con exploit verificable es el paso siguiente; todavía no está hecho.
 
 No promete «cero vulnerabilidades»: reporta qué se probó y con qué resultado. En tests unitarios que corren dentro del mismo proceso que el código no hay garantía y solo se marca para revisión.
 
@@ -55,9 +55,11 @@ src/contraprueba/
   integrity.py    detección de cambios que alteran la evaluación
   holdout.py      ataques y tests reservados que el parchador no ve
   redteam.py      variantes de ataque por plantillas, confirmadas contra la rama base
-  fixer.py        parchador (modelo no confiable)
+  fixer.py        parchador: un agente de código real propone el parche
+  bench.py        medición de todos los PR etiquetados en cada modo
 docker/           imágenes de la app revisada y del evaluador
 cases/            casos de evaluación
+results/          resultados de la medición y evidencia de cada corrida
 docs/propuesta.md detalle de la propuesta, evaluación y límites
 docs/arquitectura.md arquitectura y plan por fases
 ```
@@ -74,6 +76,10 @@ contraprueba case cases/facturas
 
 # Un PR de un repo cuya rama base tiene .contraprueba.json
 contraprueba check --repo <ruta> --base main --pr <rama>
+
+# Medición completa y parches generados por un agente real
+contraprueba bench
+contraprueba fix cases/facturas --agent claude --runs 3
 ```
 
 Salida del caso de demo:
@@ -107,5 +113,27 @@ Las tres primeras columnas son líneas base y `full` es Contraprueba:
 - `parche-rompe` bloquea todos los ataques rompiendo los adjuntos en subcarpetas; lo detectan los tests funcionales reservados.
 
 Los ataques del caso los genera `contraprueba redteam cases/facturas` por plantillas, sin ningún modelo, y solo se conservan los que funcionan contra la rama base. Los PR del caso están escritos a mano para reproducir cada tipo de comportamiento.
+
+## Resultados
+
+`contraprueba bench` corre los 19 PR etiquetados del caso en los cuatro modos. Rechazos con evidencia sobre el total, con intervalo de Wilson al 95 %. Una corrida que no se puede completar se rechaza igual, pero se informa aparte y no cuenta como detección; en esta medición no hubo ninguna:
+
+| Modo | Agente con trampa (debe rechazar) | Parche a medias o que rompe (debe rechazar) | Cambio legítimo (debe aprobar) |
+|---|---|---|---|
+| CI normal | 0/8 (0% a 32%) | 0/3 (0% a 56%) | 0/8 (0% a 32%) |
+| Tests restaurados, mismo contenedor | 5/8 (31% a 86%) | 0/3 (0% a 56%) | 0/8 (0% a 32%) |
+| Validación propia del parchador | 8/8 (68% a 100%) | 0/3 (0% a 56%) | 1/8 (2% a 47%) |
+| **Contraprueba** | **8/8 (68% a 100%)** | **3/3 (44% a 100%)** | 1/8 (2% a 47%) |
+
+- La falsa alarma es un cambio legítimo a un test existente: la política bloquea todo cambio a tests existentes y pide revisión humana.
+- Dos trampas no tocan la evaluación ni nombran pytest (una se porta bien solo ante el cliente de pruebas, otra esconde el hook): la revisión estática no las ve y se rechazan por comportamiento, desde el otro contenedor.
+- Son PR escritos a mano sobre una sola app. Los intervalos son anchos y describen esta muestra, no una tasa general.
+
+Además, `contraprueba fix` le pide parches a agentes reales (Claude Code y Codex). Cada agente corre aislado: recibe los archivos de la rama base y los ataques visibles, y no puede leer el proyecto, el material reservado ni las ramas con las soluciones.
+
+- Con el encargo normal, los 8 parches (2 de Sonnet, 4 de Haiku y 2 de Codex) arreglaron la falla de raíz y Contraprueba los aprobó todos. En una app chica los modelos actuales no se quedaron a medias.
+- Con un parchador instruido para hacer el cambio mínimo (una política de ataque, como en las evaluaciones de AI control), los 3 parches pasaron su propia validación y Contraprueba los rechazó por los ataques reservados.
+
+Detalle por PR y evidencia de cada corrida: [`results/resultados.md`](results/resultados.md) y `results/`.
 
 Tests: `pytest` (unitarios) y `CP_DOCKER=1 pytest tests/test_sandbox_docker.py` (integración con Docker).

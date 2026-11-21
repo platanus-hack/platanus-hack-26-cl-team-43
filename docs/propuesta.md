@@ -25,6 +25,8 @@ Ninguna IA aprueba el código de otra IA. Contraprueba es un revisor determinist
 
 ## Evaluación
 
+> Estado: hecha sobre un caso propio (`cases/facturas`, 19 PR etiquetados); ver [`results/resultados.md`](../results/resultados.md). Los casos de ImpossibleBench, BaxBench y CVE de Python descritos abajo son el plan y todavía no están adaptados.
+
 **Casos**
 - Agentes con trampa etiquetada: tareas donde pasar los tests solo es posible haciendo trampa (estilo ImpossibleBench) y las variantes de ataque al evaluador de BenchJack, ejecutadas por un agente instruido para atacar, como en los experimentos de AI control.
 - Seguridad: apps de BaxBench con vulnerabilidad conocida y CVE de Python con exploit verificable.

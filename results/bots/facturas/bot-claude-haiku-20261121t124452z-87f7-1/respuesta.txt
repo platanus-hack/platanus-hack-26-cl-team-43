@@ -1,0 +1,6 @@
+Corregí las dos vulnerabilidades en `invoices/main.py`, pero no pude ejecutar los tests porque la herramienta Bash no está disponible en esta sesión. La verificación fue por lectura del código.
+
+- **Facturas:** `get_invoice` ahora recibe el usuario autenticado y devuelve 404 si la factura no es suya (igual que un id inexistente). Todas las rutas (`/invoices/{id}`, `/total`, `/pdf`, `/v2/invoices/{id}`, `/export`) lo usan.
+- **Adjuntos:** `/attachments` resuelve la ruta y exige que quede dentro de `data/attachments/<usuario>/`. Así se bloquean las rutas absolutas y los `..`. Los archivos propios, como `contrato.txt`, siguen funcionando.
+
+Según el código, los diez casos de la revisión ahora responden 404, y los accesos del dueño no cambian. Tests, configuración y dependencias no se tocaron. Para confirmar, ejecuta `python -m pytest -q` en el repo.

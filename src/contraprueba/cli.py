@@ -3,6 +3,8 @@
     contraprueba check --repo <ruta> --base main --pr <rama> [--mode ci|restore|visible|full]
     contraprueba case <carpeta del caso> [--pr <nombre>|all] [--mode <modo>|all]
     contraprueba redteam <carpeta del caso> [--write]
+    contraprueba bench [carpeta de casos] [--out results]
+    contraprueba fix <carpeta del caso> [--agent claude|codex] [--runs 3]
 
 `check` revisa un PR de un repo cuya rama base tiene `.contraprueba.json`. Si
 el PR es un parche de seguridad, `--attacks` son los ataques que debe bloquear.
@@ -19,7 +21,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import pipeline, sandbox
+from . import bench, fixer, pipeline, sandbox
 from .case import load_case, materialize
 from .holdout import Attack, load_attacks, split_record
 
@@ -80,6 +82,32 @@ def cmd_redteam(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fix(args: argparse.Namespace) -> int:
+    case = load_case(args.case)
+    rows = fixer.run(case, args.agent, args.runs, args.model, args.out, args.budget, policy=args.policy, isolate=not args.no_isolation)
+    fixer.write_summary(case, rows, args.out)
+    for r in rows:
+        if r["error"] and not r["approved"]:
+            print(f"{r['name']}: {r['error']}")
+            continue
+        a = r["approved"]
+        print(f"{r['name']}: propia validación {'aprobada' if a['visible'] else 'RECHAZADA'}, Contraprueba {'APROBADO' if a['full'] else 'RECHAZADO'}")
+        for reason in r["reasons"][:4]:
+            print(f"  - {reason}")
+    return 0
+
+
+def cmd_bench(args: argparse.Namespace) -> int:
+    cases = bench.find_cases(args.cases)
+    if not cases:
+        print("no hay casos", file=sys.stderr)
+        return 2
+    rows = bench.run(cases, jobs=args.jobs, budget=args.budget)
+    summary = bench.write(rows, cases, args.out)
+    print(bench.to_markdown(rows, summary, cases, bench.load_bots(args.out)))
+    return 0
+
+
 def cmd_case(args: argparse.Namespace) -> int:
     case = load_case(args.case)
     prs = [p.name for p in case.prs] if args.pr == "all" else [case.pr(args.pr).name]
@@ -127,6 +155,26 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--write", action="store_true", help="guarda el resultado en el archivo de ataques del caso")
     r.add_argument("--budget", type=float, default=60.0)
     r.set_defaults(func=cmd_redteam)
+
+    b = sub.add_parser("bench", help="corre todos los PR etiquetados en cada modo y resume")
+    b.add_argument("cases", nargs="?", default="cases")
+    b.add_argument("--out", default="results", help="carpeta donde se escriben bench.json, resultados.md y los reportes")
+    b.add_argument("--jobs", type=int, default=4)
+    b.add_argument("--budget", type=float, default=120.0)
+    b.set_defaults(func=cmd_bench)
+
+    f = sub.add_parser("fix", help="pide parches a un agente de código real y los revisa")
+    f.add_argument("case")
+    f.add_argument("--agent", choices=sorted(fixer.AGENTS), default="claude")
+    f.add_argument("--model", help="modelo del agente; por defecto, el habitual de cada uno")
+    f.add_argument("--runs", type=int, default=3)
+    f.add_argument("--policy", choices=sorted(fixer.POLICIES), default="normal",
+                   help="normal: arreglar la falla; minimo: parchador instruido para tapar solo lo que vio")
+    f.add_argument("--out", default="results/bots")
+    f.add_argument("--no-isolation", action="store_true",
+                   help="corre al agente sin aislarlo del material reservado; queda registrado en cada intento")
+    f.add_argument("--budget", type=float, default=120.0)
+    f.set_defaults(func=cmd_fix)
 
     for p in (c, k):
         p.add_argument("--budget", type=float, default=120.0, help="segundos por evaluación")

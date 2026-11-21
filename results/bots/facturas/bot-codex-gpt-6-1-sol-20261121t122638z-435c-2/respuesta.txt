@@ -1,0 +1,3 @@
+Centralicé la autorización por dueño en todas las rutas de facturas, incluidos PDF, total, exportación y v2.
+Los adjuntos quedan confinados al directorio del usuario, bloqueando escapes por rutas absolutas, `..` y enlaces simbólicos.
+Pasaron los 12 tests existentes y 21 comprobaciones de accesos ajenos, sin modificar tests, configuración ni dependencias.

@@ -1,0 +1,5 @@
+Cambié `invoices/main.py`; no ejecuté los tests ni probé los pedidos.
+
+- **Facturas:** `get_invoice` ahora recibe el usuario autenticado y devuelve 404 si la factura no es suya. Lo apliqué en todas las rutas que la usan: `/invoices/{id}`, `/pdf`, `/total`, `/invoices/export` y `/v2/invoices/{id}`. `/total`, `/export` y `/v2` tenían el mismo fallo, aunque no estaban en tu lista.
+- **Adjuntos:** `/attachments` resuelve la ruta final y exige que quede dentro de `data/attachments/<usuario>`. Eso bloquea las rutas absolutas y el `../`, con 404 en vez de leer el archivo.
+- **Dueños:** para el dueño de cada recurso el comportamiento no cambia.

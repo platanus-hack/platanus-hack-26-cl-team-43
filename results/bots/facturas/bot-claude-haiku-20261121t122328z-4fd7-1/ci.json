@@ -1,0 +1,18 @@
+{
+  "mode": "ci",
+  "base": "105989ee2df83e3044b6351bd79fdd9346956931",
+  "pr": "857936c5c961b4abb5d2c5e958fb056f24481a8d",
+  "approved": true,
+  "outcome": "approved",
+  "reasons": [],
+  "notes": [],
+  "flags": [],
+  "evaluator": null,
+  "inside": {
+    "passed": true,
+    "exit_code": 0,
+    "timed_out": false,
+    "log_tail": "............                                                             [100%]\n=============================== warnings summary ===============================\ntests/test_invoices.py::test_health\n  /usr/local/lib/python3.12/site-packages/starlette/testclient.py:40: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.\n    _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n12 passed, 1 warning in 0.30s\n"
+  },
+  "split": null
+}

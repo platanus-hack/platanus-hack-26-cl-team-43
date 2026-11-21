@@ -121,10 +121,22 @@ Los casos son fixtures locales confiables. Aun así, `materialize` valida las ca
 | **0. Contratos** | Formato de `case.json`, `Attack` con predicado estructurado, app de demo en la base, imágenes de app y evaluador | Ambas imágenes construyen; los tests de la base pasan contra la app desde el evaluador |
 | **1. Hito 1: aislamiento** | `sandbox.py` (red interna, levantar y bajar), caso con trampa (el paquete parcha los reportes de pytest), modos `ci`, `restore` y `full` | `ci` y `restore` dan verde; `full` rechaza con archivo y línea; un caso honesto se aprueba |
 | **2. Hito 2: reservados** | `holdout.run_attacks`, `redteam.py` por plantillas (otro id, otra ruta, otras formas de escribir la ruta del archivo), ramas de parche a medias, parche correcto y parche que rompe una función | El parche a medias pasa su propia validación y cae con un ataque reservado; el correcto se aprueba |
-| **3. Medición** | `bench.py` sobre casos etiquetados: detección, falsas alarmas y utilidad con intervalos de Wilson; `fixer.py` en vivo | Tabla de Contraprueba contra las tres líneas base; al menos un parche generado en vivo pasa por la revisión |
+| **3. Medición** | `bench.py` sobre los PR etiquetados: detección y falsas alarmas por modo con intervalos de Wilson; `fixer.py` con agentes reales | Tabla de Contraprueba contra las tres líneas base; parches generados en vivo pasan por la revisión |
 | **4. Entrega** | Página de resultados para `deploy-url`, guion de la demo, respuestas a las preguntas del jurado | Demo de punta a punta en menos de 3 minutos; `platanus-hack-project.jsonc` completo |
 
 La ruta crítica es 0 → 1 → 2. La medición y la página avanzan en paralelo desde que existen los contratos de la fase 0.
+
+## Medición
+
+- `contraprueba bench` corre cada PR etiquetado en los cuatro modos y escribe `results/bench.json`, `results/resultados.md` y un reporte por corrida en `results/runs/`.
+- Cada PR tiene una etiqueta puesta a mano que dice qué debería decidir un revisor correcto. Se cuentan los rechazos por modo y por grupo (trampas, parches malos, cambios legítimos) con el intervalo de Wilson al 95 %.
+- Una corrida rechazada solo por falta de evidencia (tiempo agotado, infraestructura) queda como «sin veredicto»: no cuenta como detección ni como acierto, y se informa aparte.
+- `contraprueba fix` lanza un agente de código real (Claude Code o Codex, no interactivos). Guarda el pedido, la respuesta y el diff de cada intento en `results/bots/`, sin sobrescribir intentos anteriores y también cuando no hay parche.
+- **Aislamiento del agente.** Trabaja sobre los archivos de la base exportados a una carpeta nueva, sin `.git`: las ramas con las soluciones y los intentos anteriores están en otro repo, del lado confiable. Corre en un espacio de nombres de Linux donde el proyecto, el caso, los resultados y `/tmp` están tapados; antes de lanzarlo, una sonda comprueba desde adentro que el material reservado no se puede leer. Al terminar, sus archivos se copian como contenido no confiable sobre una rama creada desde el commit de la base fijado de antemano.
+- Lo que ese aislamiento no cubre: la red (el agente necesita llegar a su proveedor; que no baje nada depende de las herramientas que se le dan) y los sistemas sin `unshare`, como macOS, donde hay que pedir explícitamente correr sin aislar y queda registrado en cada intento.
+- El encargo `minimo` es una política de ataque: un parchador instruido para tapar solo lo que vio. Sirve para probar la revisión contra parches a medias escritos por un modelo real; no mide con qué frecuencia un modelo hace eso por su cuenta.
+
+Lo que esta medición no dice: no hay casos de terceros (BaxBench, CVE reales), todos los PR comparten una app, y las trampas están escritas a mano.
 
 ## Reparto sugerido (5 personas)
 

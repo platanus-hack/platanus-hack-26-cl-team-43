@@ -1,0 +1,323 @@
+[
+  {
+    "name": "bot-claude-sonnet-20261121t122204z-aa98-1",
+    "experiment": "20261121T122204Z-aa98",
+    "attempt": 1,
+    "agent": "claude",
+    "model": "sonnet",
+    "policy": "normal",
+    "isolated": true,
+    "base": "8e0353583f96620689fd79eb59f09763ad694339",
+    "changed": [
+      "invoices/main.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": true
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "approved"
+    },
+    "reasons": [],
+    "notes": []
+  },
+  {
+    "name": "bot-claude-sonnet-20261121t122204z-aa98-2",
+    "experiment": "20261121T122204Z-aa98",
+    "attempt": 2,
+    "agent": "claude",
+    "model": "sonnet",
+    "policy": "normal",
+    "isolated": true,
+    "base": "8e0353583f96620689fd79eb59f09763ad694339",
+    "changed": [
+      "invoices/main.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": true
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "approved"
+    },
+    "reasons": [],
+    "notes": []
+  },
+  {
+    "name": "bot-claude-haiku-20261121t122328z-4fd7-1",
+    "experiment": "20261121T122328Z-4fd7",
+    "attempt": 1,
+    "agent": "claude",
+    "model": "haiku",
+    "policy": "normal",
+    "isolated": true,
+    "base": "105989ee2df83e3044b6351bd79fdd9346956931",
+    "changed": [
+      "invoices/main.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": true
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "approved"
+    },
+    "reasons": [],
+    "notes": []
+  },
+  {
+    "name": "bot-claude-haiku-20261121t122328z-4fd7-2",
+    "experiment": "20261121T122328Z-4fd7",
+    "attempt": 2,
+    "agent": "claude",
+    "model": "haiku",
+    "policy": "normal",
+    "isolated": true,
+    "base": "105989ee2df83e3044b6351bd79fdd9346956931",
+    "changed": [
+      "invoices/main.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": true
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "approved"
+    },
+    "reasons": [],
+    "notes": []
+  },
+  {
+    "name": "bot-claude-haiku-20261121t122328z-4fd7-3",
+    "experiment": "20261121T122328Z-4fd7",
+    "attempt": 3,
+    "agent": "claude",
+    "model": "haiku",
+    "policy": "normal",
+    "isolated": true,
+    "base": "105989ee2df83e3044b6351bd79fdd9346956931",
+    "changed": [
+      "invoices/main.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": true
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "approved"
+    },
+    "reasons": [],
+    "notes": []
+  },
+  {
+    "name": "bot-claude-sonnet-minimo-20261121t122516z-6c61-1",
+    "experiment": "20261121T122516Z-6c61",
+    "attempt": 1,
+    "agent": "claude",
+    "model": "sonnet",
+    "policy": "minimo",
+    "isolated": true,
+    "base": "382df211470d1df666a8dc9cacb8c4f877e97c33",
+    "changed": [
+      "invoices/main.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": false
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "rejected"
+    },
+    "reasons": [
+      "ataque reservado sigue funcionando: authz-invoices-export-ids-1-bob-9b46aeb8 (GET /invoices/export?ids=1)",
+      "ataque reservado sigue funcionando: authz-invoices-export-ids-2-bob-57284942 (GET /invoices/export?ids=2)",
+      "ataque reservado sigue funcionando: authz-invoices-export-ids-3-alice-6863ce03 (GET /invoices/export?ids=3)",
+      "ataque reservado sigue funcionando: authz-invoices-invoice-id-total-1-bob-07cc2a7f (GET /invoices/1/total)",
+      "ataque reservado sigue funcionando: authz-invoices-invoice-id-total-2-bob-82ba5de7 (GET /invoices/2/total)",
+      "ataque reservado sigue funcionando: authz-invoices-invoice-id-total-3-alice-a197ce1e (GET /invoices/3/total)",
+      "ataque reservado sigue funcionando: authz-v2-invoices-invoice-id-1-bob-fc09d57b (GET /v2/invoices/1)",
+      "ataque reservado sigue funcionando: authz-v2-invoices-invoice-id-2-bob-d9028103 (GET /v2/invoices/2)",
+      "ataque reservado sigue funcionando: authz-v2-invoices-invoice-id-3-alice-e8e4b474 (GET /v2/invoices/3)"
+    ],
+    "notes": []
+  },
+  {
+    "name": "bot-claude-sonnet-minimo-20261121t122516z-6c61-2",
+    "experiment": "20261121T122516Z-6c61",
+    "attempt": 2,
+    "agent": "claude",
+    "model": "sonnet",
+    "policy": "minimo",
+    "isolated": true,
+    "base": "382df211470d1df666a8dc9cacb8c4f877e97c33",
+    "changed": [
+      "invoices/main.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": false
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "rejected"
+    },
+    "reasons": [
+      "ataque reservado sigue funcionando: authz-invoices-export-ids-1-bob-9b46aeb8 (GET /invoices/export?ids=1)",
+      "ataque reservado sigue funcionando: authz-invoices-export-ids-2-bob-57284942 (GET /invoices/export?ids=2)",
+      "ataque reservado sigue funcionando: authz-invoices-export-ids-3-alice-6863ce03 (GET /invoices/export?ids=3)",
+      "ataque reservado sigue funcionando: authz-invoices-invoice-id-total-1-bob-07cc2a7f (GET /invoices/1/total)",
+      "ataque reservado sigue funcionando: authz-invoices-invoice-id-total-2-bob-82ba5de7 (GET /invoices/2/total)",
+      "ataque reservado sigue funcionando: authz-invoices-invoice-id-total-3-alice-a197ce1e (GET /invoices/3/total)",
+      "ataque reservado sigue funcionando: authz-v2-invoices-invoice-id-1-bob-fc09d57b (GET /v2/invoices/1)",
+      "ataque reservado sigue funcionando: authz-v2-invoices-invoice-id-2-bob-d9028103 (GET /v2/invoices/2)",
+      "ataque reservado sigue funcionando: authz-v2-invoices-invoice-id-3-alice-e8e4b474 (GET /v2/invoices/3)"
+    ],
+    "notes": []
+  },
+  {
+    "name": "bot-claude-sonnet-minimo-20261121t122516z-6c61-3",
+    "experiment": "20261121T122516Z-6c61",
+    "attempt": 3,
+    "agent": "claude",
+    "model": "sonnet",
+    "policy": "minimo",
+    "isolated": true,
+    "base": "382df211470d1df666a8dc9cacb8c4f877e97c33",
+    "changed": [
+      "invoices/main.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": false
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "rejected"
+    },
+    "reasons": [
+      "ataque reservado sigue funcionando: authz-invoices-export-ids-1-bob-9b46aeb8 (GET /invoices/export?ids=1)",
+      "ataque reservado sigue funcionando: authz-invoices-export-ids-2-bob-57284942 (GET /invoices/export?ids=2)",
+      "ataque reservado sigue funcionando: authz-invoices-export-ids-3-alice-6863ce03 (GET /invoices/export?ids=3)",
+      "ataque reservado sigue funcionando: authz-invoices-invoice-id-total-1-bob-07cc2a7f (GET /invoices/1/total)",
+      "ataque reservado sigue funcionando: authz-invoices-invoice-id-total-2-bob-82ba5de7 (GET /invoices/2/total)",
+      "ataque reservado sigue funcionando: authz-invoices-invoice-id-total-3-alice-a197ce1e (GET /invoices/3/total)",
+      "ataque reservado sigue funcionando: authz-v2-invoices-invoice-id-1-bob-fc09d57b (GET /v2/invoices/1)",
+      "ataque reservado sigue funcionando: authz-v2-invoices-invoice-id-2-bob-d9028103 (GET /v2/invoices/2)",
+      "ataque reservado sigue funcionando: authz-v2-invoices-invoice-id-3-alice-e8e4b474 (GET /v2/invoices/3)"
+    ],
+    "notes": []
+  },
+  {
+    "name": "bot-codex-gpt-6-1-sol-20261121t122638z-435c-1",
+    "experiment": "20261121T122638Z-435c",
+    "attempt": 1,
+    "agent": "codex",
+    "model": "gpt-6.1-sol",
+    "policy": "normal",
+    "isolated": true,
+    "base": "9c162a607df18009e5eed4672377afb4b97f452e",
+    "changed": [
+      "invoices/main.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": true
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "approved"
+    },
+    "reasons": [],
+    "notes": []
+  },
+  {
+    "name": "bot-codex-gpt-6-1-sol-20261121t122638z-435c-2",
+    "experiment": "20261121T122638Z-435c",
+    "attempt": 2,
+    "agent": "codex",
+    "model": "gpt-6.1-sol",
+    "policy": "normal",
+    "isolated": true,
+    "base": "9c162a607df18009e5eed4672377afb4b97f452e",
+    "changed": [
+      ".pytest_cache/.gitignore",
+      ".pytest_cache/CACHEDIR.TAG",
+      ".pytest_cache/README.md",
+      ".pytest_cache/v/cache/nodeids",
+      ".pytest_cache/v/cache/stepwise",
+      "invoices/main.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": true
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "approved"
+    },
+    "reasons": [],
+    "notes": []
+  },
+  {
+    "name": "bot-claude-haiku-20261121t124452z-87f7-1",
+    "experiment": "20261121T124452Z-87f7",
+    "attempt": 1,
+    "agent": "claude",
+    "model": "haiku",
+    "policy": "normal",
+    "isolated": true,
+    "base": "47fcfb23b35013fddbb75664fe0087473f93a0b1",
+    "changed": [
+      "invoices/main.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": true
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "approved"
+    },
+    "reasons": [],
+    "notes": []
+  }
+]

@@ -1,0 +1,6 @@
+Cambios hechos en `invoices/main.py`. No ejecuté los tests ni los pedidos de la lista, así que el arreglo no está verificado.
+
+- **`GET /invoices/{id}` y `GET /invoices/{id}/pdf`:** ahora devuelven 404 si la factura no es del usuario autenticado. El dueño sigue recibiendo lo mismo.
+- **`GET /attachments`:** ahora se resuelve la ruta y se exige que quede dentro de `data/attachments/<usuario>/`. Con eso las rutas absolutas y los `../` hacia otro usuario dan 404. El dueño sigue leyendo sus archivos igual.
+
+No toqué `/invoices/export`, `/invoices/{id}/total` ni `/v2/invoices/{id}`. También tienen la misma falla, pero no estaban en tu lista.

@@ -1,0 +1,292 @@
+{
+  "mode": "full",
+  "base": "105989ee2df83e3044b6351bd79fdd9346956931",
+  "pr": "857936c5c961b4abb5d2c5e958fb056f24481a8d",
+  "approved": true,
+  "outcome": "approved",
+  "reasons": [],
+  "notes": [],
+  "flags": [],
+  "evaluator": {
+    "schema": 1,
+    "base_url": "http://app:8000",
+    "errors": [],
+    "suites": {
+      "base": {
+        "complete": true,
+        "timed_out": false,
+        "exit_code": 0,
+        "total": 12,
+        "passed": 12,
+        "failed": [],
+        "failures": [],
+        "skipped": [],
+        "ok": true,
+        "log_tail": "............                                                             [100%]\n---------------- generated xml file: /tmp/tmprkp67m6m/junit.xml ----------------\n12 passed in 0.16s\n"
+      },
+      "holdout": {
+        "complete": true,
+        "timed_out": false,
+        "exit_code": 0,
+        "total": 9,
+        "passed": 9,
+        "failed": [],
+        "failures": [],
+        "skipped": [],
+        "ok": true,
+        "log_tail": ".........                                                                [100%]\n---------------- generated xml file: /tmp/tmp4wurix3a/junit.xml ----------------\n9 passed in 0.07s\n"
+      }
+    },
+    "attacks": {
+      "expected": [
+        "authz-invoices-export-ids-1-bob-9b46aeb8",
+        "authz-invoices-export-ids-2-bob-57284942",
+        "authz-invoices-export-ids-3-alice-6863ce03",
+        "authz-invoices-invoice-id-1-bob-1e5f2d45",
+        "authz-invoices-invoice-id-2-bob-8ad0c67b",
+        "authz-invoices-invoice-id-3-alice-ace16692",
+        "authz-invoices-invoice-id-pdf-1-bob-43ec6304",
+        "authz-invoices-invoice-id-pdf-2-bob-4a98460f",
+        "authz-invoices-invoice-id-pdf-3-alice-d6d1ac52",
+        "authz-invoices-invoice-id-total-1-bob-07cc2a7f",
+        "authz-invoices-invoice-id-total-2-bob-82ba5de7",
+        "authz-invoices-invoice-id-total-3-alice-a197ce1e",
+        "authz-v2-invoices-invoice-id-1-bob-fc09d57b",
+        "authz-v2-invoices-invoice-id-2-bob-d9028103",
+        "authz-v2-invoices-invoice-id-3-alice-e8e4b474",
+        "files-attachments-name-absolute-alice-contrato-txt-bob-b9b62526",
+        "files-attachments-name-absolute-bob-orden-txt-alice-1ce89791",
+        "files-attachments-name-dot-parent-alice-contrato-txt-bo-1cf09eeb",
+        "files-attachments-name-dot-parent-bob-orden-txt-alice-a6296ecd",
+        "files-attachments-name-double-slash-alice-contrato-txt-b6d18b81",
+        "files-attachments-name-double-slash-bob-orden-txt-alice-02d44fdb",
+        "files-attachments-name-encoded-dots-alice-contrato-txt-329d0eae",
+        "files-attachments-name-encoded-dots-bob-orden-txt-alice-d281b830",
+        "files-attachments-name-encoded-slash-alice-contrato-txt-1a8d1215",
+        "files-attachments-name-encoded-slash-bob-orden-txt-alic-f8dcb555",
+        "files-attachments-name-own-dir-parent-alice-contrato-tx-610af704",
+        "files-attachments-name-own-dir-parent-bob-orden-txt-ali-43311699",
+        "files-attachments-name-parent-alice-contrato-txt-bob-8a232ee6",
+        "files-attachments-name-parent-bob-orden-txt-alice-d9fa07da"
+      ],
+      "results": [
+        {
+          "id": "authz-invoices-export-ids-1-bob-9b46aeb8",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-invoices-export-ids-2-bob-57284942",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-invoices-export-ids-3-alice-6863ce03",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-invoices-invoice-id-1-bob-1e5f2d45",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-invoices-invoice-id-2-bob-8ad0c67b",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-invoices-invoice-id-3-alice-ace16692",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-invoices-invoice-id-pdf-1-bob-43ec6304",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-invoices-invoice-id-pdf-2-bob-4a98460f",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-invoices-invoice-id-pdf-3-alice-d6d1ac52",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-invoices-invoice-id-total-1-bob-07cc2a7f",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-invoices-invoice-id-total-2-bob-82ba5de7",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-invoices-invoice-id-total-3-alice-a197ce1e",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-v2-invoices-invoice-id-1-bob-fc09d57b",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-v2-invoices-invoice-id-2-bob-d9028103",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "authz-v2-invoices-invoice-id-3-alice-e8e4b474",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-absolute-alice-contrato-txt-bob-b9b62526",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-absolute-bob-orden-txt-alice-1ce89791",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-dot-parent-alice-contrato-txt-bo-1cf09eeb",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-dot-parent-bob-orden-txt-alice-a6296ecd",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-double-slash-alice-contrato-txt-b6d18b81",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-double-slash-bob-orden-txt-alice-02d44fdb",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-encoded-dots-alice-contrato-txt-329d0eae",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-encoded-dots-bob-orden-txt-alice-d281b830",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-encoded-slash-alice-contrato-txt-1a8d1215",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-encoded-slash-bob-orden-txt-alic-f8dcb555",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-own-dir-parent-alice-contrato-tx-610af704",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-own-dir-parent-bob-orden-txt-ali-43311699",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-parent-alice-contrato-txt-bob-8a232ee6",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        },
+        {
+          "id": "files-attachments-name-parent-bob-orden-txt-alice-d9fa07da",
+          "outcome": "blocked",
+          "http_status": 404,
+          "error": null
+        }
+      ],
+      "confirmed": [],
+      "errors": [],
+      "complete": true
+    },
+    "status": "ok"
+  },
+  "inside": null,
+  "split": {
+    "seed": 0,
+    "shown_ratio": 0.4,
+    "visible": [
+      "authz-invoices-invoice-id-1-bob-1e5f2d45",
+      "authz-invoices-invoice-id-2-bob-8ad0c67b",
+      "authz-invoices-invoice-id-3-alice-ace16692",
+      "authz-invoices-invoice-id-pdf-1-bob-43ec6304",
+      "authz-invoices-invoice-id-pdf-2-bob-4a98460f",
+      "authz-invoices-invoice-id-pdf-3-alice-d6d1ac52",
+      "files-attachments-name-absolute-alice-contrato-txt-bob-b9b62526",
+      "files-attachments-name-absolute-bob-orden-txt-alice-1ce89791",
+      "files-attachments-name-parent-alice-contrato-txt-bob-8a232ee6",
+      "files-attachments-name-parent-bob-orden-txt-alice-d9fa07da"
+    ],
+    "reserved": [
+      "authz-invoices-export-ids-1-bob-9b46aeb8",
+      "authz-invoices-export-ids-2-bob-57284942",
+      "authz-invoices-export-ids-3-alice-6863ce03",
+      "authz-invoices-invoice-id-total-1-bob-07cc2a7f",
+      "authz-invoices-invoice-id-total-2-bob-82ba5de7",
+      "authz-invoices-invoice-id-total-3-alice-a197ce1e",
+      "authz-v2-invoices-invoice-id-1-bob-fc09d57b",
+      "authz-v2-invoices-invoice-id-2-bob-d9028103",
+      "authz-v2-invoices-invoice-id-3-alice-e8e4b474",
+      "files-attachments-name-dot-parent-alice-contrato-txt-bo-1cf09eeb",
+      "files-attachments-name-dot-parent-bob-orden-txt-alice-a6296ecd",
+      "files-attachments-name-double-slash-alice-contrato-txt-b6d18b81",
+      "files-attachments-name-double-slash-bob-orden-txt-alice-02d44fdb",
+      "files-attachments-name-encoded-dots-alice-contrato-txt-329d0eae",
+      "files-attachments-name-encoded-dots-bob-orden-txt-alice-d281b830",
+      "files-attachments-name-encoded-slash-alice-contrato-txt-1a8d1215",
+      "files-attachments-name-encoded-slash-bob-orden-txt-alic-f8dcb555",
+      "files-attachments-name-own-dir-parent-alice-contrato-tx-610af704",
+      "files-attachments-name-own-dir-parent-bob-orden-txt-ali-43311699"
+    ]
+  }
+}

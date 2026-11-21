@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import threading
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,8 +52,33 @@ class AppHandle:
     base_url: str
 
 
+# Dos revisiones del mismo árbol producen la misma imagen. Si una la borra justo
+# cuando la otra termina de construirla, la segunda se queda sin imagen: construir
+# y borrar se hacen de a uno.
+_image_lock = threading.Lock()
+MISSING_IMAGE = ("Unable to find image", "No such image", "pull access denied")
+
+
+def _build_app_image(context: Path, image: str) -> None:
+    with _image_lock:
+        _docker("build", "-q", "-f", str(ROOT / "docker" / "app.Dockerfile"), "-t", image, str(context))
+
+
+def _remove_image(image: str) -> None:
+    with _image_lock:
+        _docker("rmi", "-f", image, check=False, timeout=60)
+
+
+_built: set[str] = set()
+_build_lock = threading.Lock()
+
+
 def build_evaluator_image(root: Path = ROOT) -> str:
-    _docker("build", "-q", "-f", str(root / "docker" / "evaluator.Dockerfile"), "-t", EVALUATOR_IMAGE, str(root))
+    """Construye la imagen del evaluador una vez por proceso."""
+    with _build_lock:
+        if str(root) not in _built:
+            _docker("build", "-q", "-f", str(root / "docker" / "evaluator.Dockerfile"), "-t", EVALUATOR_IMAGE, str(root))
+            _built.add(str(root))
     return EVALUATOR_IMAGE
 
 
@@ -164,14 +190,17 @@ def run_pytest_inside(context: Path, tests_dir: str, budget: float = 120.0) -> d
     """
     run_id = f"cp-{uuid.uuid4().hex[:10]}"
     image = f"{run_id}-ci"
-    _docker("build", "-q", "-f", str(ROOT / "docker" / "app.Dockerfile"), "-t", image, str(context))
+    _build_app_image(context, image)
+    cmd = [
+        "run", "--rm", "--name", run_id, "--network", "none", *HARDENING,
+        image, "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", tests_dir,
+    ]
     try:
         try:
-            proc = _docker(
-                "run", "--rm", "--name", run_id, "--network", "none", *HARDENING,
-                image, "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", tests_dir,
-                timeout=budget, check=False,
-            )
+            proc = _docker(*cmd, timeout=budget, check=False)
+            if proc.returncode == 125 and any(m in proc.stderr for m in MISSING_IMAGE):
+                _build_app_image(context, image)  # otra corrida fuera de este proceso la borró
+                proc = _docker(*cmd, timeout=budget, check=False)
         except subprocess.TimeoutExpired:
             _docker("rm", "-f", run_id, check=False, timeout=60)
             return {"passed": False, "exit_code": None, "timed_out": True, "log_tail": ""}
@@ -182,21 +211,29 @@ def run_pytest_inside(context: Path, tests_dir: str, budget: float = 120.0) -> d
             "log_tail": (proc.stdout + proc.stderr)[-2000:],
         }
     finally:
-        _docker("rmi", "-f", image, check=False, timeout=60)
+        _remove_image(image)
 
 
 def start_app(context: Path, case: Case | Target) -> AppHandle:
     """Construye y levanta la app de `context` en un contenedor aislado, sin salida a internet."""
     run_id = f"cp-{uuid.uuid4().hex[:10]}"
     image = f"{run_id}-app"
-    _docker("build", "-q", "-f", str(ROOT / "docker" / "app.Dockerfile"), "-t", image, str(context))
-    _docker("network", "create", "--internal", run_id)
+    _build_app_image(context, image)
     container = f"{run_id}-app"
+    cmd = [
+        "run", "-d", "--name", container, "--network", run_id, "--network-alias", "app", *HARDENING,
+        image, "uvicorn", case.app.module, "--host", "0.0.0.0", "--port", str(case.app.port),
+    ]
     try:
-        _docker(
-            "run", "-d", "--name", container, "--network", run_id, "--network-alias", "app", *HARDENING,
-            image, "uvicorn", case.app.module, "--host", "0.0.0.0", "--port", str(case.app.port),
-        )
+        _docker("network", "create", "--internal", run_id)
+        try:
+            _docker(*cmd)
+        except SandboxError as e:
+            if not any(m in str(e) for m in MISSING_IMAGE):
+                raise
+            _docker("rm", "-f", container, check=False, timeout=60)
+            _build_app_image(context, image)  # otra corrida fuera de este proceso la borró
+            _docker(*cmd)
     except SandboxError:
         stop(AppHandle(run_id, run_id, container, image, ""))
         raise
@@ -272,4 +309,4 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
 def stop(app: AppHandle) -> None:
     _docker("rm", "-f", app.container, check=False, timeout=60)
     _docker("network", "rm", app.network, check=False, timeout=60)
-    _docker("rmi", "-f", app.image, check=False, timeout=60)
+    _remove_image(app.image)

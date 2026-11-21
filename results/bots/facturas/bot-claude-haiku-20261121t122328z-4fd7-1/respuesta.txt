@@ -1,0 +1,7 @@
+Corregí la vulnerabilidad en `invoices/main.py`, pero **no pude ejecutar los tests**: la herramienta Bash no está disponible en esta sesión. La verificación fue por lectura del código contra los tests existentes y los casos del reporte.
+
+**Cambios:**
+- **Facturas:** `get_invoice` ahora recibe el usuario y devuelve 404 si la factura no es suya (igual que si no existe). Todas las rutas de factura (`/invoices/{id}`, `/total`, `/pdf`, `/v2/...` y `/invoices/export`) lo usan.
+- **Adjuntos:** `/attachments` resuelve la ruta dentro de la carpeta del usuario y responde 404 si queda fuera (rutas absolutas o con `..`). Las subcarpetas legítimas, como `notas/reunion.txt`, siguen funcionando.
+
+Por lectura, los tests existentes deberían seguir pasando, y los 10 casos del reporte deberían responder 404 en lugar de devolver datos ajenos. Para confirmarlo, ejecuta `python -m pytest -q` y los casos del reporte en tu entorno. No se tocaron tests, configuración ni dependencias.
