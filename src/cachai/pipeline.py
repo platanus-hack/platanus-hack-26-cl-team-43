@@ -489,7 +489,10 @@ def check(
             inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget)
             return _baseline(mode, base_sha, pr_sha, inside)
 
-        if plan is None and holdout_tests is None and target.hidden is not None:
+        # Sin la clave, el modo visible es la revisión local del dev: sigue sin el
+        # paquete en vez de quedar incompleto. En full, la falta de clave sí lo deja incompleto.
+        local_visible = mode == "visible" and target.hidden is not None and not os.environ.get(target.hidden.key_env)
+        if plan is None and holdout_tests is None and target.hidden is not None and not local_visible:
             try:
                 plan, holdout_tests = load_hidden(repo, base_sha, target, tmp_path / "reservado")
             except (hidden.HiddenError, ValueError, OSError) as e:
@@ -502,7 +505,9 @@ def check(
 
         def done(result: dict | None, ev: Evidence) -> CheckResult:
             verdict = decide(ev)
-            return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, verdict.notes, flags,
+            notes = verdict.notes + ([f"sin {target.hidden.key_env}: no se abrió el paquete reservado, ni sus ataques visibles"]
+                                     if local_visible else [])
+            return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, notes, flags,
                                evaluator=result, split=split, outcome=verdict.outcome, typed=verdict.typed,
                                secrets=reserved_secrets(plan if mode == "full" else None, holdout_tests, result))
 
