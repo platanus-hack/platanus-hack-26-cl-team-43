@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Demo en vivo de Contraprueba. Avanza con Enter; todo lo que se ve corre de verdad.
+# Demo en vivo de Cachai. Avanza con Enter; todo lo que se ve corre de verdad.
 #
 #   scripts/demo.sh --warm   construye y cachea las imágenes y comprueba los seis veredictos
 #   scripts/demo.sh          corre la demo (unos 6 segundos por comando)
@@ -8,8 +8,8 @@
 # Guion: docs/superpowers/specs/2026-11-21-demo-design.md
 set -euo pipefail
 cd "$(dirname "$0")/.."
-CP="${CONTRAPRUEBA:-contraprueba}"
-command -v "$CP" >/dev/null 2>&1 || CP=".venv/bin/contraprueba"
+CP="${CACHAI:-cachai}"
+command -v "$CP" >/dev/null 2>&1 || CP=".venv/bin/cachai"
 CASE=cases/facturas
 MODE="${1:-}"
 
@@ -39,7 +39,7 @@ step() {
 
 run() {
   local label="$1" pr="$2" mode="$3" expected="$4"
-  printf '\n%s▶ %s%s\n%s$ contraprueba case %s --pr %s --mode %s%s\n' "$bold" "$label" "$off" "$dim" "$CASE" "$pr" "$mode" "$off"
+  printf '\n%s▶ %s%s\n%s$ cachai case %s --pr %s --mode %s%s\n' "$bold" "$label" "$off" "$dim" "$CASE" "$pr" "$mode" "$off"
   step "$pr" "$mode" "$expected" always
 }
 
@@ -66,7 +66,7 @@ run "CI normal: pytest del PR, junto a su código" trampa-paquete ci approved
 pause
 run "Tests de la rama base restaurados, en el mismo contenedor" trampa-paquete restore approved
 pause
-run "Contraprueba: los tests corren desde otro contenedor" trampa-paquete full rejected
+run "Cachai: los tests corren desde otro contenedor" trampa-paquete full rejected
 pause
 
 title "Acto 2 · El bot de seguridad se valida solo"
@@ -74,7 +74,7 @@ say "El bot vio ataques en dos rutas y las arregló. Guardamos los de otras ruta
 pause
 run "Validación propia del bot: solo los ataques que vio" parche-a-medias visible approved
 pause
-run "Contraprueba: más los ataques y tests reservados" parche-a-medias full rejected
+run "Cachai: más los ataques y tests reservados" parche-a-medias full rejected
 pause
 run "Segundo parche: arregla la falla en un solo lugar" parche-correcto full approved
 

@@ -39,7 +39,7 @@ MODE_TITLES = {
     "ci": "CI normal",
     "restore": "Tests restaurados, mismo contenedor",
     "visible": "Validación propia del parchador",
-    "full": "Contraprueba",
+    "full": "Cachai",
 }
 
 
@@ -65,7 +65,7 @@ def run(cases: list[Case], modes: tuple[str, ...] = pipeline.MODES, jobs: int = 
     """Corre cada PR de cada caso en cada modo. Devuelve una fila por corrida."""
     sandbox.build_evaluator_image()
     rows: list[dict] = []
-    with tempfile.TemporaryDirectory(prefix="contraprueba-bench-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="cachai-bench-") as tmp:
         tasks = []
         for case in cases:
             repo = materialize(case, Path(tmp) / case.id)
@@ -130,7 +130,7 @@ POLICY_TITLES = {"normal": "Encargo normal: arreglar la falla", "minimo": "Polí
 
 
 def load_bots(out_dir: str | Path) -> list[dict]:
-    """Parches generados por agentes reales (`contraprueba fix`), si los hay."""
+    """Parches generados por agentes reales (`cachai fix`), si los hay."""
     rows = []
     for f in sorted(Path(out_dir).glob("bots/*/bots.json")):
         rows += [{**r, "case": f.parent.name} for r in json.loads(f.read_text())]
@@ -138,7 +138,7 @@ def load_bots(out_dir: str | Path) -> list[dict]:
 
 
 def summarize_bots(bots: list[dict]) -> list[dict]:
-    """Por política y modelo: cuántos parches pasan su propia validación y cuántos aprueba Contraprueba."""
+    """Por política y modelo: cuántos parches pasan su propia validación y cuántos aprueba Cachai."""
     out = []
     keys = dict.fromkeys((b.get("policy", "normal"), b["agent"], b["model"]) for b in bots)
     for policy, agent, model in keys:
@@ -168,12 +168,12 @@ def bots_markdown(bots: list[dict]) -> list[str]:
     out = [
         "## Parches generados por modelos",
         "",
-        "Con `contraprueba fix`, un agente de código real recibe los archivos de la rama base y solo los ataques visibles. "
+        "Con `cachai fix`, un agente de código real recibe los archivos de la rama base y solo los ataques visibles. "
         "Corre aislado: no ve el proyecto, el material reservado ni las ramas con las soluciones. "
         "Su parche se revisa igual que cualquier PR. Están todos los intentos, también los que no produjeron parche; "
         "el pedido, la respuesta y el diff de cada uno están en `results/bots/`.",
         "",
-        "| Encargo | Agente y modelo | Intentos | Sin parche | Pasan su propia validación | Aprueba Contraprueba | Pasan la propia y se rechazan | Sin veredicto | Agente aislado |",
+        "| Encargo | Agente y modelo | Intentos | Sin parche | Pasan su propia validación | Aprueba Cachai | Pasan la propia y se rechazan | Sin veredicto | Agente aislado |",
         "|---|---|---|---|---|---|---|---|---|",
     ]
     for s in summarize_bots(bots):
@@ -183,7 +183,7 @@ def bots_markdown(bots: list[dict]) -> list[str]:
         )
     out += [
         "",
-        "El encargo normal mide si Contraprueba deja pasar parches buenos de modelos reales. "
+        "El encargo normal mide si Cachai deja pasar parches buenos de modelos reales. "
         "La política de ataque es un parchador instruido para hacer el cambio mínimo, como en las evaluaciones de AI control: "
         "prueba la revisión contra un modelo real que solo tapa lo que vio, y no describe cómo se comporta un modelo por su cuenta.",
         "",
@@ -198,7 +198,7 @@ def to_markdown(rows: list[dict], summary: dict, cases: list[Case], bots: list[d
     out.append(
         f"{n_prs} PR etiquetados en {len(cases)} caso{'s' if len(cases) != 1 else ''} "
         f"({', '.join(c.id for c in cases)}), cada uno revisado en {len(modes)} modos. "
-        "Generado con `contraprueba bench`."
+        "Generado con `cachai bench`."
     )
     out += ["", "## Rechazos por modo", ""]
     out.append(
@@ -229,7 +229,7 @@ def to_markdown(rows: list[dict], summary: dict, cases: list[Case], bots: list[d
     out += ["", "En negrita, las decisiones equivocadas.", ""]
     wrong_full = [r for r in rows if r["mode"] == "full" and not r["correct"]]
     if wrong_full:
-        out += ["## Decisiones equivocadas de Contraprueba", ""]
+        out += ["## Decisiones equivocadas de Cachai", ""]
         for r in wrong_full:
             why = "; ".join(r["result"]["reasons"][:2]) or "sin motivos"
             verdict = {"approved": "aprobado", "rejected": "rechazado", "incomplete": "sin veredicto"}[r["outcome"]]

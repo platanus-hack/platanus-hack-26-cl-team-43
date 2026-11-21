@@ -1,14 +1,14 @@
-# Propuesta: Contraprueba
+# Propuesta: Cachai
 
 ## Idea
 
-Ninguna IA aprueba el código de otra IA. Contraprueba es un revisor determinista, fuera del alcance de cualquier modelo, que decide antes del merge si entra el código escrito por un agente o el parche propuesto por un bot de seguridad.
+Ninguna IA aprueba el código de otra IA. Cachai es un revisor determinista, fuera del alcance de cualquier modelo, que decide antes del merge si entra el código escrito por un agente o el parche propuesto por un bot de seguridad.
 
 ## Modelo de amenaza
 
 - **Modelos no confiables:** el agente de código y el parchador. Pueden equivocarse o hacer trampa para cumplir su métrica (*reward hacking*).
 - **Componentes confiables:** el evaluador, los tests y el runner de la rama base, los ataques y tests reservados y la decisión final. Ningún modelo los escribe ni los ejecuta en su entorno.
-- **Fuera de alcance:** atacantes externos sobre la infraestructura de Contraprueba y acciones irreversibles fuera del repo (correos, pushes, datos ya enviados).
+- **Fuera de alcance:** atacantes externos sobre la infraestructura de Cachai y acciones irreversibles fuera del repo (correos, pushes, datos ya enviados).
 
 ## Dos escenarios
 
@@ -45,7 +45,7 @@ Con pocos casos se reportan intervalos de confianza, no «cero vulnerable».
 
 ## Demo
 
-1. El agente hace trampa con un hook de pytest. CI normal: verde. Contraprueba: rechazado, con archivo y línea.
+1. El agente hace trampa con un hook de pytest. CI normal: verde. Cachai: rechazado, con archivo y línea.
 2. El bot parcha un acceso a datos de otro usuario y su validación da verde. Un ataque reservado sigue entrando: rechazado.
 3. Segundo parche: pasa los tests de la base y los reservados. Aprobado.
 

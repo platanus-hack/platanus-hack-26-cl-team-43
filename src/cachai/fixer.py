@@ -1,4 +1,4 @@
-"""Parchador: un agente de código real propone un parche y Contraprueba lo revisa.
+"""Parchador: un agente de código real propone un parche y Cachai lo revisa.
 
 El parchador es un modelo no confiable. Recibe una copia de los archivos de la
 rama base y los ataques visibles (qué pedido hizo quién y qué dato ajeno
@@ -29,7 +29,7 @@ sin red). Sin `unshare` (por ejemplo en macOS) el aislamiento no existe: hay que
 pedirlo explícitamente con `isolate=False` y queda registrado en cada intento.
 
 El agente es un comando externo que edita archivos en la carpeta donde corre.
-Contraprueba no depende de ningún modelo en particular ni lo llama para decidir.
+Cachai no depende de ningún modelo en particular ni lo llama para decidir.
 """
 
 from __future__ import annotations
@@ -106,10 +106,10 @@ def brief(visible: list[Attack], policy: str = "normal") -> str:
 def default_masks(case: Case, out_dir: Path) -> list[Path]:
     """Carpetas que el agente no debe ver: el proyecto, el caso, los resultados y los temporales.
 
-    `CONTRAPRUEBA_MASK` agrega otras (separadas por `:`), por ejemplo la carpeta
+    `CACHAI_MASK` agrega otras (separadas por `:`), por ejemplo la carpeta
     donde viven otros clones del repo.
     """
-    extra = [Path(p) for p in os.environ.get("CONTRAPRUEBA_MASK", "").split(":") if p]
+    extra = [Path(p) for p in os.environ.get("CACHAI_MASK", "").split(":") if p]
     masks = [ROOT, case.root, Path(out_dir), Path(tempfile.gettempdir()), *extra]
     return list(dict.fromkeys(p.resolve() for p in masks))
 
@@ -230,7 +230,7 @@ def apply(trusted: Path, base_sha: str, name: str, files: dict[str, bytes]) -> t
 def propose(trusted: Path, base_sha: str, name: str, agent: str, model: str, prompt: str,
             masks: list[Path], secrets: list[Path], isolate: bool = True, timeout: float = 600.0) -> Proposal:
     """Lanza al agente sobre una copia de los archivos de la base y guarda su parche como rama del repo confiable."""
-    holder = Path(tempfile.mkdtemp(prefix="contraprueba-agente-"))
+    holder = Path(tempfile.mkdtemp(prefix="cachai-agente-"))
     workdir = holder / "repo"
     gitio.export_tree(trusted, base_sha, workdir)
     cmd = [part.replace("{prompt}", prompt).replace("{model}", model) for part in AGENTS[agent]]
@@ -282,7 +282,7 @@ def run(case: Case, agent: str, runs: int = 3, model: str | None = None, out_dir
     secrets = [p for p in (case.root / "case.json", case.root / (case.attacks_file or "attacks.json"), case.holdout_tests_path) if p]
     experiment = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:4]
     rows = []
-    with tempfile.TemporaryDirectory(prefix="contraprueba-parchador-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="cachai-parchador-") as tmp:
         trusted = materialize(case, Path(tmp) / "repo")
         base_sha = gitio.resolve(trusted, "main")
         for i in range(1, runs + 1):

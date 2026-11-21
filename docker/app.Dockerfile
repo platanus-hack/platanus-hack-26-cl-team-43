@@ -1,5 +1,5 @@
 # Imagen de la app que se revisa. El contexto es el checkout de la rama del PR
-# (no confiable); el comando de arranque lo pone Contraprueba al correrla.
+# (no confiable); el comando de arranque lo pone Cachai al correrla.
 FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .

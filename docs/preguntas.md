@@ -10,7 +10,7 @@ Medimos las tres defensas habituales sobre los mismos 19 cambios:
 - Restaurar los tests de la rama base, que es lo que hacen los benchmarks, atrapó 5 de 8. Las otras 3 no tocan los archivos de test: viven dentro del paquete de la app o en su comportamiento.
 - La validación que un bot parchador se hace a sí mismo aprobó los 3 parches malos.
 
-Las salvaguardas de un laboratorio actúan sobre lo que el modelo dice o hace mientras trabaja. Contraprueba actúa después, sobre el resultado, y no depende de que el modelo coopere ni de quién lo entrenó.
+Las salvaguardas de un laboratorio actúan sobre lo que el modelo dice o hace mientras trabaja. Cachai actúa después, sobre el resultado, y no depende de que el modelo coopere ni de quién lo entrenó.
 
 No conocemos una herramienta que combine evaluador fuera del alcance del código, ataques que el parchador no vio y decisión sin ningún modelo. Si existe, se puede sumar como una fila más del mismo banco.
 

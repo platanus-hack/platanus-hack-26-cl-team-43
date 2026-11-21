@@ -1,12 +1,12 @@
-"""CLI de Contraprueba.
+"""CLI de Cachai.
 
-    contraprueba check --repo <ruta> --base main --pr <rama> [--mode ci|restore|visible|full]
-    contraprueba case <carpeta del caso> [--pr <nombre>|all] [--mode <modo>|all]
-    contraprueba redteam <carpeta del caso> [--write]
-    contraprueba bench [carpeta de casos] [--out results]
-    contraprueba fix <carpeta del caso> [--agent claude|codex] [--runs 3]
+    cachai check --repo <ruta> --base main --pr <rama> [--mode ci|restore|visible|full]
+    cachai case <carpeta del caso> [--pr <nombre>|all] [--mode <modo>|all]
+    cachai redteam <carpeta del caso> [--write]
+    cachai bench [carpeta de casos] [--out results]
+    cachai fix <carpeta del caso> [--agent claude|codex] [--runs 3]
 
-`check` revisa un PR de un repo cuya rama base tiene `.contraprueba.json`. Si
+`check` revisa un PR de un repo cuya rama base tiene `.cachai.json`. Si
 el PR es un parche de seguridad, `--attacks` son los ataques que debe bloquear.
 `case` arma el repo de un caso de `cases/` y lo revisa; con `all` imprime la
 tabla de modos por PR. `redteam` genera las variantes de ataque del caso y las
@@ -60,7 +60,7 @@ def run_case(case, prs: list[str], modes: list[str], budget: float = 120.0) -> d
     attacks, split = case.attacks(), case.split()
     plan = pipeline.AttackPlan(tuple(attacks), split) if split else None
     results: dict[tuple[str, str], pipeline.CheckResult] = {}
-    with tempfile.TemporaryDirectory(prefix="contraprueba-caso-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="cachai-caso-") as tmp:
         repo = materialize(case, Path(tmp) / "repo")
         for pr in prs:
             for mode in modes:
@@ -79,7 +79,7 @@ def cmd_redteam(args: argparse.Namespace) -> int:
     sandbox.build_evaluator_image()
     app = sandbox.start_app(case.base_dir, case)
     try:
-        with tempfile.TemporaryDirectory(prefix="contraprueba-rojo-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="cachai-rojo-") as tmp:
             inv = Path(tmp) / "inventory.json"
             inv.write_text(json.dumps(case.inventory))
             found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, case, inv, args.budget)]
@@ -104,7 +104,7 @@ def cmd_fix(args: argparse.Namespace) -> int:
             print(f"{r['name']}: {r['error']}")
             continue
         a = r["approved"]
-        print(f"{r['name']}: propia validación {'aprobada' if a['visible'] else 'RECHAZADA'}, Contraprueba {'APROBADO' if a['full'] else 'RECHAZADO'}")
+        print(f"{r['name']}: propia validación {'aprobada' if a['visible'] else 'RECHAZADA'}, Cachai {'APROBADO' if a['full'] else 'RECHAZADO'}")
         for reason in r["reasons"][:4]:
             print(f"  - {reason}")
     return 0
@@ -154,7 +154,7 @@ def cmd_case(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="contraprueba")
+    parser = argparse.ArgumentParser(prog="cachai")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     c = sub.add_parser("check", help="revisa un PR escrito por IA antes del merge")

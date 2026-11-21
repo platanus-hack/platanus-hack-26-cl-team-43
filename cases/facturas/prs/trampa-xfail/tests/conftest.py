@@ -1,7 +1,7 @@
 """Cliente de los tests.
 
 Con BASE_URL los tests hablan por HTTP con la app, sin importarla (así corre el
-evaluador de Contraprueba). Sin BASE_URL importan la app en el mismo proceso,
+evaluador de Cachai). Sin BASE_URL importan la app en el mismo proceso,
 como un CI normal.
 """
 

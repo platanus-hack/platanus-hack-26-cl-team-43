@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from contraprueba import sandbox
-from contraprueba.case import load_case
+from cachai import sandbox
+from cachai.case import load_case
 
 pytestmark = pytest.mark.skipif(os.environ.get("CP_DOCKER") != "1", reason="requiere CP_DOCKER=1")
 
@@ -26,7 +26,7 @@ def evaluator_image():
 
 @pytest.fixture(scope="module")
 def facturas_repo(tmp_path_factory):
-    from contraprueba.case import materialize
+    from cachai.case import materialize
     return materialize(load_case(FACTURAS), tmp_path_factory.mktemp("facturas") / "repo")
 
 
@@ -111,7 +111,7 @@ def test_redteam_reproduces_committed_attacks(tmp_path):
 
 def test_all_attacks_work_on_base(facturas_repo):
     """Sin parche, todos los ataques del caso siguen funcionando: la base es vulnerable."""
-    from contraprueba import pipeline
+    from cachai import pipeline
     case = load_case(FACTURAS)
     plan = pipeline.AttackPlan(tuple(case.attacks()), case.split())
     r = pipeline.check(facturas_repo, "main", "main", "full", budget=90, plan=plan)
@@ -169,7 +169,7 @@ EXPECTED = {
 
 
 def _check(repo, pr, mode):
-    from contraprueba import pipeline
+    from cachai import pipeline
     case = load_case(FACTURAS)
     plan = pipeline.AttackPlan(tuple(case.attacks()), case.split()) if case.pr(pr).is_security_patch else None
     return pipeline.check(repo, "main", pr, mode, holdout_tests=case.holdout_tests_path, budget=90, plan=plan)
@@ -204,8 +204,8 @@ def test_hito_matrix(facturas_repo, pr, mode):
 def test_stale_branch_is_rejected(tmp_path):
     """Si la base avanzó, el PR no se evalúa contra tests que no conoce."""
     import subprocess
-    from contraprueba import pipeline
-    from contraprueba.case import materialize
+    from cachai import pipeline
+    from cachai.case import materialize
     repo = materialize(load_case(FACTURAS), tmp_path / "repo")
     (repo / "NOTAS.md").write_text("avance de main\n")
     for args in (["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-qm", "avanza"]):
@@ -216,11 +216,11 @@ def test_stale_branch_is_rejected(tmp_path):
 
 def test_pr_that_breaks_the_build_is_incomplete(tmp_path):
     import subprocess
-    from contraprueba import pipeline
-    from contraprueba.case import materialize
+    from cachai import pipeline
+    from cachai.case import materialize
     repo = materialize(load_case(FACTURAS), tmp_path / "repo")
     subprocess.run(["git", "-C", str(repo), "checkout", "-qb", "roto", "main"], check=True)
-    (repo / "requirements.txt").write_text("paquete-que-no-existe-contraprueba==9.9.9\n")
+    (repo / "requirements.txt").write_text("paquete-que-no-existe-cachai==9.9.9\n")
     subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-qam", "roto"], check=True, capture_output=True)
     r = pipeline.check(repo, "main", "roto", "full")
     assert not r.approved and "incompleta" in r.reasons[0]
@@ -228,7 +228,7 @@ def test_pr_that_breaks_the_build_is_incomplete(tmp_path):
 
 def test_partially_skipped_holdout_rejects_honest_pr(facturas_repo, tmp_path):
     """El rechazo del evaluador no se pierde al armar la evidencia."""
-    from contraprueba import pipeline
+    from cachai import pipeline
     holdout = tmp_path / "reservados"
     holdout.mkdir()
     (holdout / "conftest.py").write_text(CONFTEST)
@@ -242,7 +242,7 @@ def test_partially_skipped_holdout_rejects_honest_pr(facturas_repo, tmp_path):
 
 
 def test_holdout_that_passes_keeps_honest_pr_approved(facturas_repo, tmp_path):
-    from contraprueba import pipeline
+    from cachai import pipeline
     holdout = tmp_path / "reservados"
     holdout.mkdir()
     (holdout / "conftest.py").write_text(CONFTEST)
@@ -254,8 +254,8 @@ def test_holdout_that_passes_keeps_honest_pr_approved(facturas_repo, tmp_path):
 def test_git_replace_cannot_launder_a_bad_commit(tmp_path):
     """Con un reemplazo local hacia el commit honesto, el hash malo se sigue rechazando."""
     import subprocess
-    from contraprueba import gitio, pipeline
-    from contraprueba.case import materialize
+    from cachai import gitio, pipeline
+    from cachai.case import materialize
     repo = materialize(load_case(FACTURAS), tmp_path / "repo")
     bad, good = gitio.resolve(repo, "trampa-paquete"), gitio.resolve(repo, "honesto")
     subprocess.run(["git", "-C", str(repo), "replace", bad, good], check=True, capture_output=True)
@@ -340,8 +340,8 @@ async def escape_json(request, call_next):
 def test_evasive_patch_is_rejected(tmp_path, name):
     """Ninguno arregla la falla; cada uno intenta que los ataques parezcan bloqueados."""
     import subprocess
-    from contraprueba import pipeline
-    from contraprueba.case import materialize
+    from cachai import pipeline
+    from cachai.case import materialize
     case = load_case(FACTURAS)
     repo = materialize(case, tmp_path / "repo")
     subprocess.run(["git", "-C", str(repo), "checkout", "-qb", name, "main"], check=True)
@@ -362,8 +362,8 @@ def test_evasive_patch_is_rejected(tmp_path, name):
 
 
 def test_full_mode_matches_every_label_except_the_declared_false_alarm():
-    """Contraprueba decide bien los 19 PR etiquetados; la única diferencia es la política sobre tests existentes."""
-    from contraprueba import bench
+    """Cachai decide bien los 19 PR etiquetados; la única diferencia es la política sobre tests existentes."""
+    from cachai import bench
     case = load_case(FACTURAS)
     rows = bench.run([case], modes=("full",), jobs=4, budget=90)
     assert len(rows) == len(case.prs) == 19

@@ -2,7 +2,7 @@
 
 import pytest
 
-from contraprueba import pipeline
+from cachai import pipeline
 
 
 def result(approved, reasons=(), **kw):
@@ -80,7 +80,7 @@ def test_baseline_says_where_pytest_ran():
 
 @pytest.fixture
 def fake_run(monkeypatch):
-    from contraprueba import cli
+    from cachai import cli
     calls = []
 
     def run_case(case, prs, modes, budget=120.0):
@@ -94,14 +94,14 @@ def fake_run(monkeypatch):
 @pytest.mark.parametrize("extra", [[], ["--json"], ["--color", "always"]])
 def test_case_report_is_written_whatever_the_output_format(fake_run, tmp_path, capsys, extra):
     import json
-    from contraprueba import cli
+    from cachai import cli
     report = tmp_path / "r.json"
     code = cli.main(["case", "cases/facturas", "--pr", "honesto", "--mode", "full", "--report", str(report), *extra])
     assert code == 0 and json.loads(report.read_text())["outcome"] == "approved"
 
 
 def test_case_report_needs_a_single_run(fake_run, tmp_path, capsys):
-    from contraprueba import cli
+    from cachai import cli
     report = tmp_path / "r.json"
     assert cli.main(["case", "cases/facturas", "--pr", "honesto", "--report", str(report)]) == 2
     assert cli.main(["case", "cases/facturas", "--mode", "full", "--report", str(report)]) == 2

@@ -228,10 +228,10 @@ def generate(base_url: str, inv: Inventory, budget: float = 60.0) -> list[Attack
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Corre dentro del contenedor de Contraprueba, contra la app de la rama base."""
+    """Corre dentro del contenedor de Cachai, contra la app de la rama base."""
     from .evaluator import wait_for
 
-    p = argparse.ArgumentParser(prog="contraprueba-redteam")
+    p = argparse.ArgumentParser(prog="cachai-redteam")
     p.add_argument("--base-url", required=True)
     p.add_argument("--health", default="/health")
     p.add_argument("--inventory", required=True)

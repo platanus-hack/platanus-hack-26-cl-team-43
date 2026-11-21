@@ -2,7 +2,7 @@
 
 Un caso guarda la app de la rama base en `base/` y cada PR como una capa de
 archivos en `prs/<nombre>/`. `materialize` arma un repo git temporal con `main`
-y una rama por PR, que es lo que revisa Contraprueba.
+y una rama por PR, que es lo que revisa Cachai.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "holdout_tests"
 APP_KEYS = {"module", "port", "health"}
 PR_KEYS = {"name", "kind", "description", "delete"}
 SPLIT_KEYS = {"shown", "seed"}
-CONFIG_FILE = ".contraprueba.json"  # configuración de la evaluación; solo vale la de la rama base
+CONFIG_FILE = ".cachai.json"  # configuración de la evaluación; solo vale la de la rama base
 CONFIG_KEYS = {"app", "tests_dir"}
 BRANCH_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 MODULE_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$")
@@ -56,7 +56,7 @@ class Target:
 
 
 def load_target(data: bytes | str) -> Target:
-    """Lee `.contraprueba.json` (el contenido que tiene en la rama base)."""
+    """Lee `.cachai.json` (el contenido que tiene en la rama base)."""
     d = json.loads(data)
     if not isinstance(d, dict) or not isinstance(d.get("app"), dict):
         raise ValueError(f"{CONFIG_FILE} inválido")
@@ -199,7 +199,7 @@ def load_case(path: str | Path) -> Case:
 def _git(repo: Path, *args: str) -> None:
     subprocess.run(
         [
-            "git", "-C", str(repo), "-c", "user.name=contraprueba", "-c", "user.email=contraprueba@localhost",
+            "git", "-C", str(repo), "-c", "user.name=cachai", "-c", "user.email=cachai@localhost",
             "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", *args,
         ],
         check=True,
@@ -236,7 +236,7 @@ def _confined(repo: Path, rel: str) -> Path:
 def materialize(case: Case, dest: str | Path) -> Path:
     """Crea en `dest` un repo git con `main` (la base) y una rama por PR.
 
-    La base lleva además `.contraprueba.json`, generado desde `case.json`.
+    La base lleva además `.cachai.json`, generado desde `case.json`.
 
     Los casos son fixtures locales confiables; aun así las capas se validan para
     que no escriban ni borren fuera de `dest` ni toquen `.git`. No es un sandbox.

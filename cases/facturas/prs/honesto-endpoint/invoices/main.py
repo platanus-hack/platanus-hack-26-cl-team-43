@@ -3,7 +3,7 @@
 Rama base del caso: tiene a propósito una falla de autorización por recurso
 (cualquier usuario autenticado puede leer facturas ajenas cambiando el id) en
 varias rutas y una de acceso a archivos en adjuntos. Solo se usa dentro del
-sandbox de Contraprueba.
+sandbox de Cachai.
 """
 
 from __future__ import annotations

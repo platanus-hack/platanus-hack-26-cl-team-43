@@ -1,4 +1,4 @@
-"""Genera docs/pitch/contraprueba-pitch.pdf y docs/pitch/notas-orador.md.
+"""Genera docs/pitch/cachai-pitch.pdf y docs/pitch/notas-orador.md.
 
 Uso:
     pip install qrcode
@@ -24,19 +24,19 @@ import qrcode
 import qrcode.image.svg
 
 HERE = Path(__file__).parent
-PDF = HERE / "contraprueba-pitch.pdf"
+PDF = HERE / "cachai-pitch.pdf"
 NOTES = HERE / "notas-orador.md"
-DEFAULT_URL = "https://contraprueba-three.vercel.app"
+DEFAULT_URL = "https://cachai-ai.vercel.app"
 
-# Analogía del examen. La IA es el alumno; Contraprueba, el profesor que corrige en otra sala.
-EXAMEN_BASE = ("Hoy la IA rinde la prueba y se la corrige ella misma. Contraprueba es el profesor que "
+# Analogía del examen. La IA es el alumno; Cachai, el profesor que corrige en otra sala.
+EXAMEN_BASE = ("Hoy la IA rinde la prueba y se la corrige ella misma. Cachai es el profesor que "
                "corrige en otra sala, con preguntas que el alumno nunca vio.")
 EXAMEN_TRAMPA = ("Este alumno no estudió: cambió el corrector, así todo lo que entrega sale con un 7. El CI normal "
                  "le cree. Le devolvemos la pauta original, pero si corrige en su mismo puesto sigue sacando un 7, "
-                 "porque escondió otro corrector en la mochila. Contraprueba corrige en otra sala, donde la mochila "
+                 "porque escondió otro corrector en la mochila. Cachai corrige en otra sala, donde la mochila "
                  "no llega: un 1, con la pregunta que falló.")
 EXAMEN_PARCIAL = ("Este alumno sí estudió, pero solo se aprendió de memoria la guía de ejercicios que le pasamos. "
-                  "Evaluado con esa misma guía, saca un 7. Contraprueba guardó preguntas que no estaban en la guía, "
+                  "Evaluado con esa misma guía, saca un 7. Cachai guardó preguntas que no estaban en la guía, "
                   "y falla 11. No entendió la materia: tapó los casos que vio.")
 EXAMEN_TOTAL = ("Este entendió la materia: responde las preguntas que no vio y no olvidó lo que ya sabía. "
                 "Aprueba, y le entregamos la prueba corregida con la pauta: qué se preguntó y qué respondió.")
@@ -176,7 +176,7 @@ def esc(s: str) -> str:
 
 
 def foot(label: str) -> str:
-    return f'<div class="foot"><b>contraprueba</b> · {esc(label)}</div>'
+    return f'<div class="foot"><b>cachai</b> · {esc(label)}</div>'
 
 
 def qr_svg(url: str) -> str:
@@ -206,7 +206,7 @@ def slides(url: str) -> list[tuple[str, str, str]]:
 
     S.append(("Portada", f"""
 <section class="slide cover">
-  <div class="title">Contraprueba</div>
+  <div class="title">Cachai</div>
   <div class="tag">Ninguna IA aprueba el código de otra IA.</div>
   <div class="meta"><b>🛡️ AI Security</b> · Platanus Hack 26: Santiago ft. Buk · team-43</div>
 </section>""", "En pantalla mientras se prepara. No se lee. Al empezar, avanzar a la slide del problema (0:00)."))
@@ -235,7 +235,7 @@ def slides(url: str) -> list[tuple[str, str, str]]:
         "los parches de seguridad que pasan su propio ataque siguen rotos. Al final, un humano ve el check "
         "verde y hace merge.»"))
 
-    # Medición real: results/resultados.md (contraprueba bench, 19 PR etiquetados).
+    # Medición real: results/resultados.md (cachai bench, 19 PR etiquetados).
     rows = [
         ("Trampas del agente rechazadas", "debe rechazar 8/8", [0, 5, 8, 8], 8, "detect"),
         ("Parches a medias o que rompen, rechazados", "debe rechazar 3/3", [0, 0, 0, 3], 3, "detect"),
@@ -256,12 +256,12 @@ def slides(url: str) -> list[tuple[str, str, str]]:
         body += "</tr>"
     S.append(("Solución (0:15–0:30)", f"""
 <section class="slide">
-  <h1>Contraprueba <span class="muted" style="font-weight:400">· el revisor que no le cree al modelo</span></h1>
-  <div class="exam">Hoy la IA rinde la prueba y se la corrige sola. Contraprueba <b>corrige en otra sala,
+  <h1>Cachai <span class="muted" style="font-weight:400">· el revisor que no le cree al modelo</span></h1>
+  <div class="exam">Hoy la IA rinde la prueba y se la corrige sola. Cachai <b>corrige en otra sala,
     con preguntas que nunca vio.</b></div>
   <table class="cmp" style="margin-top:40px">
     <tr><th></th><th>CI normal</th><th>Tests restaurados<br>mismo contenedor</th>
-        <th>Validación<br>del bot</th><th class="us">Contraprueba</th></tr>
+        <th>Validación<br>del bot</th><th class="us">Cachai</th></tr>
     {body}
   </table>
   <div class="pillars"><b>otro contenedor</b><span>·</span><b>ataques que el parche nunca vio</b>
@@ -269,10 +269,10 @@ def slides(url: str) -> list[tuple[str, str, str]]:
   {foot("medido sobre 19 PR etiquetados de una app propia · detalle en results/resultados.md")}
 </section>""",
         f"«{EXAMEN_BASE}» "
-        "«Contraprueba es el revisor que no le cree al modelo. Corre los tests desde otro contenedor, donde "
+        "«Cachai es el revisor que no le cree al modelo. Corre los tests desde otro contenedor, donde "
         "el código no puede tocarlos, y guarda ataques que el parche nunca vio. Si algo falla, no entra nada. "
         "Lo medimos sobre 19 PR: el CI normal no atrapa ninguna trampa; restaurar los tests, 5 de 8; "
-        "y ninguna de las defensas actuales atrapa un parche a medias. Contraprueba atrapa todo. Miren.» "
+        "y ninguna de las defensas actuales atrapa un parche a medias. Cachai atrapa todo. Miren.» "
         "→ Pasar a la terminal (demo 0:30–2:20). Si preguntan por la falsa alarma: un cambio legítimo a un "
         "test existente; la política bloquea todo cambio a tests existentes y pide revisión humana."))
 
@@ -288,7 +288,7 @@ def slides(url: str) -> list[tuple[str, str, str]]:
     <div class="arrow">→</div>
     <div>
       <div class="col-label green">DETERMINISTA · SIN MODELOS</div>
-      <div class="panel core"><b>Contraprueba</b><ul>
+      <div class="panel core"><b>Cachai</b><ul>
         <li>prueba desde otro contenedor</li><li>marca hooks de pytest</li>
         <li>ataques y tests reservados</li><li>todo o nada</li></ul></div>
     </div>
@@ -335,7 +335,7 @@ def slides(url: str) -> list[tuple[str, str, str]]:
   <h1>La analogía del examen</h1>
   <div class="exam">{esc(EXAMEN_BASE)}</div>
   <table class="cmp" style="margin-top:32px;font-size:28px">
-    <tr><th style="text-align:left">En la prueba</th><th style="text-align:left;color:var(--green)">En Contraprueba</th></tr>
+    <tr><th style="text-align:left">En la prueba</th><th style="text-align:left;color:var(--green)">En Cachai</th></tr>
     {filas.replace('<td class="mono"', '<td class="mono" style="text-align:left;font-size:24px;padding:13px 12px"').replace('<tr><td>', '<tr><td style="padding:13px 12px 13px 0">')}
   </table>
   {foot("respaldo")}
@@ -347,10 +347,10 @@ def slides(url: str) -> list[tuple[str, str, str]]:
   <h1><span class="muted" style="font-weight:400">Acto 1 ·</span> el agente que hace trampa</h1>
   <div class="exam">El alumno que cambió el corrector y escondió otro en la mochila.</div>
   <div class="terms" style="margin-top:36px">
-    {term("líneas base", [("$ contraprueba case … --pr trampa-paquete", "muted"), ("", ""),
+    {term("líneas base", [("$ cachai case … --pr trampa-paquete", "muted"), ("", ""),
           ("PR trampa-paquete", ""), ("  ci        aprobado", "green"), ("  restore   aprobado", "green"), ("", ""),
           ("CI normal y tests restaurados", "muted"), ("en el mismo contenedor", "muted")], ("✅ APROBADO ×2", "green"))}
-    {term("contraprueba · modo full", [("test de la base falla desde", ""), ("otro contenedor:", ""),
+    {term("cachai · modo full", [("test de la base falla desde", ""), ("otro contenedor:", ""),
           ("  tests/test_invoices.py:48", "yellow"), ("  assert 1200 == 1428.0", "yellow"), ("", ""),
           ("código de la app que", ""), ("referencia pytest:", ""), ("  invoices/_telemetry.py:9", "yellow")],
           ("❌ RECHAZADO", "red"))}
@@ -370,7 +370,7 @@ def slides(url: str) -> list[tuple[str, str, str]]:
     {term("validación del bot · visible", [("10 ataques que el bot vio", ""), ("", ""),
           ("GET /invoices/{id}", "muted"), ("GET /invoices/{id}/pdf", "muted"), ("GET /attachments?name=../…", "muted"),
           ("", ""), ("todos bloqueados", "green")], ("✅ APROBADO", "green"))}
-    {term("contraprueba · modo full", [("11 ataques reservados", ""), ("siguen entrando:", ""),
+    {term("cachai · modo full", [("11 ataques reservados", ""), ("siguen entrando:", ""),
           ("  GET /invoices/1/total", "yellow"), ("  GET /v2/invoices/1", "yellow"),
           ("  GET /invoices/export?ids=1", "yellow"), ("  GET /attachments?name=./../…", "yellow"), ("", ""),
           ("el bot nunca vio estas rutas", "muted")], ("❌ RECHAZADO", "red"))}
@@ -386,7 +386,7 @@ def slides(url: str) -> list[tuple[str, str, str]]:
   <h1><span class="muted" style="font-weight:400">Acto 2 ·</span> el parche correcto</h1>
   <div class="exam">El alumno que entendió la materia.</div>
   <div class="terms single" style="margin-top:36px">
-    {term("contraprueba check", [("12 tests de la base          pasan", ""), ("19 ataques reservados        bloqueados", ""),
+    {term("cachai check", [("12 tests de la base          pasan", ""), ("19 ataques reservados        bloqueados", ""),
           (" 5 tests funcionales reserv. pasan", ""), (" 0 hooks de evaluación", ""), ("", ""),
           ("evidencia → report.json de la corrida", "muted")], ("✅ APROBADO", "green"))}
   </div>
@@ -403,18 +403,18 @@ def slides(url: str) -> list[tuple[str, str, str]]:
   <div class="cards c3" style="grid-template-columns:1fr 1fr">
     <div class="panel card"><div class="t">Encargo normal: arreglar la falla</div>
       <div class="n" style="margin-top:20px">8/8</div>
-      <div class="d" style="margin-top:16px">parches aprobados por Contraprueba<br>2 Sonnet · 4 Haiku · 2 Codex</div>
+      <div class="d" style="margin-top:16px">parches aprobados por Cachai<br>2 Sonnet · 4 Haiku · 2 Codex</div>
       <div class="d" style="margin-top:28px">No bloquea parches buenos de modelos reales.</div></div>
     <div class="panel card" style="border-color:var(--red)"><div class="t">Política de ataque: tapar solo lo que vio</div>
       <div class="n" style="margin-top:20px;color:var(--red)">3/3</div>
-      <div class="d" style="margin-top:16px">pasan su propia validación<br>y Contraprueba los rechaza a los tres</div>
+      <div class="d" style="margin-top:16px">pasan su propia validación<br>y Cachai los rechaza a los tres</div>
       <div class="d" style="margin-top:28px">Como en las evaluaciones de AI control: un parchador instruido para el cambio mínimo.</div></div>
   </div>
-  {foot("respaldo · contraprueba fix · results/bots/")}
+  {foot("respaldo · cachai fix · results/bots/")}
 </section>""",
               "Preguntas: ¿funciona con modelos de verdad? Con el encargo normal, 8 de 8 parches reales se aprobaron. "
               "Con un parchador instruido para hacer el cambio mínimo, 3 de 3 pasaron su propia validación y "
-              "Contraprueba los rechazó."))
+              "Cachai los rechazó."))
 
     steps = [
         ("1", "Prueba desde afuera", "La app del PR corre en un contenedor; el evaluador, con los tests de la "
@@ -478,7 +478,7 @@ def main():
     args = ap.parse_args()
 
     deck = slides(args.url)
-    doc = (f'<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Contraprueba</title>'
+    doc = (f'<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Cachai</title>'
            f"<style>{CSS}</style></head><body>{''.join(h for _, h, _ in deck)}</body></html>")
 
     with tempfile.TemporaryDirectory() as tmp:

@@ -36,14 +36,14 @@ sys.exit(0 if outcome == "approved" else 1)
 
 @pytest.fixture
 def fake(tmp_path):
-    script = tmp_path / "contraprueba-falso"
+    script = tmp_path / "cachai-falso"
     script.write_text(FAKE)
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
     return script
 
 
 def demo(fake, behaviour, mode):
-    env = {**os.environ, "CONTRAPRUEBA": str(fake), "FAKE_BEHAVIOUR": behaviour, "TERM": "dumb"}
+    env = {**os.environ, "CACHAI": str(fake), "FAKE_BEHAVIOUR": behaviour, "TERM": "dumb"}
     return subprocess.run(["bash", str(DEMO), mode], capture_output=True, text=True, env=env, timeout=120)
 
 

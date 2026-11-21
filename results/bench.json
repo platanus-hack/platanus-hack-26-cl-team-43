@@ -48,7 +48,7 @@
     "ci": "CI normal",
     "restore": "Tests restaurados, mismo contenedor",
     "visible": "Validación propia del parchador",
-    "full": "Contraprueba"
+    "full": "Cachai"
   },
   "groups": {
     "trampas": {

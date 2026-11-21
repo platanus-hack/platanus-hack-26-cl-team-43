@@ -14,7 +14,7 @@ import html
 import json
 from pathlib import Path
 
-from contraprueba.pipeline import checked_lines
+from cachai.pipeline import checked_lines
 
 ROOT = Path(__file__).resolve().parent.parent
 REPO = "https://github.com/platanus-hack/platanus-hack-26-cl-team-43"
@@ -82,7 +82,7 @@ def bot_conclusions(summary: list[dict]) -> list[str]:
         incomplete = sum(s["incomplete"] for s in rows)
         patched = n - without
         parts = [f"{lead} hubo {plural(n, 'intento', 'intentos')} y {plural(patched, 'parche', 'parches')}."]
-        parts.append(f"Contraprueba aprobó {approved} de {patched}.")
+        parts.append(f"Cachai aprobó {approved} de {patched}.")
         if own_rejected:
             parts.append(f"{plural(own_rejected, 'pasó', 'pasaron')} su propia validación y se {'rechazó' if own_rejected == 1 else 'rechazaron'} con evidencia.")
         if incomplete:
@@ -140,7 +140,7 @@ TEMPLATE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Contraprueba: ninguna IA aprueba el código de otra IA</title>
+<title>Cachai: ninguna IA aprueba el código de otra IA</title>
 <meta name="description" content="Un revisor determinista que verifica, antes del merge, el código de agentes y los parches de bots de seguridad. Resultados reproducibles.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -297,14 +297,14 @@ footer { border-top: 1px solid var(--line); padding: 2rem 0 3rem; color: var(--s
 </head>
 <body>
 <header class="top wrap">
-  <strong>Contraprueba</strong>
+  <strong>Cachai</strong>
   <a href="{{repo}}">Código y evidencia en GitHub</a>
 </header>
 
 <main>
 <div class="hero wrap">
   <h1>Ninguna IA aprueba el código de otra IA.</h1>
-  <p class="lede">Contraprueba decide, antes del merge, si entra el código de un agente o el parche de un bot de seguridad. Prueba desde otro contenedor, guarda ataques que el parche nunca vio y, si algo falla, no deja entrar nada.</p>
+  <p class="lede">Cachai decide, antes del merge, si entra el código de un agente o el parche de un bot de seguridad. Prueba desde otro contenedor, guarda ataques que el parche nunca vio y, si algo falla, no deja entrar nada.</p>
 
   <div class="bench" aria-live="polite">
     <div class="tabs" id="tabs" role="group" aria-label="Elegir un cambio para ver cómo lo juzga cada revisor"></div>
@@ -334,7 +334,7 @@ footer { border-top: 1px solid var(--line); padding: 2rem 0 3rem; color: var(--s
 <section id="medicion">
   <div class="wrap">
     <h2>Medición sobre {{prs}} cambios etiquetados</h2>
-    <p>Cada cambio tiene una etiqueta puesta a mano que dice qué debería decidir un revisor correcto. Lo corrimos por tres revisores habituales y por Contraprueba. Cada punto es un cambio; relleno significa rechazado.</p>
+    <p>Cada cambio tiene una etiqueta puesta a mano que dice qué debería decidir un revisor correcto. Lo corrimos por tres revisores habituales y por Cachai. Cada punto es un cambio; relleno significa rechazado.</p>
     <table class="measure" id="measure"></table>
     <div class="legend">
       <span><i class="dot rej"></i> rechazado</span>
@@ -348,9 +348,9 @@ footer { border-top: 1px solid var(--line); padding: 2rem 0 3rem; color: var(--s
 <section id="cambios">
   <div class="wrap">
     <h2>Los {{prs}} cambios, uno por uno</h2>
-    <p>Toca un cambio para ver qué era y por qué Contraprueba decidió lo que decidió. Las decisiones equivocadas van marcadas.</p>
+    <p>Toca un cambio para ver qué era y por qué Cachai decidió lo que decidió. Las decisiones equivocadas van marcadas.</p>
     <div class="prs">
-      <div class="prhead" aria-hidden="true"><span>Cambio</span><span>Qué debería pasar</span><span>CI normal</span><span>Tests restaurados</span><span>Validación propia</span><span>Contraprueba</span></div>
+      <div class="prhead" aria-hidden="true"><span>Cambio</span><span>Qué debería pasar</span><span>CI normal</span><span>Tests restaurados</span><span>Validación propia</span><span>Cachai</span></div>
       <div id="prs"></div>
     </div>
   </div>
@@ -390,10 +390,10 @@ git clone {{repo}}.git
 cd platanus-hack-26-cl-team-43 &amp;&amp; pip install -e ".[dev]"
 
 <span class="c"># un cambio, un revisor</span>
-contraprueba case cases/facturas --pr trampa-paquete --mode full
+cachai case cases/facturas --pr trampa-paquete --mode full
 
 <span class="c"># los {{prs}} cambios por los cuatro revisores (unos 2 minutos)</span>
-contraprueba bench</pre>
+cachai bench</pre>
   </div>
 </section>
 </main>
@@ -409,8 +409,8 @@ contraprueba bench</pre>
 <script>
 const D = JSON.parse(document.getElementById("data").textContent);
 const MODES = ["ci", "restore", "visible", "full"];
-const WHO = { ci: "CI normal", restore: "Tests restaurados, mismo contenedor", visible: "Validación propia del parchador", full: "Contraprueba" };
-const SHORT = { ci: "CI normal", restore: "Restaurados", visible: "Propia", full: "Contraprueba" };
+const WHO = { ci: "CI normal", restore: "Tests restaurados, mismo contenedor", visible: "Validación propia del parchador", full: "Cachai" };
+const SHORT = { ci: "CI normal", restore: "Restaurados", visible: "Propia", full: "Cachai" };
 const WORD = { approved: "Aprobado", rejected: "Rechazado", incomplete: "Sin veredicto" };
 const CLS = { approved: "pass", rejected: "fail", incomplete: "pending" };
 const KIND = { cheat: "Agente con trampa", honest: "Cambio legítimo", half_patch: "Parche a medias", correct_patch: "Parche correcto", breaking_patch: "Parche que rompe una función" };
@@ -445,7 +445,7 @@ function show(pr) {
   }));
   void stamps.offsetWidth;
   stamps.classList.add("go");
-  document.getElementById("evtitle").textContent = runs.full.approved ? "Qué comprobó Contraprueba" : "Por qué lo rechazó Contraprueba";
+  document.getElementById("evtitle").textContent = runs.full.approved ? "Qué comprobó Cachai" : "Por qué lo rechazó Cachai";
   evidence(document.getElementById("evidence"), runs.full);
 }
 
@@ -496,7 +496,7 @@ document.getElementById("prs").append(...prs.map((pr, i) => {
 
 // Parches de modelos
 const bots = document.getElementById("bots");
-const cols = ["Encargo", "Agente y modelo", "Intentos", "Sin parche", "Pasan su propia validación", "Aprueba Contraprueba", "Pasan la propia y se rechazan", "Sin veredicto", "Agente aislado"];
+const cols = ["Encargo", "Agente y modelo", "Intentos", "Sin parche", "Pasan su propia validación", "Aprueba Cachai", "Pasan la propia y se rechazan", "Sin veredicto", "Agente aislado"];
 bots.append(el("thead", {}, el("tr", {}, ...cols.map((c) => el("th", { text: c })))));
 bots.append(el("tbody", {}, ...D.bots.summary.map((s) => el("tr", {},
   ...[s.policy_title, s.agent + " " + s.model, s.n, s.without_patch, s.visible_approved, s.full_approved, s.passed_own_but_rejected, s.incomplete, s.isolated ? "sí" : "no"]

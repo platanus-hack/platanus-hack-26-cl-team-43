@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from contraprueba import bench
+from cachai import bench
 
 
 def test_wilson_known_values():
@@ -46,7 +46,7 @@ def test_summary_counts_rejections_per_group():
 
 
 def test_every_kind_belongs_to_exactly_one_group():
-    from contraprueba.case import PR_KINDS
+    from cachai.case import PR_KINDS
     kinds = [k for g in bench.GROUPS.values() for k in g["kinds"]]
     assert sorted(kinds) == sorted(PR_KINDS)
 
@@ -83,7 +83,7 @@ def test_incomplete_evaluation_is_not_a_detection_nor_a_false_alarm():
 
 
 def test_gate_outcome_separates_evidence_from_missing_evidence():
-    from contraprueba.gate import Evidence, decide
+    from cachai.gate import Evidence, decide
     assert decide(Evidence(True)).outcome == "approved"
     assert decide(Evidence(False, base_tests_failed=["t — assert"])).outcome == "rejected"
     assert decide(Evidence(False, incomplete=["tests de la base: no terminaron (tiempo agotado)"])).outcome == "incomplete"
@@ -93,7 +93,7 @@ def test_gate_outcome_separates_evidence_from_missing_evidence():
 
 
 def test_baseline_timeout_is_incomplete():
-    from contraprueba import pipeline
+    from cachai import pipeline
     r = pipeline._baseline("ci", "a" * 40, "b" * 40, {"passed": False, "timed_out": True, "exit_code": None, "log_tail": ""})
     assert r.outcome == "incomplete" and not r.approved
     assert pipeline._baseline("ci", "a" * 40, "b" * 40, {"passed": False, "timed_out": False, "exit_code": 1, "log_tail": ""}).outcome == "rejected"

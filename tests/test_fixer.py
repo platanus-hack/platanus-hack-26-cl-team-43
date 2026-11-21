@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from contraprueba import bench, fixer, gitio
-from contraprueba.case import load_case, materialize
+from cachai import bench, fixer, gitio
+from cachai.case import load_case, materialize
 
 FACTURAS = Path(__file__).resolve().parent.parent / "cases" / "facturas"
 
@@ -83,7 +83,7 @@ def test_propose_commits_the_agents_patch_on_its_own_branch(case, trusted, agent
     assert gitio.read_blob(repo, branch, "invoices/main.py").endswith(b"# parche\n")
     assert gitio.resolve(repo, "main") == base and gitio.is_ancestor(repo, base, branch)
     assert not gitio.read_blob(repo, base, "invoices/main.py").endswith(b"# parche\n")
-    assert not [p for p in Path(tempfile.gettempdir()).glob("contraprueba-agente-*")]  # la carpeta del agente no queda
+    assert not [p for p in Path(tempfile.gettempdir()).glob("cachai-agente-*")]  # la carpeta del agente no queda
 
 
 @needs_isolation
@@ -92,7 +92,7 @@ def test_agent_that_changes_nothing_or_fails_is_reported(case, trusted, agent_di
     assert "no cambió" in propose(case, trusted, "bot-nada-1", "nada").error
     monkeypatch.setitem(fixer.AGENTS, "roto", fake_agent(agent_dir, "raise SystemExit(3)\n"))
     assert "código 3" in propose(case, trusted, "bot-roto-1", "roto").error
-    monkeypatch.setitem(fixer.AGENTS, "ausente", ["comando-que-no-existe-contraprueba", "{prompt}"])
+    monkeypatch.setitem(fixer.AGENTS, "ausente", ["comando-que-no-existe-cachai", "{prompt}"])
     assert propose(case, trusted, "bot-ausente-1", "ausente").error
 
 

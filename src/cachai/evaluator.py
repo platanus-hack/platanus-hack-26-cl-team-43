@@ -1,6 +1,6 @@
 """Punto de entrada del contenedor evaluador.
 
-Corre dentro de la imagen fija de Contraprueba, nunca junto al código del PR.
+Corre dentro de la imagen fija de Cachai, nunca junto al código del PR.
 Espera a que la app responda, corre los tests de la rama base (y los reservados,
 si hay) contra ella por HTTP y escribe en stdout un JSON con esquema versionado.
 
@@ -166,7 +166,7 @@ def evaluate(
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="contraprueba-evaluator")
+    p = argparse.ArgumentParser(prog="cachai-evaluator")
     p.add_argument("--base-url", required=True)
     p.add_argument("--health", default="/health")
     p.add_argument("--base-dir", default="/work/base", help="tests y configuración de la rama base")

@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from contraprueba.case import load_case, materialize
-from contraprueba.evaluator import parse_junit
-from contraprueba.holdout import Attack, Predicate, load_attacks
+from cachai.case import load_case, materialize
+from cachai.evaluator import parse_junit
+from cachai.holdout import Attack, Predicate, load_attacks
 
 ROOT = Path(__file__).resolve().parent.parent
 FACTURAS = ROOT / "cases" / "facturas"

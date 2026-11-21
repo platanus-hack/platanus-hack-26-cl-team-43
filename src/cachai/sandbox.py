@@ -21,7 +21,7 @@ from .case import Case, Target
 from .integrity import EVAL_CONFIG, is_hook
 
 ROOT = Path(__file__).resolve().parents[2]
-EVALUATOR_IMAGE = "contraprueba-evaluator"
+EVALUATOR_IMAGE = "cachai-evaluator"
 HARDENING = [
     "--cap-drop", "ALL",
     "--security-opt", "no-new-privileges",
@@ -245,7 +245,7 @@ INCOMPLETE = {"schema": 1, "status": "incomplete", "suites": {}, "attacks": None
 
 def _run_trusted(app: AppHandle, name: str, mounts: list[tuple[Path, str]], args: list[str], budget: float,
                  entrypoint: list[str] | None = None) -> tuple[int | None, str, str]:
-    """Corre la imagen de Contraprueba en la red de la app. Devuelve (código, stdout, stderr);
+    """Corre la imagen de Cachai en la red de la app. Devuelve (código, stdout, stderr);
     código None si hubo que matarlo por tiempo."""
     cmd = ["run", "--rm", "--name", name, "--network", app.network, *HARDENING]
     for src, dst in mounts:
@@ -298,7 +298,7 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
     code, out, err = _run_trusted(
         app, f"{app.run_id}-red", [(inventory_file, "/work/inventory.json")],
         ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json", "--budget", str(budget)],
-        budget, entrypoint=["python", "-m", "contraprueba.redteam"],
+        budget, entrypoint=["python", "-m", "cachai.redteam"],
     )
     data = _last_json(out) if code == 0 else None
     if data is None or "attacks" not in data:

@@ -1,6 +1,6 @@
-from contraprueba.gate import Evidence, decide
-from contraprueba.holdout import Attack, Predicate, split
-from contraprueba.integrity import classify
+from cachai.gate import Evidence, decide
+from cachai.holdout import Attack, Predicate, split
+from cachai.integrity import classify
 
 
 def test_classify_flags_hooks_config_and_tests():

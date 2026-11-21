@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from contraprueba.case import load_case, materialize, safe_relpath
-from contraprueba.evaluator import overall_status, run_suite, summarize
-from contraprueba.gate import Evidence, decide
-from contraprueba.holdout import Attack, AttackReport, AttackResult, Predicate, split, split_record
+from cachai.case import load_case, materialize, safe_relpath
+from cachai.evaluator import overall_status, run_suite, summarize
+from cachai.gate import Evidence, decide
+from cachai.holdout import Attack, AttackReport, AttackResult, Predicate, split, split_record
 
 OK = {"status_in": [200]}
 REQ = {"method": "GET", "path": "/x"}
@@ -291,7 +291,7 @@ def test_attack_result_rejects_contradictions(kw):
 
 @pytest.mark.parametrize("budget", [0, -1, float("inf"), float("nan")])
 def test_evaluate_rejects_bad_budget(tmp_path, budget):
-    from contraprueba.evaluator import evaluate
+    from cachai.evaluator import evaluate
     with pytest.raises(ValueError):
         evaluate("http://127.0.0.1:9", "/h", tmp_path, "tests", None, budget)
 
@@ -330,7 +330,7 @@ class _SlowHealth:
 
 
 def test_late_health_response_does_not_count(tmp_path):
-    from contraprueba.evaluator import evaluate
+    from cachai.evaluator import evaluate
     (tmp_path / "tests").mkdir()
     (tmp_path / "tests" / "test_x.py").write_text("def test_a():\n    pass\n")
     srv = _SlowHealth(1.5)
@@ -342,7 +342,7 @@ def test_late_health_response_does_not_count(tmp_path):
 
 
 def test_holdout_without_budget_left_is_incomplete(tmp_path, monkeypatch):
-    from contraprueba import evaluator
+    from cachai import evaluator
     (tmp_path / "tests").mkdir()
     (tmp_path / "tests" / "test_x.py").write_text("import time\ndef test_a():\n    time.sleep(1.2)\n")
     (tmp_path / "reservados").mkdir()

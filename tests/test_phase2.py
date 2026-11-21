@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from contraprueba import pipeline, redteam
-from contraprueba.case import load_case
-from contraprueba.gate import decide
-from contraprueba.holdout import Attack, Control, Predicate, run_attacks, searchable, split, split_record
+from cachai import pipeline, redteam
+from cachai.case import load_case
+from cachai.gate import decide
+from cachai.holdout import Attack, Control, Predicate, run_attacks, searchable, split, split_record
 
 ROOT = Path(__file__).resolve().parent.parent
 FACTURAS = ROOT / "cases" / "facturas"
@@ -248,7 +248,7 @@ class ScopedSessionApp:
 
 def test_session_cookie_scoped_to_a_subpath_is_sent():
     """Un usuario con sesión en /docs la sigue usando: si la app deja leer lo ajeno, se ve."""
-    from contraprueba.holdout import Clients, exchange
+    from cachai.holdout import Clients, exchange
     app = ScopedSessionApp()
     owner = {"method": "GET", "path": "/docs/1", "headers": {"Authorization": "Bearer dueno"}}
     other = {"method": "GET", "path": "/docs/1", "headers": {"Authorization": "Bearer x"}}
@@ -266,7 +266,7 @@ def test_session_cookie_scoped_to_a_subpath_is_sent():
 
 
 def test_cookie_scoped_to_another_path_is_not_sent():
-    from contraprueba.holdout import Clients, exchange
+    from cachai.holdout import Clients, exchange
     app = ScopedSessionApp()
     req = {"method": "GET", "path": "/otra/1", "headers": {"Authorization": "Bearer x"}}
     try:
@@ -280,7 +280,7 @@ def test_cookie_scoped_to_another_path_is_not_sent():
 
 def test_raw_path_survives_with_scoped_cookies():
     """Armar la URL antes del pedido no altera la ruta que viaja."""
-    from contraprueba.holdout import Clients, exchange
+    from cachai.holdout import Clients, exchange
     seen = []
     srv = Server({}, seen)
     req = {"method": "GET", "path": "/docs/f?name=..%2Fa%2Fx.txt&n=./../y", "headers": {"Authorization": "Bearer x"}}
@@ -465,7 +465,7 @@ def test_json_escapes_do_not_hide_the_marker():
 
 
 def test_oversized_response_is_error(monkeypatch):
-    from contraprueba import holdout
+    from cachai import holdout
     monkeypatch.setattr(holdout, "MAX_BODY", 100)
     srv = Server({"/a": (200, "x" * 500 + "SECRETO", 0)})
     try:
@@ -699,7 +699,7 @@ def test_facturas_attacks_split_and_labels():
 
 
 def test_reserved_material_is_not_in_the_repo_the_patcher_sees(tmp_path):
-    from contraprueba.case import materialize
+    from cachai.case import materialize
     repo = materialize(load_case(FACTURAS), tmp_path / "repo")
     names = {p.name for p in repo.rglob("*")}
     assert "attacks.json" not in names and "reservados" not in names and "test_funcional.py" not in names
@@ -735,7 +735,7 @@ def test_plan_validates_partition():
 
 
 def test_plan_rejects_a_group_split_across_both_sides():
-    from contraprueba.holdout import Split
+    from cachai.holdout import Split
     same = (attack("g-1", "/1", group="g"), attack("g-2", "/2", group="g"), attack("h-1", "/3", group="h"))
     with pytest.raises(ValueError):
         pipeline.AttackPlan(same, Split(0, 0.4, ("g-1",), ("g-2", "h-1")))

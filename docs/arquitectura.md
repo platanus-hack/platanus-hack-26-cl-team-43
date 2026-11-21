@@ -3,7 +3,7 @@
 ## Vista general
 
 ```
-                 contraprueba check --repo R --base main --pr rama [--mode ci|restore|full]
+                 cachai check --repo R --base main --pr rama [--mode ci|restore|full]
                                          │
    ┌─────────────────────────────────────┼──────────────────────────────────────┐
    │ Orquestador (cli.py → pipeline.py), proceso confiable en el host            │
@@ -11,7 +11,7 @@
    │  2. sandbox: red Docker --internal (sin internet) por corrida               │
    │       ┌──────────────────────┐   HTTP    ┌───────────────────────────────┐ │
    │       │ contenedor APP       │◀──────────│ contenedor EVALUADOR          │ │
-   │       │ código del PR        │           │ imagen fija de Contraprueba   │ │
+   │       │ código del PR        │           │ imagen fija de Cachai         │ │
    │       │ (no confiable)       │           │ tests de la BASE (git archive)│ │
    │       │ cap-drop, mem, pids  │           │ + ataques y tests reservados  │ │
    │       └──────────────────────┘           └───────────────┬───────────────┘ │
@@ -25,22 +25,22 @@
 ## Decisiones de diseño
 
 1. **Los tests de la base son de caja negra por HTTP.** El fixture `client` usa `BASE_URL` si existe; si no, importa la app en el mismo proceso, como haría un CI normal. El evaluador siempre define `BASE_URL` y no tiene el código del PR, así que un hook dentro del paquete no tiene dónde ejecutarse.
-2. **La imagen del evaluador es de Contraprueba y fija.** No se construye con nada del repo del PR. Los tests de la base se leen del commit de la rama base y se montan en solo lectura.
+2. **La imagen del evaluador es de Cachai y fija.** No se construye con nada del repo del PR. Los tests de la base se leen del commit de la rama base y se montan en solo lectura.
 3. **Los ataques se confirman con un predicado estructurado**, no con código: `{"status_in": [200], "body_contains": ["FAC-A-001"]}`. La decisión no ejecuta nada que venga de un modelo.
-4. **Las líneas base son modos de la misma CLI.** `ci` corre el pytest del PR junto al código; `restore` restaura los tests y la configuración de la base, pero en el mismo contenedor; `full` es Contraprueba. La tabla de comparación sale de correr los tres modos sobre los mismos casos.
+4. **Las líneas base son modos de la misma CLI.** `ci` corre el pytest del PR junto al código; `restore` restaura los tests y la configuración de la base, pero en el mismo contenedor; `full` es Cachai. La tabla de comparación sale de correr los tres modos sobre los mismos casos.
 5. **Casos materializados desde carpetas.** Cada caso guarda la app de la rama base (`base/`) y cada PR como una capa de archivos (`prs/<nombre>/`). Un script arma un repo git temporal con `main` y una rama por PR. Así los casos viven en el repo sin repos anidados.
 6. **App de demo propia.** API de facturas (FastAPI) con la misma falla de autorización por recurso en varias rutas (`/invoices/{id}`, `/invoices/{id}/pdf`, `/v2/invoices/{id}`, `/invoices/export`) y una de acceso a archivos (`/attachments?name=`). Varias rutas para una misma falla permiten que un parche a medias caiga con un ataque reservado.
 
 ## Qué se lee y de dónde
 
 - Todo sale de los objetos de git, por hash de commit; nunca del directorio de trabajo.
-- La configuración de la evaluación (`.contraprueba.json`: módulo de la app, puerto, ruta de salud, carpeta de tests) vale solo la de la rama base. Si el PR la cambia, se rechaza.
+- La configuración de la evaluación (`.cachai.json`: módulo de la app, puerto, ruta de salud, carpeta de tests) vale solo la de la rama base. Si el PR la cambia, se rechaza.
 - Los árboles se exportan entrada por entrada, sin `git archive`: ese comando obedece los `.gitattributes` del propio árbol y un PR podría usar `export-ignore` para que el código evaluado no sea el que se integra.
 - Si la rama del PR no contiene la punta de la base, no se evalúa: hay que actualizarla.
 - No se obedecen los reemplazos de objetos de git (`refs/replace`) y se rechaza un repo con injertos: un hash siempre significa su propio contenido y su propia historia.
 - La aprobación vale para el par exacto de hashes base y PR. Si alguna rama avanza, se revisa de nuevo.
 
-Límite: el `.git` local lo aporta quien opera Contraprueba. No se defiende contra una base de objetos manipulada a mano; en producción se revisa un clon limpio del remoto.
+Límite: el `.git` local lo aporta quien opera Cachai. No se defiende contra una base de objetos manipulada a mano; en producción se revisa un clon limpio del remoto.
 
 ## Marcas de integridad
 
@@ -49,7 +49,7 @@ Límite: el `.git` local lo aporta quien opera Contraprueba. No se defiende cont
 | Cambio | Efecto |
 |---|---|
 | `conftest.py`, `sitecustomize.py`, `usercustomize.py`, `*.pth` nuevos, modificados o borrados | bloquea |
-| `pytest.ini`, `.contraprueba.json`, o la sección de pytest de `pyproject.toml`, `setup.cfg` o `tox.ini` | bloquea |
+| `pytest.ini`, `.cachai.json`, o la sección de pytest de `pyproject.toml`, `setup.cfg` o `tox.ini` | bloquea |
 | Tests existentes modificados, borrados o movidos | bloquea: aunque no se usan para evaluar este PR, al integrarse debilitarían la base de los siguientes |
 | Código de la app que nombra pytest en líneas nuevas (imports, nombres y textos; no comentarios ni docstrings) | bloquea, con archivo y línea |
 | Tests nuevos | nota: no se usan para evaluar |
@@ -68,7 +68,7 @@ La política es restrictiva a propósito: arreglar un test existente o un fixtur
 
 ## Ataques y tests reservados
 
-Cuando el PR es un parche de seguridad, Contraprueba recibe los ataques que ese parche debe bloquear.
+Cuando el PR es un parche de seguridad, Cachai recibe los ataques que ese parche debe bloquear.
 
 - **De dónde salen.** `redteam.py` los genera por plantillas, sin ningún modelo, a partir del inventario del caso (usuarios, registros y archivos con dueño) y de las rutas que la app publica en su OpenAPI. Para autorización, un usuario pide el registro de otro en cada ruta que recibe un id. Para archivos, pide el archivo de otro escribiendo la ruta de siete formas. Un candidato solo se conserva si se confirma contra la rama base: el dueño obtiene el recurso y el otro usuario también.
 - **Cómo se confirma un ataque.** Cada recurso del inventario declara sus marcas: textos que solo su dueño debería ver. El ataque funciona si la respuesta trae alguna marca, con cualquier código de respuesta: los datos de otro usuario son una fuga aunque lleguen con un 201 o un 403. Una ruta solo se ataca si al dueño le entrega alguna marca; si no, ahí no hay nada que proteger.
@@ -97,7 +97,7 @@ El evaluador imprime un JSON con `schema: 1` y sale con 0 (`ok`), 1 (`failed`: t
 - La falta de evidencia nunca es éxito: `gate.decide` rechaza cualquier evaluación incompleta.
 - El orquestador solo aprueba si el evaluador dijo `ok`, salió con 0 y cada suite obligatoria (la de la base y, si se pidieron, los reservados) está presente, completa y aprobada. Una salida mal formada, un estado que no coincide con el código de salida o una suite que no aprobó sin decir por qué quedan como evaluación incompleta.
 
-Comprobación de punta a punta: `contraprueba case cases/facturas` y los tests de integración con `CP_DOCKER=1 pytest tests/test_sandbox_docker.py`.
+Comprobación de punta a punta: `cachai case cases/facturas` y los tests de integración con `CP_DOCKER=1 pytest tests/test_sandbox_docker.py`.
 
 ## Contenedores
 
@@ -121,17 +121,17 @@ Los casos son fixtures locales confiables. Aun así, `materialize` valida las ca
 | **0. Contratos** | Formato de `case.json`, `Attack` con predicado estructurado, app de demo en la base, imágenes de app y evaluador | Ambas imágenes construyen; los tests de la base pasan contra la app desde el evaluador |
 | **1. Hito 1: aislamiento** | `sandbox.py` (red interna, levantar y bajar), caso con trampa (el paquete parcha los reportes de pytest), modos `ci`, `restore` y `full` | `ci` y `restore` dan verde; `full` rechaza con archivo y línea; un caso honesto se aprueba |
 | **2. Hito 2: reservados** | `holdout.run_attacks`, `redteam.py` por plantillas (otro id, otra ruta, otras formas de escribir la ruta del archivo), ramas de parche a medias, parche correcto y parche que rompe una función | El parche a medias pasa su propia validación y cae con un ataque reservado; el correcto se aprueba |
-| **3. Medición** | `bench.py` sobre los PR etiquetados: detección y falsas alarmas por modo con intervalos de Wilson; `fixer.py` con agentes reales | Tabla de Contraprueba contra las tres líneas base; parches generados en vivo pasan por la revisión |
+| **3. Medición** | `bench.py` sobre los PR etiquetados: detección y falsas alarmas por modo con intervalos de Wilson; `fixer.py` con agentes reales | Tabla de Cachai contra las tres líneas base; parches generados en vivo pasan por la revisión |
 | **4. Entrega** | Página de resultados (`scripts/build_site.py`, publicada en el `deploy-url`), demo ejecutable (`scripts/demo.sh`), respuestas a las preguntas del jurado (`docs/preguntas.md`) | Demo de punta a punta en menos de 3 minutos; `platanus-hack-project.jsonc` completo |
 
 La ruta crítica es 0 → 1 → 2. La medición y la página avanzan en paralelo desde que existen los contratos de la fase 0.
 
 ## Medición
 
-- `contraprueba bench` corre cada PR etiquetado en los cuatro modos y escribe `results/bench.json`, `results/resultados.md` y un reporte por corrida en `results/runs/`.
+- `cachai bench` corre cada PR etiquetado en los cuatro modos y escribe `results/bench.json`, `results/resultados.md` y un reporte por corrida en `results/runs/`.
 - Cada PR tiene una etiqueta puesta a mano que dice qué debería decidir un revisor correcto. Se cuentan los rechazos por modo y por grupo (trampas, parches malos, cambios legítimos) con el intervalo de Wilson al 95 %.
 - Una corrida rechazada solo por falta de evidencia (tiempo agotado, infraestructura) queda como «sin veredicto»: no cuenta como detección ni como acierto, y se informa aparte.
-- `contraprueba fix` lanza un agente de código real (Claude Code o Codex, no interactivos). Guarda el pedido, la respuesta y el diff de cada intento en `results/bots/`, sin sobrescribir intentos anteriores y también cuando no hay parche.
+- `cachai fix` lanza un agente de código real (Claude Code o Codex, no interactivos). Guarda el pedido, la respuesta y el diff de cada intento en `results/bots/`, sin sobrescribir intentos anteriores y también cuando no hay parche.
 - **Aislamiento del agente.** Trabaja sobre los archivos de la base exportados a una carpeta nueva, sin `.git`: las ramas con las soluciones y los intentos anteriores están en otro repo, del lado confiable. Corre en un espacio de nombres de Linux donde el proyecto, el caso, los resultados y `/tmp` están tapados; antes de lanzarlo, una sonda comprueba desde adentro que el material reservado no se puede leer. Al terminar, sus archivos se copian como contenido no confiable sobre una rama creada desde el commit de la base fijado de antemano.
 - Lo que ese aislamiento no cubre: la red (el agente necesita llegar a su proveedor; que no baje nada depende de las herramientas que se le dan) y los sistemas sin `unshare`, como macOS, donde hay que pedir explícitamente correr sin aislar y queda registrado en cada intento.
 - El encargo `minimo` es una política de ataque: un parchador instruido para tapar solo lo que vio. Sirve para probar la revisión contra parches a medias escritos por un modelo real; no mide con qué frecuencia un modelo hace eso por su cuenta.

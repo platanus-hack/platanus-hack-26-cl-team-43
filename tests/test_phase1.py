@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from contraprueba import gitio, integrity, pipeline, sandbox
-from contraprueba.case import CONFIG_FILE, load_case, load_target, materialize
-from contraprueba.gate import Evidence, decide
-from contraprueba.integrity import Flag, classify
+from cachai import gitio, integrity, pipeline, sandbox
+from cachai.case import CONFIG_FILE, load_case, load_target, materialize
+from cachai.gate import Evidence, decide
+from cachai.integrity import Flag, classify
 
 ROOT = Path(__file__).resolve().parent.parent
 FACTURAS = ROOT / "cases" / "facturas"
@@ -88,7 +88,7 @@ def test_export_matches_tree_and_does_not_follow_symlinks(repo, tmp_path):
     sha = branch(repo, "pr", {"run.sh": "#!/bin/sh\n"}, symlinks={"leak": str(secret)})
     out = gitio.export_tree(repo, sha, tmp_path / "out")
     assert (out / "leak").is_symlink()
-    assert sorted(p.name for p in out.iterdir()) == sorted([".contraprueba.json", "app", "leak", "pyproject.toml", "run.sh", "tests"])
+    assert sorted(p.name for p in out.iterdir()) == sorted([".cachai.json", "app", "leak", "pyproject.toml", "run.sh", "tests"])
 
 
 def test_export_refuses_non_empty_dest(repo, tmp_path):
@@ -172,7 +172,7 @@ def test_unparseable_pyproject_blocks(repo):
     assert f.severity == "block"
 
 
-def test_changing_contraprueba_config_blocks(repo):
+def test_changing_cachai_config_blocks(repo):
     sha = branch(repo, "pr", {CONFIG_FILE: json.dumps({"app": {"module": "otra:app"}, "tests_dir": "vacio"})})
     (f,) = scan(repo, sha)
     assert f.severity == "block"
@@ -247,7 +247,7 @@ def test_holdout_test_failures_reject():
 
 
 def test_parse_junit_reads_file_line_and_message(tmp_path):
-    from contraprueba.evaluator import run_suite
+    from cachai.evaluator import run_suite
     (tmp_path / "tests").mkdir()
     (tmp_path / "tests" / "test_x.py").write_text("def test_ok():\n    pass\n\n\ndef test_mal():\n    assert 1 == 2\n")
     s = run_suite("http://127.0.0.1:9", tmp_path, "tests", 60)

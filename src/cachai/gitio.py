@@ -6,7 +6,7 @@ obedecen los reemplazos de objetos (`refs/replace`), que harían que un hash
 muestre el contenido de otro commit, y se rechaza un repo con injertos
 (`info/grafts`), que alteran la ascendencia. Tampoco corren hooks ni fsmonitor.
 
-Límite: el `.git` local lo aporta quien opera Contraprueba. Esto no defiende
+Límite: el `.git` local lo aporta quien opera Cachai. Esto no defiende
 contra una base de objetos manipulada a mano; en producción se revisa un clon
 limpio del remoto.
 La exportación escribe exactamente el árbol del commit: no usa `git archive`

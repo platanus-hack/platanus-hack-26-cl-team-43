@@ -9,11 +9,11 @@ Cuatro modos sobre el mismo PR:
 - `visible`: línea base para parches de seguridad. Evalúa desde otro
   contenedor, pero solo con los ataques que el parchador vio: es la validación
   que el parchador puede hacerse a sí mismo.
-- `full`: Contraprueba. La app corre en un contenedor y el evaluador, con los
+- `full`: Cachai. La app corre en un contenedor y el evaluador, con los
   tests de la base, en otro. Suma los ataques y los tests funcionales
   reservados y la revisión de los cambios que tocan la evaluación.
 
-Todo se lee del repo por hash de commit. La configuración (`.contraprueba.json`),
+Todo se lee del repo por hash de commit. La configuración (`.cachai.json`),
 los tests, los ataques y los reservados vienen de la rama base o de fuera del
 repo, nunca del PR. Decide `gate.decide`.
 """
@@ -297,7 +297,7 @@ def check(
     base_sha, pr_sha = gitio.resolve(repo, base), gitio.resolve(repo, pr)
     target = target or target_from_base(repo, base_sha)
 
-    with tempfile.TemporaryDirectory(prefix="contraprueba-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="cachai-") as tmp:
         tmp_path = Path(tmp)
         pr_tree = gitio.export_tree(repo, pr_sha, tmp_path / "pr")
 

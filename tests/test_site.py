@@ -122,12 +122,12 @@ def bot(policy="normal", changed=("a.py",), visible=True, full=True, outcome=Non
 
 
 def conclusions(bots):
-    from contraprueba import bench
+    from cachai import bench
     return build_site.bot_conclusions(bench.summarize_bots(bots))
 
 
 def test_model_conclusions_follow_the_results():
-    assert conclusions([bot(), bot()]) == ["Con el encargo normal hubo 2 intentos y 2 parches. Contraprueba aprobó 2 de 2."]
+    assert conclusions([bot(), bot()]) == ["Con el encargo normal hubo 2 intentos y 2 parches. Cachai aprobó 2 de 2."]
     # Un parche normal rechazado: la frase no puede seguir diciendo que aprobó todos.
     (line,) = conclusions([bot(), bot(full=False)])
     assert "aprobó 1 de 2" in line and "1 pasó su propia validación y se rechazó con evidencia" in line
@@ -152,7 +152,7 @@ def test_isolation_sentence_follows_the_data(tmp_path):
     f.write_text(json.dumps(bots))
 
     def sync(data):
-        from contraprueba import bench
+        from cachai import bench
         loaded = bench.load_bots(results)
         data["bots"] = {"summary": bench.summarize_bots(loaded), "runs": loaded}
 

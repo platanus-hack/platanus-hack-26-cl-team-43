@@ -28,7 +28,7 @@ from pathlib import Path, PurePosixPath
 from . import gitio
 
 # Configuración de la evaluación: solo vale la de la rama base.
-EVAL_CONFIG = ("conftest.py", "pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini", ".contraprueba.json")
+EVAL_CONFIG = ("conftest.py", "pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini", ".cachai.json")
 # De estas, las que además configuran otras cosas: solo bloquea el cambio en su sección de pytest.
 SHARED_CONFIG = ("pyproject.toml", "setup.cfg", "tox.ini")
 
