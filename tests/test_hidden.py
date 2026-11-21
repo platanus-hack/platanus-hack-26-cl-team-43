@@ -127,7 +127,7 @@ def test_local_visible_without_the_key_is_not_incomplete(tmp_path, monkeypatch):
     monkeypatch.delenv("CACHAI_TEST_KEY", raising=False)
     case = load_case(Path(__file__).resolve().parent.parent / "cases" / "facturas")
     repo = materialize(case, tmp_path / "facturas")
-    r = pipeline.check(repo, "main", "honesto", "visible", target=_with_hidden(case.target()))
+    r = pipeline.check(repo, "main", "honesto", "visible", target=_with_hidden(case.target()), allow_missing_hidden=True)
     assert r.outcome == "approved", r.reasons
     full = pipeline.check(repo, "main", "honesto", "full", target=_with_hidden(case.target()))
     assert full.outcome == "incomplete"  # en full, sin clave, no hay veredicto
@@ -139,3 +139,27 @@ def _with_hidden(target):
 
     from cachai.case import Hidden
     return replace(target, hidden=Hidden(".cachai/reservado.cachai", "CACHAI_TEST_KEY"))
+
+
+def test_visible_without_the_key_is_incomplete_unless_it_is_the_local_review(repo, monkeypatch):
+    """En CI (o llamando al pipeline sin pedirlo) el modo visible sin clave no se salta el material reservado."""
+    monkeypatch.delenv("CACHAI_TEST_KEY", raising=False)
+    r = pipeline.check(repo, "main", "main", "visible")
+    assert r.outcome == "incomplete" and "material reservado" in r.reasons[0]
+
+
+@pytest.mark.parametrize("ci, allowed", [({}, True), ({"CI": "true"}, False), ({"GITHUB_ACTIONS": "true"}, False)])
+def test_cli_allows_missing_key_only_outside_ci(repo, monkeypatch, ci, allowed):
+    seen = {}
+
+    def fake_check(*a, **k):
+        seen.update(k)
+        return pipeline.CheckResult("visible", "a" * 40, "b" * 40, True)
+
+    for k in cli.CI_ENV:
+        monkeypatch.delenv(k, raising=False)
+    for k, v in ci.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setattr(pipeline, "check", fake_check)
+    cli.main(["check", "--repo", str(repo), "--pr", "main", "--mode", "visible", "--color", "never"])
+    assert seen["allow_missing_hidden"] is allowed

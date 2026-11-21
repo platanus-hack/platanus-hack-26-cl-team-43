@@ -497,9 +497,15 @@ def check(
     holdout_tests: Path | None = None,
     budget: float = 120.0,
     plan: AttackPlan | None = None,
+    allow_missing_hidden: bool = False,
 ) -> CheckResult:
     """Revisa el PR. `plan` se pasa cuando el PR es un parche de seguridad: son
-    los ataques que debe bloquear."""
+    los ataques que debe bloquear.
+
+    `allow_missing_hidden`: solo para la revisión local del dev en modo
+    visible. Sin él (el caso por defecto, y siempre en CI), si la base declara
+    un paquete reservado y no se puede abrir, la revisión queda incompleta.
+    """
     if mode not in MODES:
         raise ValueError(f"modo desconocido: {mode}")
     base_sha, pr_sha = gitio.resolve(repo, base), gitio.resolve(repo, pr)
@@ -521,7 +527,8 @@ def check(
 
         # Sin la clave, el modo visible es la revisión local del dev: sigue sin el
         # paquete en vez de quedar incompleto. En full, la falta de clave sí lo deja incompleto.
-        local_visible = mode == "visible" and target.hidden is not None and not os.environ.get(target.hidden.key_env)
+        local_visible = (allow_missing_hidden and mode == "visible" and target.hidden is not None
+                         and not os.environ.get(target.hidden.key_env))
         if plan is None and holdout_tests is None and target.hidden is not None and not local_visible:
             try:
                 plan, holdout_tests = load_hidden(repo, base_sha, target, tmp_path / "reservado")
@@ -536,7 +543,7 @@ def check(
         def done(result: dict | None, ev: Evidence) -> CheckResult:
             verdict = decide(ev)
             notes = verdict.notes + ([f"sin {target.hidden.key_env}: no se abrió el paquete reservado, ni sus ataques visibles"]
-                                     if local_visible else [])
+                                     if local_visible and plan is None else [])
             return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, notes, flags,
                                evaluator=result, split=split, outcome=verdict.outcome, typed=verdict.typed,
                                secrets=reserved_secrets(plan if mode == "full" else None, holdout_tests, result))

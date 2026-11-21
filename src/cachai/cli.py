@@ -152,7 +152,10 @@ def cmd_check(args: argparse.Namespace) -> int:
     if mode == "visible":
         warn_visible(banner_color)
     try:
-        result = pipeline.check(args.repo, args.base, args.pr, mode, holdout_tests=holdout, budget=args.budget, plan=plan)
+        # Solo el dev en su máquina puede revisar sin el paquete reservado; en CI eso deja la revisión incompleta.
+        local = mode == "visible" and not any(os.environ.get(k) for k in CI_ENV)
+        result = pipeline.check(args.repo, args.base, args.pr, mode, holdout_tests=holdout, budget=args.budget, plan=plan,
+                                allow_missing_hidden=local)
     except ConfigError as e:
         print(f"error de configuración en la rama base: {e}", file=sys.stderr)
         return 2

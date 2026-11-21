@@ -17,7 +17,7 @@ FACTURAS = Path(__file__).resolve().parent.parent / "cases" / "facturas"
 def calls(monkeypatch):
     seen = []
 
-    def fake_check(repo, base, pr, mode, holdout_tests=None, budget=120.0, plan=None):
+    def fake_check(repo, base, pr, mode, holdout_tests=None, budget=120.0, plan=None, allow_missing_hidden=False):
         seen.append({"mode": mode, "holdout": holdout_tests, "plan": plan})
         confirmed = [plan.split.visible[0], plan.split.reserved[0]] if plan else []
         ev = {"attacks": {"confirmed": confirmed}} if plan else None
