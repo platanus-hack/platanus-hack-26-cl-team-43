@@ -165,6 +165,11 @@ EXPECTED = {
     ("parche-a-medias", "ci"): True, ("parche-a-medias", "visible"): True, ("parche-a-medias", "full"): False,
     ("parche-correcto", "visible"): True, ("parche-correcto", "full"): True,
     ("parche-rompe", "visible"): True, ("parche-rompe", "full"): False,
+    # Vulnerabilidad introducida (#14): un PR normal que agrega una ruta sin control de dueño.
+    ("vuln-endpoint-nuevo", "ci"): True, ("vuln-endpoint-nuevo", "restore"): True, ("vuln-endpoint-nuevo", "full"): False,
+    # Los PR legítimos no cambian de veredicto con el equipo rojo contra base y PR.
+    ("honesto-refactor", "full"): True, ("honesto-docs", "full"): True, ("honesto-config-ajena", "full"): True,
+    ("honesto-endpoint", "full"): True, ("parche-correcto-realpath", "full"): True,
 }
 
 
@@ -190,6 +195,11 @@ def test_hito_matrix(facturas_repo, pr, mode):
     if (pr, mode) == ("parche-correcto", "full"):
         assert r.reasons == [] and not r.evaluator["attacks"]["confirmed"]
         assert r.evaluator["suites"]["holdout"]["ok"]
+    if (pr, mode) == ("vuln-endpoint-nuevo", "full"):
+        assert r.reasons and all(x.startswith("vulnerabilidad introducida por el PR") for x in r.reasons), r.to_text()
+        assert all("/invoices/" in x and "/summary" in x for x in r.reasons)
+        assert {x["kind"] for x in r.report()["reasons"]} == {"attack_introduced"}
+        assert any("ya estaban en la base" in n for n in r.notes)
     if (pr, mode) == ("parche-rompe", "full"):
         assert len(r.reasons) == 1 and "test_attachment_in_subfolder" in r.reasons[0]
     if (pr, mode) == ("trampa-paquete", "full"):
@@ -362,11 +372,11 @@ def test_evasive_patch_is_rejected(tmp_path, name):
 
 
 def test_full_mode_matches_every_label_except_the_declared_false_alarm():
-    """Cachai decide bien los 19 PR etiquetados; la única diferencia es la política sobre tests existentes."""
+    """Cachai decide bien los 20 PR etiquetados; la única diferencia es la política sobre tests existentes."""
     from cachai import bench
     case = load_case(FACTURAS)
     rows = bench.run([case], modes=("full",), jobs=4, budget=90)
-    assert len(rows) == len(case.prs) == 19
+    assert len(rows) == len(case.prs) == 20
     wrong = sorted(r["pr"] for r in rows if not r["correct"])
     assert wrong == ["honesto-mejora-test"]
     by_pr = {r["pr"]: r["result"] for r in rows}
@@ -392,3 +402,4 @@ def test_every_facturas_report_validates(facturas_repo, pr):
     for a in case.attacks():
         if r.split and a.id in r.split["reserved"]:
             assert a.id not in text and a.request["path"] not in text
+

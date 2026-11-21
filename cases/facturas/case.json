@@ -161,6 +161,11 @@
       "name": "parche-correcto-realpath",
       "kind": "correct_patch",
       "description": "Otra implementación correcta: dueño comprobado en un solo lugar y adjuntos confinados por ruta real."
+    },
+    {
+      "name": "vuln-endpoint-nuevo",
+      "kind": "vulnerable",
+      "description": "Un PR normal, sin decir nada de seguridad: agrega /invoices/{id}/summary con login pero sin comprobar el dueño. Cualquier usuario lee el resumen de facturas ajenas."
     }
   ]
 }

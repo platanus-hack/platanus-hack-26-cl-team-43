@@ -51,6 +51,7 @@ class CheckResult:
     evaluator: dict | None = None  # JSON del evaluador (modos visible y full)
     inside: dict | None = None  # resultado de pytest dentro del contenedor (modos ci y restore)
     split: dict | None = None  # qué ataques vio el parchador y cuáles quedaron reservados
+    introduced: list[dict] | None = None  # ataques que entran en el PR y no en la base (modo full)
     # approved | rejected (hay evidencia de un problema) | incomplete (solo faltó evidencia)
     outcome: str = ""
     typed: list[Reason] = field(default_factory=list)  # motivos con su tipo, para el reporte v2
@@ -74,6 +75,7 @@ class CheckResult:
             "evaluator": self.evaluator,
             "inside": self.inside,
             "split": self.split,
+            "introduced": self.introduced,
         }
 
     def to_text(self, color: bool = False) -> str:
@@ -230,6 +232,55 @@ def reserved_secrets(plan: "AttackPlan | None", holdout_tests: Path | None, resu
                 out |= {str(f.get(k)) for k in ("nodeid", "file", "message") if f.get(k)}
                 out.add(str(f.get("nodeid", "")).rsplit("::", 1)[-1])
     return frozenset(x for x in out if len(x) >= 4)
+
+
+@dataclass
+class Introduced:
+    """Resultado del modo «vulnerabilidad introducida»: el equipo rojo contra el PR y contra la base."""
+
+    introduced: list[Attack] = field(default_factory=list)  # entran en el PR y no en la base
+    existing: list[Attack] = field(default_factory=list)  # ya entraban en la base
+    incomplete: list[str] = field(default_factory=list)
+
+
+def who(attack: Attack, inventory: dict) -> str:
+    """Usuario del inventario que hace el pedido del ataque."""
+    headers = attack.request.get("headers") or {}
+    return next((u for u, h in (inventory.get("users") or {}).items() if h == headers), "?")
+
+
+def describe_introduced(attack: Attack, inventory: dict) -> str:
+    """Evidencia de una vulnerabilidad introducida: pedido, usuario y marca que recibió."""
+    pred = attack.succeeded_if
+    marks = ", ".join(pred.body_contains_any + pred.body_contains)
+    return f"{attack.family}: {attack.request['method']} {attack.request['path']} como {who(attack, inventory)} recibe datos ajenos ({marks})"
+
+
+def red_team(app: "sandbox.AppHandle", target: Target, tmp: Path, budget: float) -> list[Attack]:
+    """Ataques del equipo rojo que funcionan contra `app`, solo de las familias activas."""
+    inv = tmp / f"inventory-{app.run_id}.json"
+    inv.write_text(json.dumps(target.inventory, ensure_ascii=False))
+    found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, target, inv, budget)]
+    return [a for a in found if a.family in target.attack_families]
+
+
+def compare_red_team(pr_found: list[Attack], base_found: list[Attack]) -> Introduced:
+    """Un ataque que entra en el PR y no en la base (bloqueado o ruta inexistente) es introducido.
+
+    Los ids del equipo rojo salen de la ruta, el recurso y quien ataca, así que
+    el mismo ataque tiene el mismo id contra las dos apps.
+    """
+    base_ids = {a.id for a in base_found}
+    return Introduced(
+        introduced=[a for a in pr_found if a.id not in base_ids],
+        existing=[a for a in pr_found if a.id in base_ids],
+    )
+
+
+def existing_note(existing: list[Attack]) -> str:
+    routes = sorted({a.public_route() for a in existing})
+    shown = ", ".join(routes[:4]) + (f" y {len(routes) - 4} más" if len(routes) > 4 else "")
+    return f"{len(existing)} vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR ({shown})"
 
 
 @dataclass(frozen=True)
@@ -438,16 +489,42 @@ def check(
             attacks_file = tmp_path / "attacks.json"
             attacks_file.write_text(json.dumps([a.to_dict() for a in attacks], ensure_ascii=False))
         sandbox.build_evaluator_image()
+        hunt = mode == "full" and bool(target.inventory and target.attack_families)
+        pr_found: list[Attack] = []
+        red_errors: list[str] = []
         try:
             app = sandbox.start_app(pr_tree, target)
         except sandbox.SandboxError as e:
             return done(None, Evidence(False, integrity_flags=flags, incomplete=[f"la app del PR no se pudo construir o levantar: {e}"]))
         try:
+            if hunt:
+                # Antes que los tests, con la app recién levantada, igual que la de la base.
+                try:
+                    pr_found = red_team(app, target, tmp_path, budget / 2)
+                except (sandbox.SandboxError, ValueError) as e:
+                    red_errors.append(f"el equipo rojo no terminó contra la app del PR: {e}")
             code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget, attacks_file)
         finally:
             sandbox.stop(app)
+        intro = Introduced(incomplete=red_errors)
+        if hunt and not red_errors:
+            try:
+                base_app = sandbox.start_app(base_tree, target)
+                try:
+                    base_found = red_team(base_app, target, tmp_path, budget / 2)
+                finally:
+                    sandbox.stop(base_app)
+                intro = compare_red_team(pr_found, base_found)
+            except (sandbox.SandboxError, ValueError) as e:
+                intro = Introduced(incomplete=[f"el equipo rojo no terminó contra la app de la base: {e}"])
         ev = evidence_from(result, flags, code, holdout_tests is not None, plan, tuple(a.id for a in attacks))
-        return done(result, ev)
+        ev.incomplete += intro.incomplete
+        ev.introduced_attacks += [describe_introduced(a, target.inventory or {}) for a in intro.introduced]
+        r = done(result, ev)
+        r.introduced = [a.to_dict() for a in intro.introduced]
+        if intro.existing:
+            r.notes.append(existing_note(intro.existing))
+        return r
 
 
 def _baseline(mode: str, base_sha: str, pr_sha: str, inside: dict) -> CheckResult:

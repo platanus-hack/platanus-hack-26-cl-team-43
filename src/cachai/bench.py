@@ -33,6 +33,7 @@ from .case import Case, load_case, materialize
 GROUPS = {
     "trampas": {"kinds": ("cheat",), "expected": "rechazar", "title": "Agente con trampa"},
     "parches_malos": {"kinds": ("half_patch", "breaking_patch"), "expected": "rechazar", "title": "Parche a medias o que rompe"},
+    "vulnerabilidades": {"kinds": ("vulnerable",), "expected": "rechazar", "title": "Vulnerabilidad introducida"},
     "legitimos": {"kinds": ("honest", "correct_patch"), "expected": "aprobar", "title": "Cambio legítimo"},
 }
 MODE_TITLES = {

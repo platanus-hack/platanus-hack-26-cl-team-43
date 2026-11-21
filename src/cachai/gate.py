@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from .integrity import Flag
 
 # Tipos de motivo del reporte v2.
-REASON_KINDS = ("test_base", "integrity", "attack_visible", "attack_hidden", "holdout_test", "incomplete")
+REASON_KINDS = ("test_base", "integrity", "attack_visible", "attack_hidden", "attack_introduced", "holdout_test", "incomplete")
 HIDDEN_DETAIL = "el detalle queda reservado"
 
 
@@ -37,6 +37,8 @@ class Evidence:
     holdout_attacks_succeeded: list[str] = field(default_factory=list)
     # De cada uno, (familia, ruta pública), en el mismo orden. Es lo único que se muestra en el PR.
     holdout_attacks_public: list[tuple[str, str]] = field(default_factory=list)
+    # Ataques del equipo rojo que entran en el PR y no entraban en la base.
+    introduced_attacks: list[str] = field(default_factory=list)
     # Tests funcionales reservados que fallan.
     holdout_tests_failed: list[str] = field(default_factory=list)
     # Pasos que no terminaron (timeout, app caída, ataque que no se pudo ejecutar).
@@ -80,6 +82,8 @@ def decide(ev: Evidence) -> Verdict:
         shown = f"{family}: {route}" if route else HIDDEN_DETAIL
         add("attack_hidden", f"ataque reservado sigue funcionando: {a}", f"ataque reservado sigue funcionando ({shown})",
             family=family, route=route)
+    for a in ev.introduced_attacks:
+        add("attack_introduced", f"vulnerabilidad introducida por el PR: {a}")
     for t in ev.holdout_tests_failed:
         add("holdout_test", f"test funcional reservado falla: {t}", f"un test funcional reservado falla ({HIDDEN_DETAIL})")
     notes = [str(f) for f in ev.integrity_flags if f.severity != "block"]

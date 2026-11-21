@@ -17,7 +17,8 @@ from pathlib import Path, PurePosixPath
 from .holdout import FAMILIES, Attack, Split, load_attacks, split_record
 from .redteam import Inventory
 
-PR_KINDS = ("cheat", "honest", "half_patch", "correct_patch", "breaking_patch")
+PR_KINDS = ("cheat", "honest", "half_patch", "correct_patch", "breaking_patch", "vulnerable")
+# vulnerable: PR normal (no dice ser de seguridad) que introduce una vulnerabilidad nueva.
 # Parches de seguridad: dicen arreglar la falla, así que deben bloquear los ataques del caso.
 PATCH_KINDS = ("half_patch", "correct_patch", "breaking_patch")
 CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "holdout_tests", "split", "inventory", "prs"}

@@ -28,7 +28,7 @@
         "additionalProperties": false,
         "required": ["kind", "text"],
         "properties": {
-          "kind": {"enum": ["test_base", "integrity", "attack_visible", "attack_hidden", "holdout_test", "incomplete"]},
+          "kind": {"enum": ["test_base", "integrity", "attack_visible", "attack_hidden", "attack_introduced", "holdout_test", "incomplete"]},
           "text": {"type": "string", "minLength": 1},
           "family": {"type": "string", "description": "Solo attack_hidden: familia del ataque."},
           "route": {"type": "string", "description": "Solo attack_hidden: método y ruta sin consulta, con los tramos variables ocultos."}
