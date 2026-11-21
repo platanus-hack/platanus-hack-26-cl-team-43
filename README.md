@@ -64,16 +64,23 @@ cases/            casos de evaluación
 results/          resultados de la medición y evidencia de cada corrida
 scripts/          demo en vivo y generador de la página de resultados
 site/             página pública de resultados (generada)
+docs/empezar.md   guía de 5 minutos: instalar, `cachai init`, workflow y check obligatorio
+docs/inventario.md qué es una marca, cómo elegir usuarios y recursos, errores comunes
 docs/propuesta.md detalle de la propuesta, evaluación y límites
 docs/arquitectura.md arquitectura y plan por fases
 ```
 
 ## Uso
 
-Requiere Python 3.11 o superior y Docker.
+Requiere Python 3.11 o superior y Docker. Para dejarlo configurado en un repo,
+seguí [Cachai en 5 minutos](docs/empezar.md): `cachai init` detecta la app,
+propone el inventario y sella el material reservado.
 
 ```bash
 pip install -e ".[dev]"
+
+# Configurar un repo propio en un comando (lo corre quien mantiene el repo)
+cachai init --user 'alice=Authorization: Bearer tok-alice' --user 'bob=Authorization: Bearer tok-bob'
 
 # Tabla de modos por PR del caso de demo
 cachai case cases/facturas

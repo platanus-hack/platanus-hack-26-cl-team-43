@@ -25,7 +25,8 @@ from .case import Case, Target
 from .integrity import EVAL_CONFIG, is_hook
 
 ROOT = Path(__file__).resolve().parents[2]
-EVALUATOR_IMAGE = "cachai-evaluator"
+EVALUATOR_IMAGE = "cachai-evaluator"  # repositorio; la etiqueta la pone `evaluator_tag`
+DEPS_IMAGE = "cachai-deps"  # repositorio; la etiqueta es el hash de los archivos de dependencias
 HARDENING = [
     "--cap-drop", "ALL",
     "--security-opt", "no-new-privileges",
@@ -67,6 +68,19 @@ class AppHandle:
     image: str
     base_url: str
     extra: tuple[str, ...] = ()  # contenedores de los servicios del compose
+    temp_images: tuple[str, ...] = ()  # imágenes de dependencias de esta corrida, que se borran al parar
+
+
+def cache_dir() -> Path:
+    """Carpeta de la caché de Cachai, fuera de cualquier árbol que se revisa.
+
+    Ningún contenedor la monta: el código del PR no la ve ni la escribe.
+    """
+    base = os.environ.get("CACHAI_CACHE_DIR") or str(
+        Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "cachai")
+    path = Path(base)
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return path
 
 
 # Dos revisiones del mismo árbol producen la misma imagen. Si una la borra justo
@@ -131,24 +145,104 @@ def fetch_wheels(context: Path) -> Path:
     return dest
 
 
-def _build_app_image(context: Path, image: str) -> None:
-    """Imagen Python de Cachai: dependencias desde wheels descargados antes y build sin red.
+def _image_exists(image: str) -> bool:
+    return _docker("image", "inspect", "-f", "{{.Id}}", image, check=False, timeout=60).returncode == 0
 
-    Se construye desde una copia temporal del contexto con los wheels al lado:
-    el árbol original (a veces una carpeta del repo, como la base de un caso) no se toca.
+
+def _regular_bytes(tree: Path, name: str) -> bytes | None:
+    """Contenido de `name` en `tree` si es un archivo regular (no un enlace)."""
+    f = _plain_path(tree, name)
+    if f.is_symlink() or not f.is_file():
+        return None
+    return f.read_bytes()
+
+
+def deps_key(requirements: bytes, base_image_id: str = "") -> str:
+    """Clave de la imagen de dependencias: su Dockerfile, la imagen de Python sobre
+    la que se construye y los archivos de dependencias."""
+    h = hashlib.sha256()
+    h.update((ROOT / "docker" / "deps.Dockerfile").read_bytes())
+    h.update(b"\0" + base_image_id.encode() + b"\0" + requirements + b"\0")
+    return h.hexdigest()
+
+
+_deps_locks: dict[str, threading.Lock] = {}
+
+
+def _deps_image(context: Path, trusted: Path | None, image: str) -> tuple[str, bool]:
+    """Imagen con las dependencias de `context` instaladas. Devuelve (etiqueta, es_temporal).
+
+    Solo se cachea (etiqueta por hash) si el `requirements.txt` de `context` es
+    idéntico al de `trusted`, el árbol de la rama base: la imagen compartida
+    siempre sale de archivos de la base. Si el PR lo cambió, o no hay árbol de
+    confianza, se construye una imagen temporal de esta corrida que se borra al
+    terminar, y nunca se reutiliza.
+
+    El contexto del build tiene solo el archivo de dependencias y sus wheels:
+    nunca el código del PR.
     """
-    with tempfile.TemporaryDirectory(prefix="cachai-build-") as tmp:
-        ctx = Path(tmp) / "ctx"
-        _copy_regular_tree(context, ctx, skip_symlinks=True)
-        fetch_wheels(ctx)
-        with _image_lock:
-            proc = _docker("build", "--progress", "plain", "--network", "none", "-f", str(ROOT / "docker" / "app.Dockerfile"),
-                           "-t", image, str(ctx), check=False)
-    if proc.returncode != 0:
-        log = proc.stderr + proc.stdout
-        offline = any(m in log for m in NETWORK_ERRORS)
-        why = "un script de instalación intentó usar la red y el build no la tiene" if offline else "falló la instalación sin red"
-        raise SandboxError(f"docker build falló ({why}): {log.strip()[-400:]}")
+    requirements = _regular_bytes(context, "requirements.txt")
+    if requirements is None:
+        raise SandboxError("falta requirements.txt (o no es un archivo regular) en el árbol de la app")
+    local = any(_local_requirement(ln) for ln in requirements.decode(errors="replace").splitlines())
+    cacheable = (trusted is not None and not local
+                 and _regular_bytes(trusted, "requirements.txt") == requirements)
+    base_id = _docker("image", "inspect", "-f", "{{.Id}}", "python:3.12-slim", check=False, timeout=60).stdout.strip()
+    tag = f"{DEPS_IMAGE}:{deps_key(requirements, base_id)[:24]}" if cacheable else f"{image}-deps"
+    with _image_lock:
+        lock = _deps_locks.setdefault(tag, threading.Lock())
+    with lock:
+        if cacheable and _image_exists(tag):
+            return tag, False
+        with tempfile.TemporaryDirectory(prefix="cachai-deps-") as tmp:
+            ctx = Path(tmp) / "ctx"
+            if local:
+                # Dependencias que apuntan al código del repo: el paquete local se
+                # construye en el build, así que el contexto necesita el árbol.
+                _copy_regular_tree(context, ctx, skip_symlinks=True)
+            else:
+                ctx.mkdir()
+                (ctx / "requirements.txt").write_bytes(requirements)
+            fetch_wheels(ctx)
+            with _image_lock:
+                proc = _docker("build", "--progress", "plain", "--network", "none",
+                               "-f", str(ROOT / "docker" / "deps.Dockerfile"), "-t", tag, str(ctx), check=False)
+        if proc.returncode != 0:
+            log = proc.stderr + proc.stdout
+            raise SandboxError(f"docker build de dependencias falló ({log.strip()[-400:]})")
+    return tag, not cacheable
+
+
+def _build_app_image(context: Path, image: str, trusted: Path | None = None) -> str | None:
+    """Imagen Python de Cachai: la de dependencias más el código, sin red.
+
+    Con `trusted` (el árbol de la rama base), si los archivos de dependencias de
+    `context` son los mismos se reutiliza la imagen de dependencias cacheada; si
+    no, se construye una temporal que hay que borrar. Devuelve la etiqueta
+    temporal que hay que borrar, o None si se usó la cacheada.
+
+    Se construye desde una copia temporal del contexto, sin enlaces simbólicos:
+    el árbol original (a veces una carpeta del repo, como la base de un caso) no
+    se toca.
+    """
+    deps, temporary = _deps_image(context, trusted, image)
+    try:
+        with tempfile.TemporaryDirectory(prefix="cachai-build-") as tmp:
+            ctx = Path(tmp) / "ctx"
+            _copy_regular_tree(context, ctx, skip_symlinks=True)
+            with _image_lock:
+                proc = _docker("build", "--progress", "plain", "--network", "none", "--build-arg", f"DEPS_IMAGE={deps}",
+                               "-f", str(ROOT / "docker" / "app.Dockerfile"), "-t", image, str(ctx), check=False)
+        if proc.returncode != 0:
+            log = proc.stderr + proc.stdout
+            offline = any(m in log for m in NETWORK_ERRORS)
+            why = "un script de instalación intentó usar la red y el build no la tiene" if offline else "falló la construcción"
+            raise SandboxError(f"docker build falló ({why}): {log.strip()[-400:]}")
+    except SandboxError:
+        if temporary:
+            _remove_image(deps)
+        raise
+    return deps if temporary else None
 
 
 def _remove_image(image: str) -> None:
@@ -295,23 +389,69 @@ def restore_eval_files(pr_tree: Path, base_tree: Path, tests_dir: str) -> Path:
     return pr_tree
 
 
-def run_pytest_inside(context: Path, tests_dir: str, budget: float = 120.0) -> dict:
-    """Líneas base: corre pytest dentro del mismo contenedor que el código.
+def build_target_image(context: Path, target: Case | Target, image: str, compose_text: str | bytes | None = None,
+                       trusted_deps: Path | None = None) -> str | None:
+    """Imagen de la app de `context` según la configuración: la de Cachai (Python), el
+    Dockerfile del repo o el servicio de la app en el compose.
 
-    Devuelve lo que vería un CI: `passed` es verdadero si pytest salió con 0.
+    Devuelve la etiqueta de la imagen temporal de dependencias que hay que borrar
+    (solo con la imagen de Cachai), o None."""
+    spec = target.app
+    if spec.compose is not None:
+        try:
+            text = compose_text if compose_text is not None else _plain_path(context, spec.compose.file).read_bytes()
+            plan = compose_mod.parse(text, spec.compose.service)
+        except (compose_mod.ComposeError, OSError) as e:
+            raise SandboxError(f"compose inválido: {e}") from e
+        ctx = context if plan.app.build_context == "." else _plain_path(context, plan.app.build_context)
+        _build_repo_image(ctx, plan.app.dockerfile or "Dockerfile", image)
+        return None
+    if spec.dockerfile is not None:
+        _build_repo_image(context, spec.dockerfile, image)
+        return None
+    return _build_app_image(context, image, trusted_deps)
+
+
+JEST = "./node_modules/.bin/jest"
+
+
+def tests_command(target: Case | Target | None, tests_dir: str) -> list[str]:
+    if target is not None and getattr(target, "tests_runner", "pytest") == "jest":
+        return [JEST, "--ci", "--cacheDirectory=/tmp/jest", tests_dir]
+    return ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", tests_dir]
+
+
+def run_pytest_inside(context: Path, tests_dir: str, budget: float = 120.0, target: Case | Target | None = None,
+                      trusted_deps: Path | None = None) -> dict:
+    """Líneas base: corre los tests dentro del mismo contenedor que el código.
+
+    Devuelve lo que vería un CI: `passed` es verdadero si los tests salieron con 0.
+    Con `target`, la imagen y el runner salen de su configuración (p. ej. jest).
+    `trusted_deps`: árbol de la base; con él se reutiliza la imagen de
+    dependencias cacheada si el PR no las cambió.
     """
     run_id = f"cp-{uuid.uuid4().hex[:10]}"
     image = f"{run_id}-ci"
-    _build_app_image(context, image)
+    temp: list[str] = []
+
+    def build() -> None:
+        if target is None:
+            deps = _build_app_image(context, image, trusted_deps)
+        else:
+            deps = build_target_image(context, target, image, trusted_deps=trusted_deps)
+        if deps:
+            temp.append(deps)
+
+    build()
     cmd = [
-        "run", "--rm", "--name", run_id, "--network", "none", *HARDENING,
-        image, "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", tests_dir,
+        "run", "--rm", "--name", run_id, "--network", "none", *HARDENING, "-e", "HOME=/tmp",
+        image, *tests_command(target, tests_dir),
     ]
     try:
         try:
             proc = _docker(*cmd, timeout=budget, check=False)
             if proc.returncode == 125 and any(m in proc.stderr for m in MISSING_IMAGE):
-                _build_app_image(context, image)  # otra corrida fuera de este proceso la borró
+                build()  # otra corrida fuera de este proceso la borró
                 proc = _docker(*cmd, timeout=budget, check=False)
         except subprocess.TimeoutExpired:
             _docker("rm", "-f", run_id, check=False, timeout=60)
@@ -324,6 +464,8 @@ def run_pytest_inside(context: Path, tests_dir: str, budget: float = 120.0) -> d
         }
     finally:
         _remove_image(image)
+        for deps in temp:
+            _remove_image(deps)
 
 
 def _build_repo_image(context: Path, dockerfile: str, image: str) -> None:
@@ -373,7 +515,8 @@ def _run_seed(run_id: str, base_tree: Path, build, app_env: dict[str, str], seed
 
 
 def start_app(context: Path, case: Case | Target, compose_text: str | bytes | None = None,
-              seed_context: Path | None = None, seed_env: dict[str, str] | None = None) -> AppHandle:
+              seed_context: Path | None = None, seed_env: dict[str, str] | None = None,
+              trusted_deps: Path | None = None) -> AppHandle:
     """Construye y levanta la app de `context` en un contenedor aislado, sin salida a internet.
 
     Con `app.compose`, levanta antes los servicios del compose en la misma red
@@ -383,6 +526,10 @@ def start_app(context: Path, case: Case | Target, compose_text: str | bytes | No
     Si la configuración trae `seed`, después de los servicios y antes de la app
     corre la semilla con una imagen construida desde `seed_context` (el árbol de
     la base, nunca el del PR) y las variables `seed_env` (las marcas canario).
+
+    `trusted_deps` es el árbol de la rama base: con la imagen por defecto, si los
+    archivos de dependencias de `context` son los mismos, se usa la imagen de
+    dependencias cacheada; si no, una temporal de esta corrida.
     """
     spec = case.app
     run_id = f"cp-{uuid.uuid4().hex[:10]}"
@@ -396,6 +543,8 @@ def start_app(context: Path, case: Case | Target, compose_text: str | bytes | No
         except (compose_mod.ComposeError, OSError) as e:
             raise SandboxError(f"compose inválido: {e}") from e
 
+    temp: list[str] = []
+
     def build(root: Path = context, tag: str = image) -> None:
         if plan is not None:
             ctx = root if plan.app.build_context == "." else _plain_path(root, plan.app.build_context)
@@ -403,7 +552,10 @@ def start_app(context: Path, case: Case | Target, compose_text: str | bytes | No
         elif spec.dockerfile is not None:
             _build_repo_image(root, spec.dockerfile, tag)
         else:
-            _build_app_image(root, tag)
+            deps = _build_app_image(root, tag, trusted_deps)
+            if deps:
+                temp.append(deps)
+                handle.temp_images = tuple(temp)
 
     seed_cmd = tuple(getattr(case, "seed", ()) or ())
     if seed_cmd and seed_context is None:
@@ -455,7 +607,7 @@ def start_app(context: Path, case: Case | Target, compose_text: str | bytes | No
     except SandboxError:
         stop(handle)
         raise
-    return AppHandle(run_id, run_id, container, image, f"http://app:{spec.port}", tuple(extra))
+    return AppHandle(run_id, run_id, container, image, f"http://app:{spec.port}", tuple(extra), tuple(temp))
 
 
 INCOMPLETE = {"schema": 1, "status": "incomplete", "suites": {}, "attacks": None}
@@ -490,7 +642,7 @@ def _last_json(stdout: str) -> dict | None:
 
 
 def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_dir: Path | None = None,
-                  budget: float = 120.0, attacks_file: Path | None = None) -> tuple[int, dict]:
+                  budget: float = 120.0, attacks_file: Path | None = None, skip_base: bool = False) -> tuple[int, dict]:
     """Corre el evaluador contra la app. Devuelve (código de salida, JSON del evaluador).
 
     Si el contenedor no termina en `budget` + margen, se mata y se devuelve una
@@ -504,6 +656,8 @@ def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_di
     if attacks_file is not None:
         mounts.append((attacks_file, "/work/attacks.json"))
         args += ["--attacks", "/work/attacks.json"]
+    if skip_base:
+        args.append("--skip-base")
     code, out, err = _run_trusted(app, f"{app.run_id}-eval", mounts, args, budget)
     if code is None:
         return 2, {**INCOMPLETE, "errors": ["el evaluador no terminó a tiempo"]}
@@ -513,11 +667,49 @@ def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_di
     return code, result
 
 
+def run_jest(app: AppHandle, target: Case | Target, base_tree: Path, budget: float = 120.0,
+             compose_text: str | bytes | None = None) -> dict:
+    """Tests de la base con jest, por HTTP contra la app del PR.
+
+    Corren con la imagen construida desde el árbol de la base (con sus
+    dependencias de desarrollo, su configuración de jest y sus tests), en otro
+    contenedor de la misma red. Nada del PR entra en esa imagen.
+    """
+    from .evaluator import parse_junit, summarize
+
+    tag = f"{app.run_id}-tests"
+    with tempfile.TemporaryDirectory(prefix="cachai-jest-") as tmp:
+        out = Path(tmp) / "out"
+        out.mkdir()
+        os.chmod(out, 0o777)  # el usuario de la imagen (p. ej. node) escribe el junit
+        try:
+            build_target_image(base_tree, target, tag, compose_text)
+            cmd = ["run", "--rm", "--name", tag, "--network", app.network, *HARDENING,
+                   "-v", f"{out.resolve()}:/out", "-e", f"BASE_URL={app.base_url}", "-e", "HOME=/tmp",
+                   "-e", "JEST_JUNIT_OUTPUT_DIR=/out", "-e", "JEST_JUNIT_ADD_FILE_ATTRIBUTE=true",
+                   "-e", "JEST_JUNIT_CLASSNAME={filepath}", "-e", "JEST_JUNIT_TITLE={title}",
+                   # La carpeta va antes de las opciones: --reporters acepta varios valores y se la tragaría.
+                   tag, JEST, target.tests_dir, "--ci", "--cacheDirectory=/tmp/jest", "--reporters=default",
+                   "--reporters=jest-junit"]
+            try:
+                proc = _docker(*cmd, timeout=budget, check=False)
+                code, timed_out, log = proc.returncode, False, proc.stdout + proc.stderr
+            except subprocess.TimeoutExpired:
+                _docker("rm", "-f", tag, check=False, timeout=60)
+                code, timed_out, log = None, True, ""
+            junit = out / "junit.xml"
+            cases = parse_junit(junit) if junit.is_file() else []
+        finally:
+            _remove_image(tag)
+    return summarize(cases, code, timed_out, log)
+
+
 def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budget: float = 60.0,
                 families: tuple[str, ...] | None = None, routes_file: Path | None = None,
-                info: dict | None = None) -> list[dict]:
+                info: dict | None = None, rotation: bool = False) -> list[dict]:
     """Genera y confirma variantes de ataque contra la app. `routes_file`: rutas leídas
-    del código de esa app; en `info` quedan las que su OpenAPI no publica."""
+    del código de esa app; en `info` quedan las que su OpenAPI no publica. Con
+    `rotation` suma las variantes guardadas para rotar reservados quemados."""
     args = ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json", "--budget", str(budget)]
     mounts = [(inventory_file, "/work/inventory.json")]
     if routes_file is not None:
@@ -525,6 +717,8 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
         args += ["--routes", "/work/routes.json"]
     if families:
         args += ["--families", ",".join(families)]
+    if rotation:
+        args += ["--rotation"]
     nonce = uuid.uuid4().hex[:12] if not families or "cmdi" in families else ""
     if nonce:
         args += ["--cmdi-nonce", nonce]
@@ -556,7 +750,32 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
     return attacks
 
 
+def run_attacks_only(app: AppHandle, case: Case | Target, attacks_file: Path, budget: float = 60.0) -> dict:
+    """Corre solo los ataques contra la app (sin suites). Devuelve el reporte de ataques."""
+    args = ["--base-url", app.base_url, "--health", case.app.health, "--attacks", "/work/attacks.json",
+            "--budget", str(budget), "--attacks-only"]
+    code, out, err = _run_trusted(app, f"{app.run_id}-atk", [(attacks_file, "/work/attacks.json")], args, budget)
+    data = _last_json(out) if code == 0 else None
+    if data is None or not isinstance(data.get("attacks"), dict):
+        raise SandboxError(f"los ataques no terminaron: {(out + err).strip()[-500:]}")
+    return data["attacks"]
+
+
+def run_probe(app: AppHandle, case: Case | Target, users_file: Path, budget: float = 60.0) -> dict:
+    """Lee `/openapi.json` de la app y lo que cada usuario de prueba ve en sus listados (para `cachai init`)."""
+    args = ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/users.json",
+            "--budget", str(budget), "--probe"]
+    code, out, err = _run_trusted(app, f"{app.run_id}-probe", [(users_file, "/work/users.json")], args, budget,
+                                  entrypoint=["python", "-m", "cachai.redteam"])
+    data = _last_json(out) if code == 0 else None
+    if data is None or "openapi" not in data:
+        raise SandboxError(f"no se pudo leer la app: {(out + err).strip()[-500:]}")
+    return data
+
+
 def stop(app: AppHandle) -> None:
     _docker("rm", "-f", app.container, *app.extra, check=False, timeout=60)
     _docker("network", "rm", app.network, check=False, timeout=60)
     _remove_image(app.image)
+    for image in app.temp_images:
+        _remove_image(image)

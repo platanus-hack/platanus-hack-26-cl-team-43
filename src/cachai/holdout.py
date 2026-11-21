@@ -269,15 +269,40 @@ def load_attacks(path: str | Path) -> list[Attack]:
 
 @dataclass(frozen=True)
 class Split:
-    """Qué ataques ve el parchador y cuáles quedan reservados. Va en la evidencia."""
+    """Qué ataques ve el parchador y cuáles quedan reservados. Va en la evidencia.
+
+    `burned`: ataques que eran reservados y se quemaron porque un rechazo los
+    reveló (familia y ruta en el comentario del PR). Ya están en `visible`.
+    """
 
     seed: int
     shown_ratio: float
     visible: tuple[str, ...]
     reserved: tuple[str, ...]
+    burned: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
-        return {"seed": self.seed, "shown_ratio": self.shown_ratio, "visible": list(self.visible), "reserved": list(self.reserved)}
+        d = {"seed": self.seed, "shown_ratio": self.shown_ratio, "visible": list(self.visible), "reserved": list(self.reserved)}
+        if self.burned:
+            d["burned"] = list(self.burned)
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Split":
+        burned = tuple(d.get("burned") or ())
+        if not set(burned) <= set(d["visible"]):
+            raise ValueError("un ataque quemado tiene que estar entre los visibles")
+        return cls(int(d["seed"]), float(d["shown_ratio"]), tuple(d["visible"]), tuple(d["reserved"]), burned)
+
+
+def reserved_groups(attacks: list[Attack] | tuple[Attack, ...], split: Split) -> dict[str, set[tuple[str, str]]]:
+    """Grupos reservados por familia. Toda familia con ataques aparece, aunque no le quede ninguno."""
+    reserved = set(split.reserved)
+    out: dict[str, set[tuple[str, str]]] = {a.family: set() for a in attacks}
+    for a in attacks:
+        if a.id in reserved:
+            out[a.family].add(a.group_key)
+    return dict(sorted(out.items()))
 
 
 def split(attacks: list[Attack], shown: float = 0.4, seed: int = 0) -> tuple[list[Attack], list[Attack]]:

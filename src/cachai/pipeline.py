@@ -20,15 +20,19 @@ repo, nunca del PR. Decide `gate.decide`.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from . import canary, gitio, hidden, integrity, report_md, routes, sandbox, static
+from . import canary, gitio, hidden, integrity, mutation, report_md, routes, sandbox, static
 from .case import CONFIG_FILE, ConfigError, Target, load_target
-from .evaluator import EXIT, SCHEMA
+from .evaluator import EXIT, SCHEMA, overall_status
 from .gate import Evidence, Reason, decide
 from .holdout import ATTACK_OUTCOMES, Attack, Split
 from .integrity import Flag
@@ -55,6 +59,12 @@ class CheckResult:
     # approved | rejected (hay evidencia de un problema) | incomplete (solo faltó evidencia)
     outcome: str = ""
     typed: list[Reason] = field(default_factory=list)  # motivos con su tipo, para el reporte v2
+    # Atajo «solo documentación»: los .md que cambia el PR (aprobado sin levantar nada).
+    docs_only: list[str] | None = None
+    # Segundos por fase de la revisión (`total` incluido). No cambia el veredicto.
+    timings: dict[str, float] = field(default_factory=dict, compare=False)
+    # Grupos reservados que quedan por familia y señales de quema (modo full con ataques). Ver `reserve_status`.
+    reserve: dict | None = None
     # Textos del material reservado que el reporte público nunca muestra.
     secrets: frozenset[str] = field(default_factory=frozenset, repr=False, compare=False)
 
@@ -76,6 +86,9 @@ class CheckResult:
             "inside": self.inside,
             "split": self.split,
             "introduced": self.introduced,
+            "docs_only": self.docs_only,
+            "timings": self.timings,
+            "reserve": self.reserve,
         }
 
     def to_text(self, color: bool = False) -> str:
@@ -136,6 +149,11 @@ class CheckResult:
             "reasons": [{k: (v if k == "kind" else _redact(v, self.secrets)) for k, v in r.items()} for r in reasons],
             "notes": _redact(list(self.notes), self.secrets),
         }
+        if self.timings:
+            report["timings"] = dict(self.timings)
+        if self.reserve is not None:
+            # Solo conteos, nombres de familia y señales HMAC: nada del paquete en claro.
+            report["reserve"] = self.reserve
         report["public"] = {"summary": report_md.summary(report), "markdown": report_md.markdown(report)}
         return report
 
@@ -149,6 +167,12 @@ def checked_lines(report: dict) -> list[str]:
     """
     if report.get("approved") is not True or report.get("outcome", "approved") != "approved":
         return []
+    docs = report.get("docs_only")
+    if docs is not None:
+        if (not docs or not all(isinstance(d, str) and is_doc(d) for d in docs)
+                or report.get("evaluator") is not None or report.get("inside") is not None):
+            raise ValueError("reporte contradictorio: atajo de documentación con archivos que no son .md o con evaluación")
+        return [f"el PR solo cambia documentación ({len(docs)} archivo{'s' if len(docs) != 1 else ''} .md): no se levantó la app"]
     inside = report.get("inside")
     if inside is not None:
         if inside.get("passed") is not True:
@@ -279,13 +303,14 @@ def red_team(app: "sandbox.AppHandle", target: Target, tmp: Path, budget: float,
     return [a for a in found if a.family in families]
 
 
-def compare_red_team(pr_found: list[Attack], base_found: list[Attack]) -> Introduced:
+def compare_red_team(pr_found: list[Attack], base_found: list[Attack] | set[str]) -> Introduced:
     """Un ataque que entra en el PR y no en la base (bloqueado o ruta inexistente) es introducido.
 
     Los ids del equipo rojo salen de la ruta, el recurso y quien ataca, así que
-    el mismo ataque tiene el mismo id contra las dos apps.
+    el mismo ataque tiene el mismo id contra las dos apps. `base_found` puede
+    ser la lista de ataques o, de la caché, solo sus ids.
     """
-    base_ids = {a.id for a in base_found}
+    base_ids = {a if isinstance(a, str) else a.id for a in base_found}
     return Introduced(
         introduced=[a for a in pr_found if a.id not in base_ids],
         existing=[a for a in pr_found if a.id in base_ids],
@@ -320,7 +345,8 @@ class AttackPlan:
     def __post_init__(self) -> None:
         ids = [a.id for a in self.attacks]
         visible, reserved = set(self.split.visible), set(self.split.reserved)
-        if len(ids) != len(set(ids)) or visible & reserved or visible | reserved != set(ids) or not visible or not reserved:
+        # Sin reservados es válido: todos se quemaron. El reporte lo avisa como nota.
+        if len(ids) != len(set(ids)) or visible & reserved or visible | reserved != set(ids) or not visible:
             raise ValueError("la selección visible/reservada no coincide con los ataques")
         groups = {a.id: a.group_key for a in self.attacks}
         if {groups[i] for i in visible} & {groups[i] for i in reserved}:
@@ -338,6 +364,37 @@ class AttackPlan:
         return a.family, a.public_route()
 
 
+def reserve_status(plan: AttackPlan, confirmed: list[str] | set[str], base: str, key: str | None = None) -> tuple[dict, list[str]]:
+    """Cuántos grupos reservados quedan por familia después de esta corrida, y sus notas.
+
+    Un reservado confirmado sale en el comentario del PR con su familia y su
+    ruta: desde ese momento su grupo cuenta como visto y ya no se cuenta entre
+    los que quedan. Con la clave del paquete (`key`), el reporte lleva una señal
+    opaca por grupo revelado (`hidden.burn_token`), con la que quien mantiene el
+    repo lo quema (`cachai hidden burn --report`). Sin clave (ataques de un caso
+    o de `--attacks`), no hay paquete que quemar y no hay señales.
+    """
+    from .holdout import reserved_groups
+
+    reserved = plan.subset(plan.split.reserved)
+    revealed = {a.group_key for a in reserved if a.id in set(confirmed)}
+    remaining = {f: len(g - revealed) for f, g in reserved_groups(plan.attacks, plan.split).items()}
+    status: dict = {"remaining": remaining, "revealed": len(revealed)}
+    if key and revealed:
+        status["burn"] = sorted(hidden.burn_token(key, base, g) for g in revealed)
+    notes = []
+    if revealed:
+        n = len(revealed)
+        what = "1 grupo" if n == 1 else f"{n} grupos"
+        seen = "cuenta como visto y hay que quemarlo" if n == 1 else "cuentan como vistos y hay que quemarlos"
+        notes.append(f"este rechazo muestra familia y ruta de {what} de ataques reservados: desde ahora {seen} "
+                     "(cachai hidden burn --report)")
+    notes.append("grupos de ataques reservados que quedan por familia: " + ", ".join(f"{f} {n}" for f, n in remaining.items()))
+    notes += [f"la familia {f} se quedó sin ataques reservados: sus ataques ya no miden si el parche generaliza; "
+              "hay que rotarla (cachai hidden rotate)" for f, n in remaining.items() if n == 0]
+    return status, notes
+
+
 def target_from_base(repo: str | Path, base_sha: str) -> Target:
     data = gitio.read_blob(repo, base_sha, CONFIG_FILE)
     if data is None:
@@ -346,7 +403,11 @@ def target_from_base(repo: str | Path, base_sha: str) -> Target:
 
 
 def failure_line(f: dict) -> str:
-    where = f"{f['file']}:{f['line']}" if f.get("file") and f.get("line") else str(f["nodeid"])
+    if f.get("file") and f.get("line"):
+        where = f"{f['file']}:{f['line']}"
+    else:
+        # Sin línea (jest no la da): el archivo, o el nodeid sin el nombre del test, que va después.
+        where = f.get("file") or str(f["nodeid"]).rsplit("::", 1)[0] or str(f["nodeid"])
     name = str(f["nodeid"]).rsplit("::", 1)[-1]
     msg = f" — {f['message']}" if f.get("message") else ""
     return f"{where} {name}{msg}"
@@ -484,6 +545,181 @@ def load_hidden(repo: str | Path, base_sha: str, target: Target, dest: Path) -> 
     return plan, material.holdout_tests
 
 
+# .md que los agentes de código leen como instrucciones: no son documentación inerte.
+AGENT_INSTRUCTION_FILES = {"agents.md", "claude.md", "gemini.md", "copilot-instructions.md"}
+AGENT_INSTRUCTION_DIRS = {".claude", ".github", ".cursor", ".codex", ".gemini", ".windsurf"}
+
+
+def is_doc(path: str) -> bool:
+    """Archivo de documentación para el atajo: termina en `.md` (en minúsculas) y
+    no es un archivo de instrucciones para agentes (AGENTS.md, CLAUDE.md,
+    .github/prompts/…, .claude/commands/…)."""
+    p = PurePosixPath(path)
+    if p.suffix != ".md":
+        return False
+    if p.name.lower() in AGENT_INSTRUCTION_FILES:
+        return False
+    return not any(part.lower() in AGENT_INSTRUCTION_DIRS for part in p.parts[:-1])
+
+
+# Si algún archivo de la base que no es .md nombra esto, la app o pytest podrían
+# leer los .md (plantillas, doctests): el atajo no aplica.
+DOC_READERS = r"\.md|markdown|doctest"
+
+
+def docs_only_files(repo: str | Path, base_sha: str, pr_sha: str, target: Target, flags: list[Flag]) -> list[str] | None:
+    """Los .md que cambia el PR si se puede aprobar sin levantar nada; si no, None.
+
+    Un .md no se ejecuta, pero puede cambiar la evaluación si algo lo lee. Por
+    eso el atajo exige, además de que todo cambio sea un `.md`:
+
+    - ninguna marca de integridad (un .md dentro de la carpeta de tests la tiene);
+    - ningún enlace simbólico entre los .md del PR;
+    - la imagen de app por defecto (un Dockerfile o compose del repo puede
+      procesar cualquier archivo al construir);
+    - que ningún archivo de la base que no sea .md nombre `.md`, `markdown` o
+      `doctest`: ni la app lee .md por nombre ni pytest los colecta como doctests.
+
+    Límite: no detecta una app de la base que lea todos los archivos de una
+    carpeta sin nombrar su extensión.
+    """
+    changes = gitio.changed_files(repo, base_sha, pr_sha)
+    if not changes or flags or not all(is_doc(path) for _, path in changes):
+        return None
+    if target.app.dockerfile is not None or target.app.compose is not None:
+        return None
+    if any(integrity.in_dir(path, target.tests_dir) for _, path in changes):
+        return None
+    modes = {path: mode for mode, _, _, path in gitio.ls_tree(repo, pr_sha)}
+    if any(status != "D" and modes.get(path) not in ("100644", "100755") for status, path in changes):
+        return None
+    if gitio.grep_mentions(repo, base_sha, DOC_READERS):
+        return None
+    return sorted(path for _, path in changes)
+
+
+DOCS_NOTE = ("el PR solo cambia documentación (*.md): se aprueba sin levantar la app ni correr tests ni ataques, "
+             "porque ningún archivo de la base lee .md y la app se evalúa igual que la base")
+
+
+# Caché del equipo rojo contra la base, por sha de la base. Guarda solo los ids
+# de los ataques que funcionan contra la base (nunca marcas canario), fuera del
+# repo y de todo contenedor. Solo la escriben corridas contra la app de la base.
+BASE_HUNT_VERSION = 1
+
+
+def base_hunt_key(base_sha: str, target: Target, compose_text: bytes | str | None) -> str:
+    """Todo lo que determina el resultado del equipo rojo contra la base: el
+    commit, la configuración, el compose y el código de Cachai."""
+    if isinstance(compose_text, str):
+        compose_text = compose_text.encode()
+    data = {
+        "v": BASE_HUNT_VERSION,
+        "base": base_sha,
+        "target": target.to_dict(),
+        "compose": hashlib.sha256(compose_text).hexdigest() if compose_text is not None else None,
+        "code": sandbox.evaluator_tag(),
+    }
+    return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def _base_hunt_file(key: str) -> Path:
+    return sandbox.cache_dir() / "rojo-base" / f"{key}.json"
+
+
+def load_base_hunt(key: str, base_sha: str) -> set[str] | None:
+    """Ids cacheados del equipo rojo contra la base, o None si no hay o no se pueden leer."""
+    try:
+        data = json.loads(_base_hunt_file(key).read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    ids = data.get("ids")
+    if data.get("base") != base_sha or not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+        return None
+    return set(ids)
+
+
+def save_base_hunt(key: str, base_sha: str, ids: set[str]) -> None:
+    f = _base_hunt_file(key)
+    try:
+        f.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        tmp = f.with_name(f"{f.name}.{os.getpid()}.tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(fd, "w") as out:
+            json.dump({"base": base_sha, "ids": sorted(ids)}, out)
+        os.replace(tmp, f)
+    except OSError:
+        pass  # sin caché la próxima revisión corre el equipo rojo contra la base
+
+
+def timings_text(timings: dict[str, float]) -> str:
+    """`total 4.1 s (app_pr 1.2 s, evaluador 1.9 s, …)`."""
+    parts = ", ".join(f"{k} {v:.1f} s" for k, v in timings.items() if k != "total")
+    total = timings.get("total")
+    return (f"total {total:.1f} s" if total is not None else "") + (f" ({parts})" if parts else "")
+
+
+class Timer:
+    """Segundos por fase. Las fases que corren en paralelo se miden cada una por su lado."""
+
+    def __init__(self) -> None:
+        self.started = time.monotonic()
+        self.phases: dict[str, float] = {}
+
+    @contextmanager
+    def phase(self, name: str):
+        t = time.monotonic()
+        try:
+            yield
+        finally:
+            self.phases[name] = round(self.phases.get(name, 0.0) + time.monotonic() - t, 2)
+
+    def done(self) -> dict[str, float]:
+        return {**self.phases, "total": round(time.monotonic() - self.started, 2)}
+
+
+def attacks_open_in_base(base_app: "sandbox.AppHandle", target: Target, attacks_file: Path, budget: float) -> set[str] | None:
+    """Ids de los ataques que funcionan contra la app de la base, o None si no se pudo saber."""
+    try:
+        report = sandbox.run_attacks_only(base_app, target, attacks_file, budget)
+    except sandbox.SandboxError:
+        return None
+    results = report.get("results") if isinstance(report, dict) else None
+    if not isinstance(results, list) or report.get("complete") is not True:
+        return None
+    return {r["id"] for r in results if isinstance(r, dict) and r.get("outcome") == "confirmed"}
+
+
+def excuse_existing(ev: Evidence, plan: "AttackPlan", attack_ids: tuple[str, ...], pr_confirmed: list[str],
+                    base_open: set[str]) -> list[str]:
+    """Ataques del paquete reservado que no bloquean este PR. Modifica `ev`.
+
+    El paquete lo arma `cachai init` corriendo el equipo rojo contra la base: si
+    la base es vulnerable, sus ataques funcionan contra cualquier PR. Regla:
+
+    - Un ataque que la base bloquea y el PR no, siempre bloquea (el PR lo reabrió).
+    - Si el PR cierra al menos uno de los que la base sufre, es un intento de
+      arreglo y debe cerrarlos todos, visibles y reservados: así se rechaza el
+      parche que solo tapa lo que vio.
+    - Si no cierra ninguno, los que ya funcionaban en la base son fallas
+      existentes: no son culpa del PR y quedan como nota.
+    """
+    wanted = set(attack_ids)
+    open_base = base_open & wanted
+    if open_base - set(pr_confirmed):
+        return []  # intento de arreglo: debe cerrar todo
+    excused = [i for i in pr_confirmed if i in open_base]
+    drop = {plan.describe(i) for i in excused}
+    keep = [k for k, d in enumerate(ev.holdout_attacks_succeeded) if d not in drop]
+    if len(ev.holdout_attacks_public) == len(ev.holdout_attacks_succeeded):
+        ev.holdout_attacks_public = [ev.holdout_attacks_public[k] for k in keep]
+    ev.holdout_attacks_succeeded = [ev.holdout_attacks_succeeded[k] for k in keep]
+    ev.visible_attacks_succeeded = [d for d in ev.visible_attacks_succeeded if d not in drop]
+    return excused
+
+
 def check(
     repo: str | Path,
     base: str,
@@ -501,33 +737,55 @@ def check(
     `allow_missing_hidden`: solo para la revisión local del dev en modo
     visible. Sin él (el caso por defecto, y siempre en CI), si la base declara
     un paquete reservado y no se puede abrir, la revisión queda incompleta.
+
+    El resultado lleva el tiempo de cada fase en `timings`.
     """
+    timer = Timer()
+    result = _check(repo, base, pr, mode, target, holdout_tests, budget, plan, allow_missing_hidden, timer)
+    result.timings = timer.done()
+    return result
+
+
+def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | None, holdout_tests: Path | None,
+           budget: float, plan: AttackPlan | None, allow_missing_hidden: bool, timer: Timer) -> CheckResult:
     if mode not in MODES:
         raise ValueError(f"modo desconocido: {mode}")
-    base_sha, pr_sha = gitio.resolve(repo, base), gitio.resolve(repo, pr)
-    target = target or target_from_base(repo, base_sha)
+    with timer.phase("preparar"):
+        base_sha, pr_sha = gitio.resolve(repo, base), gitio.resolve(repo, pr)
+        target = target or target_from_base(repo, base_sha)
 
     with tempfile.TemporaryDirectory(prefix="cachai-") as tmp:
         tmp_path = Path(tmp)
-        pr_tree = gitio.export_tree(repo, pr_sha, tmp_path / "pr")
+        with timer.phase("preparar"):
+            pr_tree = gitio.export_tree(repo, pr_sha, tmp_path / "pr")
 
         if mode == "ci":
-            inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget)
+            with timer.phase("pytest_dentro"):
+                inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget, target)
             return _baseline(mode, base_sha, pr_sha, inside)
 
-        base_tree = gitio.export_tree(repo, base_sha, tmp_path / "base")
+        with timer.phase("preparar"):
+            base_tree = gitio.export_tree(repo, base_sha, tmp_path / "base")
         if mode == "restore":
             sandbox.restore_eval_files(pr_tree, base_tree, target.tests_dir)
-            inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget)
+            with timer.phase("pytest_dentro"):
+                inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget, target, trusted_deps=base_tree)
             return _baseline(mode, base_sha, pr_sha, inside)
 
         # Sin la clave, el modo visible es la revisión local del dev: sigue sin el
         # paquete en vez de quedar incompleto. En full, la falta de clave sí lo deja incompleto.
         local_visible = (allow_missing_hidden and mode == "visible" and target.hidden is not None
                          and not os.environ.get(target.hidden.key_env))
+        # Los ataques del paquete se juzgan contra la base (ver `excuse_existing`); los que llegan
+        # por `plan` (un parche de seguridad declarado) se deben bloquear todos.
+        from_package = False
+        burn_key = None  # clave del paquete: firma las señales de quema del reporte
         if plan is None and holdout_tests is None and target.hidden is not None and not local_visible:
             try:
-                plan, holdout_tests = load_hidden(repo, base_sha, target, tmp_path / "reservado")
+                with timer.phase("preparar"):
+                    plan, holdout_tests = load_hidden(repo, base_sha, target, tmp_path / "reservado")
+                from_package = plan is not None
+                burn_key = os.environ.get(target.hidden.key_env)
             except (hidden.HiddenError, ValueError, OSError) as e:
                 msg = f"evaluación incompleta: no se pudo abrir el material reservado ({e})"
                 return CheckResult(mode, base_sha, pr_sha, False, [msg], outcome="incomplete", typed=[Reason("incomplete", msg, msg)])
@@ -540,66 +798,149 @@ def check(
             verdict = decide(ev)
             notes = verdict.notes + ([f"sin {target.hidden.key_env}: no se abrió el paquete reservado, ni sus ataques visibles"]
                                      if local_visible and plan is None else [])
+            reserve = None
+            if mode == "full" and plan is not None and isinstance(result, dict):
+                confirmed, _ = _attack_evidence(result.get("attacks"), tuple(a.id for a in attacks))
+                reserve, reserve_notes = reserve_status(plan, confirmed, base_sha, burn_key)
+                notes += reserve_notes
             return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, notes, flags,
                                evaluator=result, split=split, outcome=verdict.outcome, typed=verdict.typed,
-                               secrets=reserved_secrets(plan if mode == "full" else None, holdout_tests, result))
+                               secrets=reserved_secrets(plan if mode == "full" else None, holdout_tests, result),
+                               reserve=reserve)
 
         spec = target.app
-        eval_files = (spec.compose.file,) if spec.compose else ()
-        app_files = (spec.dockerfile,) if spec.dockerfile else ()
-        flags = integrity.scan(repo, base_sha, pr_sha, target.tests_dir, eval_files, app_files)
+        with timer.phase("integridad"):
+            eval_files = (spec.compose.file,) if spec.compose else ()
+            app_files = (spec.dockerfile,) if spec.dockerfile else ()
+            flags = integrity.scan(repo, base_sha, pr_sha, target.tests_dir, eval_files, app_files)
         compose_text = gitio.read_blob(repo, base_sha, spec.compose.file) if spec.compose else None
         if spec.compose and compose_text is None:
             return done(None, Evidence(False, integrity_flags=flags, incomplete=[f"la rama base no tiene {spec.compose.file}"]))
         if not gitio.is_ancestor(repo, base_sha, pr_sha):
             return done(None, Evidence(False, integrity_flags=flags, incomplete=["la rama del PR no contiene la punta de la base; hay que actualizarla"]))
+        if plan is None:
+            # Un parche de seguridad (con `plan`) siempre se evalúa: el atajo es para PR normales.
+            with timer.phase("integridad"):
+                docs = docs_only_files(repo, base_sha, pr_sha, target, flags)
+            if docs:
+                r = done(None, Evidence(True, integrity_flags=flags))
+                r.docs_only = docs
+                r.notes.append(DOCS_NOTE)
+                return r
         workdir = sandbox.prepare_eval_workdir(base_tree, target.tests_dir, tmp_path / "eval")
         attacks_file = None
         if attacks:
             attacks_file = tmp_path / "attacks.json"
             attacks_file.write_text(json.dumps([a.to_dict() for a in attacks], ensure_ascii=False))
-        sandbox.build_evaluator_image()
         hunt = mode == "full" and bool(target.inventory and target.attack_families)
         # Marcas canario nuevas en cada corrida: la semilla las escribe y el equipo rojo las busca.
         canaries = canary.generate(canary.names(target.inventory)) if target.inventory else {}
         attack_target = replace(target, inventory=canary.resolve(target.inventory, canaries)) if canaries else target
         seed_kw = {"seed_context": base_tree, "seed_env": canary.env(canaries)} if target.seed else {}
+        app_kw = {**seed_kw, "trusted_deps": base_tree}
+        attack_ids = tuple(a.id for a in attacks)
+        # El paquete sellado por `cachai init` se armó contra la base: sus ataques pueden
+        # funcionar ya en la base, y entonces no son culpa de este PR (ver `excuse_existing`).
+        needs_base_open = from_package and bool(attacks)
+        needs_base = hunt or needs_base_open
+        hunt_key = base_hunt_key(base_sha, target, compose_text) if hunt else ""
+        cached_base = load_base_hunt(hunt_key, base_sha) if hunt else None
+        if cached_base is not None:
+            timer.phases["rojo_base"] = 0.0
+
+        def evaluator_image() -> None:
+            with timer.phase("imagen_evaluador"):
+                sandbox.build_evaluator_image()
+
+        def base_hunt() -> tuple[set[str], set[str] | None]:
+            """Equipo rojo contra la app de la base (en paralelo con la evaluación del PR)."""
+            with timer.phase("rojo_base"):
+                base_app = sandbox.start_app(base_tree, target, compose_text, **app_kw)
+                try:
+                    found = ({a.id for a in red_team(base_app, attack_target, tmp_path, budget / 2, tree=base_tree)}
+                             if hunt else set())
+                    base_open = (attacks_open_in_base(base_app, target, attacks_file, budget / 2)
+                                 if needs_base_open else None)
+                finally:
+                    sandbox.stop(base_app)
+            if hunt:
+                save_base_hunt(hunt_key, base_sha, found)
+            return found, base_open
+
         pr_found: list[Attack] = []
         pr_info: dict = {}
         red_errors: list[str] = []
-        try:
-            app = sandbox.start_app(pr_tree, target, compose_text, **seed_kw)
-        except sandbox.SandboxError as e:
-            return done(None, Evidence(False, integrity_flags=flags, incomplete=[f"la app del PR no se pudo construir o levantar: {e}"]))
-        try:
-            if hunt:
-                # Antes que los tests, con la app recién levantada, igual que la de la base.
-                # Las escrituras cambian datos: van después de los tests, para no ensuciar la evaluación.
-                reads = tuple(f for f in target.attack_families if f != "writes")
-                try:
-                    pr_found = red_team(app, attack_target, tmp_path, budget / 2, reads, pr_tree, pr_info)
-                except (sandbox.SandboxError, ValueError) as e:
-                    red_errors.append(f"el equipo rojo no terminó contra la app del PR: {e}")
-            code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget, attacks_file)
-            if hunt and not red_errors and "writes" in target.attack_families:
-                try:
-                    pr_found += red_team(app, attack_target, tmp_path, budget / 2, ("writes",), pr_tree)
-                except (sandbox.SandboxError, ValueError) as e:
-                    red_errors.append(f"el equipo rojo no terminó las escrituras contra la app del PR: {e}")
-        finally:
-            sandbox.stop(app)
-        intro = Introduced(incomplete=red_errors)
-        if hunt and not red_errors:
+        # La pool se cierra (esperando a todos) antes de borrar la carpeta temporal.
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="cachai") as pool:
+            # La imagen del evaluador se prepara mientras se construye y levanta la app del PR.
+            eval_ready = pool.submit(evaluator_image)
             try:
-                base_app = sandbox.start_app(base_tree, target, compose_text, **seed_kw)
+                with timer.phase("app_pr"):
+                    app = sandbox.start_app(pr_tree, target, compose_text, **app_kw)
+            except sandbox.SandboxError as e:
+                eval_ready.result()
+                return done(None, Evidence(False, integrity_flags=flags, incomplete=[f"la app del PR no se pudo construir o levantar: {e}"]))
+            try:
+                eval_ready.result()
+                base_future = pool.submit(base_hunt) if needs_base and (cached_base is None or needs_base_open) else None
+                if hunt:
+                    # Antes que los tests, con la app recién levantada, igual que la de la base.
+                    # Las escrituras cambian datos: van después de los tests, para no ensuciar la evaluación.
+                    reads = tuple(f for f in target.attack_families if f != "writes")
+                    try:
+                        with timer.phase("rojo_pr"):
+                            pr_found = red_team(app, attack_target, tmp_path, budget / 2, reads, pr_tree, pr_info)
+                    except (sandbox.SandboxError, ValueError) as e:
+                        red_errors.append(f"el equipo rojo no terminó contra la app del PR: {e}")
+                jest = target.tests_runner == "jest"
+                with timer.phase("evaluador"):
+                    code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget, attacks_file, skip_base=jest)
+                    if jest and isinstance(result, dict) and not result.get("errors"):
+                        # Los tests de la base en Node corren con la imagen de la base, no en el evaluador de Python.
+                        result["suites"]["base"] = sandbox.run_jest(app, target, base_tree, budget, compose_text)
+                        result["status"] = overall_status(result)
+                        code = EXIT[result["status"]]
+                if hunt and not red_errors and "writes" in target.attack_families:
+                    try:
+                        with timer.phase("rojo_pr"):
+                            pr_found += red_team(app, attack_target, tmp_path, budget / 2, ("writes",), pr_tree)
+                    except (sandbox.SandboxError, ValueError) as e:
+                        red_errors.append(f"el equipo rojo no terminó las escrituras contra la app del PR: {e}")
+            finally:
+                with timer.phase("parar"):
+                    sandbox.stop(app)
+            pr_confirmed: list[str] = []
+            if from_package and isinstance(result, dict):
+                pr_confirmed, _ = _attack_evidence(result.get("attacks"), attack_ids)
+            intro = Introduced(incomplete=red_errors)
+            base_open: set[str] | None = None
+            base_notes: list[str] = []
+            if needs_base:
                 try:
-                    base_found = red_team(base_app, attack_target, tmp_path, budget / 2, tree=base_tree)
-                finally:
-                    sandbox.stop(base_app)
-                intro = compare_red_team(pr_found, base_found)
-            except (sandbox.SandboxError, ValueError) as e:
-                intro = Introduced(incomplete=[f"el equipo rojo no terminó contra la app de la base: {e}"])
-        ev = evidence_from(result, flags, code, holdout_tests is not None, plan, tuple(a.id for a in attacks))
+                    if base_future is None:
+                        base_found, base_open = cached_base or set(), None
+                    else:
+                        base_found, base_open = base_future.result()
+                    if hunt and not red_errors:
+                        intro = compare_red_team(pr_found, base_found)
+                        if base_future is None and cached_base is not None and intro.introduced:
+                            # La caché pudo guardar una corrida de la base con fallos de red
+                            # pasajeros: antes de rechazar, se confirma contra la base en vivo.
+                            intro = compare_red_team(pr_found, base_hunt()[0])
+                except (sandbox.SandboxError, ValueError) as e:
+                    if not red_errors:
+                        intro = Introduced(incomplete=[f"el equipo rojo no terminó contra la app de la base: {e}"])
+                    if needs_base_open:
+                        base_notes.append(f"no se pudieron correr los ataques del paquete contra la base ({e}); "
+                                          "se exige bloquearlos todos")
+            if needs_base_open and base_open is None and not base_notes:
+                base_notes.append("no se pudo saber qué ataques del paquete ya funcionaban en la base; se exige bloquearlos todos")
+        ev = evidence_from(result, flags, code, holdout_tests is not None, plan, attack_ids)
+        if base_open is not None and plan is not None:
+            excused = excuse_existing(ev, plan, attack_ids, pr_confirmed, base_open)
+            if excused:
+                base_notes.append(f"{len(excused)} ataques del paquete reservado ya funcionaban contra la base y el PR no intenta "
+                                  "arreglar ninguno; no bloquean este PR")
         ev.incomplete += intro.incomplete
         ev.introduced_attacks += [describe_introduced(a, attack_target.inventory or {}) for a in intro.introduced]
         r = done(result, ev)
@@ -610,6 +951,14 @@ def check(
                 r.notes += static.scan(repo, base_sha, pr_sha, pr_tree, target.tests_dir, tmp_path)
             except (sandbox.SandboxError, gitio.GitError, OSError) as e:
                 r.notes.append(f"análisis estático: no corrió ({e})")
+        if mode == "full":
+            # Nota, nunca motivo: mide si los tests de la base detectan que se quita un control.
+            try:
+                with timer.phase("mutantes"):
+                    r.notes += mutation.notes(base_tree, target, workdir, holdout_tests, budget, tmp_path,
+                                              app_kw, base_sha, compose_text)
+            except (sandbox.SandboxError, OSError) as e:
+                r.notes.append(f"pruebas de mutación: no corrieron ({e})")
         r.introduced = [a.to_dict() for a in intro.introduced]
         if intro.existing:
             r.notes.append(existing_note(intro.existing))
@@ -618,6 +967,7 @@ def check(
             shown = ", ".join(f"{h['method']} {h['template']} ({h['source']})" for h in off_openapi[:4])
             more = f" y {len(off_openapi) - 4} más" if len(off_openapi) > 4 else ""
             r.notes.append(f"{len(off_openapi)} rutas del código no están en el OpenAPI de la app; se atacaron igual: {shown}{more}")
+        r.notes += base_notes
         return r
 
 

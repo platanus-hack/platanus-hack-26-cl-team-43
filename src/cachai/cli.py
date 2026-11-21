@@ -1,5 +1,6 @@
 """CLI de Cachai.
 
+    cachai init [--repo .] [--yes] [--user alice='Authorization: Bearer tok-alice' ...]
     cachai check --repo <ruta> --base main --pr <rama> [--mode ci|restore|visible|full]
     cachai case <carpeta del caso> [--pr <nombre>|all] [--mode <modo>|all]
     cachai redteam <carpeta del caso> [--write]
@@ -27,7 +28,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from . import bench, fixer, gitio, hidden, pipeline, sandbox
+from . import bench, fixer, gitio, hidden, init, pipeline, routes, sandbox
 from .case import ConfigError, load_case, materialize
 from .holdout import Attack, load_attacks, split_record
 
@@ -198,7 +199,11 @@ def cmd_redteam(args: argparse.Namespace) -> int:
         with tempfile.TemporaryDirectory(prefix="cachai-rojo-") as tmp:
             inv = Path(tmp) / "inventory.json"
             inv.write_text(json.dumps(case.inventory))
-            found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, case, inv, args.budget)]
+            # Rutas leídas del código de la base: Express, Flask y Django no publican OpenAPI.
+            rf = Path(tmp) / "routes.json"
+            rf.write_text(json.dumps([r.to_dict() for r in routes.extract(case.base_dir)], ensure_ascii=False))
+            families = tuple(f for f in (case.families or ()) if f != "writes") or None
+            found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, case, inv, args.budget, families, rf)]
     finally:
         sandbox.stop(app)
     text = json.dumps([a.to_dict() for a in found], ensure_ascii=False, indent=2) + "\n"
@@ -269,13 +274,114 @@ def cmd_case(args: argparse.Namespace) -> int:
     return 0 if all(r.approved for r in results.values()) else 1
 
 
+def parse_group(text: str) -> tuple[str, str]:
+    family, sep, group = text.partition(":")
+    if not sep or not family or not group:
+        raise ValueError(f"grupo inválido (se escribe familia:grupo): {text!r}")
+    return family, group
+
+
+def cmd_burn(args: argparse.Namespace, key: str | None) -> int:
+    """Quema los grupos que reveló una corrida (señales de su reporte) o los que se nombran a mano."""
+    if not args.package or not (args.report or args.group):
+        print("burn necesita el paquete y --report o --group", file=sys.stderr)
+        return 2
+    sealed = Path(args.package).read_bytes()
+    groups = {parse_group(g) for g in args.group or []}
+    for path in args.report or []:
+        found, unknown = hidden.groups_from_report(sealed, key, json.loads(Path(path).read_text()))
+        groups |= found
+        if unknown:
+            # Una señal que no corresponde: de otro paquete, otra clave o un reporte alterado. No quema nada.
+            print(f"aviso: {len(unknown)} señales de {path} no corresponden a ningún grupo de este paquete", file=sys.stderr)
+    new, r = hidden.burn(sealed, key, groups)
+    out = Path(args.out or args.package)
+    if new is not None:
+        out.write_bytes(new)
+    for f, g in r.burned:
+        print(f"quemado: {f}:{g}")
+    for f, g in r.already:
+        print(f"ya era visible: {f}:{g}")
+    for g in r.unknown:
+        print(f"aviso: {g} no está en el paquete", file=sys.stderr)
+    print("grupos reservados que quedan: " + ", ".join(f"{f} {n}" for f, n in r.remaining.items()))
+    print(f"paquete escrito en {out}; commitéalo en la rama base" if new is not None else "nada que quemar: el paquete no cambió")
+    for f, n in r.remaining.items():
+        if n == 0:
+            print(f"nota: la familia {f} se quedó sin reservados; corre `cachai hidden rotate`")
+    return 0
+
+
+def rotation_attacks(args: argparse.Namespace) -> list[Attack]:
+    """Corre el equipo rojo, con las variantes de rotación, contra la app de la base."""
+    from . import canary
+
+    with tempfile.TemporaryDirectory(prefix="cachai-rotar-") as tmp:
+        tmp_path = Path(tmp)
+        if args.case:
+            case = load_case(args.case)
+            spec, inventory = case, case.inventory
+
+            def start():
+                return sandbox.start_app(case.base_dir, case)
+        else:
+            base_sha = gitio.resolve(args.repo, args.base)
+            spec = pipeline.target_from_base(args.repo, base_sha)
+            inventory = spec.inventory
+            base_tree = gitio.export_tree(args.repo, base_sha, tmp_path / "base")
+            compose = gitio.read_blob(args.repo, base_sha, spec.app.compose.file) if spec.app.compose else None
+            seed_kw = {"seed_context": base_tree, "seed_env": {}} if spec.seed else {}
+
+            def start():
+                return sandbox.start_app(base_tree, spec, compose, **seed_kw)
+        if not inventory:
+            raise ValueError("la configuración no tiene inventario: el equipo rojo no tiene con qué atacar")
+        if canary.names(inventory):
+            raise ValueError("el inventario usa marcas canario, que cambian en cada corrida: sus ataques no se pueden guardar en el paquete")
+        inv = tmp_path / "inventory.json"
+        inv.write_text(json.dumps(inventory, ensure_ascii=False))
+        sandbox.build_evaluator_image()
+        app = start()
+        try:
+            return [Attack.from_dict(d) for d in sandbox.run_redteam(app, spec, inv, args.budget, rotation=True)]
+        finally:
+            sandbox.stop(app)
+
+
+def cmd_rotate(args: argparse.Namespace, key: str | None) -> int:
+    if not args.package:
+        print("rotate necesita el paquete", file=sys.stderr)
+        return 2
+    sealed = Path(args.package).read_bytes()
+    hidden.rotate(sealed, key, [])  # comprueba la clave y el paquete antes de levantar contenedores
+    found = rotation_attacks(args)
+    new, r = hidden.rotate(sealed, key, found, set(args.family) if args.family else None)
+    out = Path(args.out or args.package)
+    if new is not None:
+        out.write_bytes(new)
+    for f, n in r.new_groups.items():
+        print(f"{f}: {n} grupos reservados nuevos")
+    if r.joined:
+        print(f"{r.joined} ataques nuevos en grupos que ya existían")
+    print("grupos reservados que quedan: " + ", ".join(f"{f} {n}" for f, n in r.remaining.items()))
+    for n in r.notes:
+        print(f"nota: {n}")
+    print(f"paquete escrito en {out}; commitéalo en la rama base" if new is not None else "sin ataques nuevos: el paquete no cambió")
+    return 0
+
+
 def cmd_hidden(args: argparse.Namespace) -> int:
-    """Paquete reservado: `keygen` crea la clave, `seal` lo cifra y `open` lo extrae."""
+    """Paquete reservado: `keygen` crea la clave, `seal` lo cifra, `open` lo extrae,
+    `burn` quema los grupos revelados y `rotate` repone reservados."""
     if args.action == "keygen":
         print(hidden.keygen())
         return 0
     key = os.environ.get(args.key_env)
     try:
+        if args.action == "burn":
+            return cmd_burn(args, key)
+        if args.action == "rotate":
+            return cmd_rotate(args, key)
         if args.action == "seal":
             if not args.out:
                 print("seal necesita --out", file=sys.stderr)
@@ -292,14 +398,65 @@ def cmd_hidden(args: argparse.Namespace) -> int:
         n_tests = sum(1 for _ in m.holdout_tests.rglob("test_*.py")) if m.holdout_tests else 0
         print(f"{len(m.attacks)} ataques ({len(m.split.reserved) if m.split else 0} reservados) y {n_tests} archivos de tests en {args.out}")
         return 0
-    except hidden.HiddenError as e:
+    except (hidden.HiddenError, ValueError, ConfigError, gitio.GitError, sandbox.SandboxError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    families = None if args.families is None else [f for f in args.families.split(",") if f]
+    opts = init.InitOptions(
+        repo=Path(args.repo), yes=args.yes, force=args.force, module=args.module, port=args.port, health=args.health,
+        tests_dir=args.tests_dir, users=args.user, logins=args.login, families=families,
+        holdout_tests=Path(args.holdout_tests) if args.holdout_tests else None, package=args.package,
+        key_env=args.key_env, key_file=Path(args.key_file) if args.key_file else None, shown=args.shown, seed=args.seed,
+        budget=args.budget, sandbox=not args.no_sandbox, redteam=not args.no_redteam, add_health=args.add_health,
+        workflow=not args.no_workflow,
+    )
+    try:
+        result = init.run(opts)
+    except (init.InitError, ConfigError, hidden.HiddenError, ValueError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    except (EOFError, KeyboardInterrupt):
+        print("\ninit cancelado: no se escribió nada más", file=sys.stderr)
+        return 130
+    print(f"Listo en {result.seconds:.0f} s. Prueba un PR con: cachai check --repo {args.repo} --base main --pr <rama>")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="cachai")
     sub = parser.add_subparsers(dest="cmd", required=True)
+
+    i = sub.add_parser("init", help="configura un repo FastAPI: .cachai.json, workflow y paquete reservado",
+                       description="Detecta la app, la levanta en el sandbox, propone el inventario, corre el equipo rojo "
+                                   "contra la base y sella el paquete reservado. Escribe .cachai.json y "
+                                   ".github/workflows/cachai.yml. Debe correrlo quien mantiene el repo: ve el material reservado.")
+    i.add_argument("--repo", default=".")
+    i.add_argument("--yes", "-y", action="store_true", help="no pregunta nada: acepta cada propuesta (agentes y CI)")
+    i.add_argument("--force", action="store_true", help="reemplaza .cachai.json y el workflow si ya existen")
+    i.add_argument("--module", help="objeto ASGI (paquete.modulo:app); por defecto, el detectado")
+    i.add_argument("--port", type=int)
+    i.add_argument("--health", help="ruta de salud; por defecto, la detectada")
+    i.add_argument("--add-health", action="store_true", help="si no hay ruta de salud, agrega GET /health al módulo de la app")
+    i.add_argument("--tests-dir")
+    i.add_argument("--user", action="append", default=[], metavar="NOMBRE='Header: valor'",
+                   help="usuario de prueba y un header suyo; se repite (al menos dos usuarios para el equipo rojo)")
+    i.add_argument("--login", action="append", default=[], metavar="NOMBRE='comando'",
+                   help="comando de login de un usuario; su última línea es «Header: valor» o un token Bearer")
+    i.add_argument("--families", help="familias de ataque separadas por coma; por defecto, según el inventario")
+    i.add_argument("--holdout-tests", help="carpeta con tests funcionales reservados para sellar (fuera del repo)")
+    i.add_argument("--package", default=init.DEFAULT_PACKAGE, help="dónde escribir el paquete reservado cifrado")
+    i.add_argument("--key-env", default=init.DEFAULT_KEY_ENV, help="secreto del CI con la clave (si existe en el entorno, se usa)")
+    i.add_argument("--key-file", help="escribe la clave nueva en este archivo (0600) en vez de imprimirla")
+    i.add_argument("--shown", type=float, default=0.4, help="proporción de grupos de ataques visibles")
+    i.add_argument("--seed", type=int, default=0)
+    i.add_argument("--budget", type=float, default=60.0, help="segundos para leer la app y para el equipo rojo")
+    i.add_argument("--no-sandbox", action="store_true", help="solo detecta y escribe: sin inventario ni equipo rojo")
+    i.add_argument("--no-redteam", action="store_true")
+    i.add_argument("--no-workflow", action="store_true")
+    i.set_defaults(func=cmd_init)
 
     c = sub.add_parser("check", help="revisa un PR escrito por IA antes del merge")
     c.add_argument("--repo", default=".")
@@ -348,13 +505,20 @@ def main(argv: list[str] | None = None) -> int:
     f.set_defaults(func=cmd_fix)
 
     h = sub.add_parser("hidden", help="cifra o abre el paquete de material reservado (lo usa quien mantiene el repo)")
-    h.add_argument("action", choices=("keygen", "seal", "open"))
-    h.add_argument("package", nargs="?", help="paquete a abrir (open)")
+    h.add_argument("action", choices=("keygen", "seal", "open", "burn", "rotate"))
+    h.add_argument("package", nargs="?", help="paquete a abrir, quemar o rotar")
+    h.add_argument("--report", action="append", help="burn: reporte JSON de una corrida del CI (se repite)")
+    h.add_argument("--group", action="append", help="burn: grupo a quemar a mano, familia:grupo (se repite)")
+    h.add_argument("--repo", default=".", help="rotate: repo cuya rama base se ataca")
+    h.add_argument("--base", default="main", help="rotate: rama base")
+    h.add_argument("--case", help="rotate: carpeta de un caso de cases/ en vez de un repo")
+    h.add_argument("--family", action="append", help="rotate: familia a rotar (por defecto, las que tienen grupos quemados)")
+    h.add_argument("--budget", type=float, default=120.0, help="rotate: segundos para el equipo rojo")
     h.add_argument("--attacks", help="seal: JSON de ataques")
     h.add_argument("--holdout-tests", help="seal: carpeta de tests funcionales reservados")
     h.add_argument("--shown", type=float, default=0.4, help="seal: proporción de grupos de ataques visibles")
     h.add_argument("--seed", type=int, default=0)
-    h.add_argument("--out", help="seal: archivo de salida; open: carpeta nueva")
+    h.add_argument("--out", help="seal: archivo de salida; open: carpeta nueva; burn y rotate: por defecto, el mismo paquete")
     h.add_argument("--key-env", default="CACHAI_HIDDEN_KEY", help="variable de entorno con la clave")
     h.set_defaults(func=cmd_hidden)
 

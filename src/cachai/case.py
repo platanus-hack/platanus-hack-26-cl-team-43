@@ -21,7 +21,7 @@ PR_KINDS = ("cheat", "honest", "half_patch", "correct_patch", "breaking_patch", 
 # vulnerable: PR normal (no dice ser de seguridad) que introduce una vulnerabilidad nueva.
 # Parches de seguridad: dicen arreglar la falla, así que deben bloquear los ataques del caso.
 PATCH_KINDS = ("half_patch", "correct_patch", "breaking_patch")
-CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "families", "holdout_tests", "split", "inventory", "prs", "provenance"}
+CASE_KEYS = {"id", "description", "app", "tests_dir", "tests_runner", "attacks", "families", "holdout_tests", "split", "inventory", "prs", "provenance"}
 APP_KEYS = {"module", "port", "health", "dockerfile", "compose", "env"}
 COMPOSE_KEYS = {"file", "service"}
 PR_KEYS = {"name", "kind", "description", "delete"}
@@ -30,7 +30,8 @@ CONFIG_FILE = ".cachai.json"  # configuración de la evaluación; solo vale la d
 CONFIG_VERSION = 2
 # v1: solo `app` y `tests_dir`, sin `version`. Se sigue leyendo.
 CONFIG_KEYS_V1 = {"app", "tests_dir"}
-CONFIG_KEYS = {"version", "app", "tests_dir", "inventory", "attacks", "hidden", "seed"}
+CONFIG_KEYS = {"version", "app", "tests_dir", "tests_runner", "inventory", "attacks", "hidden", "seed"}
+RUNNERS = ("pytest", "jest")
 SEED_KEYS = {"command"}
 ATTACKS_KEYS = {"families"}
 HIDDEN_KEYS = {"package", "key_env"}
@@ -142,6 +143,8 @@ class Target:
     hidden: Hidden | None = None
     # Comando que siembra los datos de prueba. Corre con la imagen de la base, nunca la del PR.
     seed: tuple[str, ...] = ()
+    # Con qué corren los tests de la base: pytest (Python) o jest (Node, con la imagen de la base).
+    tests_runner: str = "pytest"
 
     def to_dict(self) -> dict:
         d: dict = {
@@ -157,6 +160,8 @@ class Target:
             d["hidden"] = {"package": self.hidden.package, "key_env": self.hidden.key_env}
         if self.seed:
             d["seed"] = {"command": list(self.seed)}
+        if self.tests_runner != "pytest":
+            d["tests_runner"] = self.tests_runner
         return d
 
 
@@ -255,7 +260,12 @@ def load_target(data: bytes | str) -> Target:
         if spec.dockerfile is None and spec.compose is None:
             raise ConfigError("seed", "necesita app.dockerfile o app.compose: la semilla corre con la imagen de la app de la base")
         seed = tuple(cmd)
-    return Target(spec, tests_dir, inventory, families, hidden, seed)
+    runner = d.get("tests_runner", "pytest")
+    if runner not in RUNNERS:
+        raise ConfigError("tests_runner", f"debe ser uno de: {', '.join(RUNNERS)}")
+    if runner != "pytest" and spec.dockerfile is None and spec.compose is None:
+        raise ConfigError("tests_runner", "jest necesita app.dockerfile o app.compose: los tests corren con la imagen de la base")
+    return Target(spec, tests_dir, inventory, families, hidden, seed, runner)
 
 
 @dataclass(frozen=True)
@@ -286,6 +296,7 @@ class Case:
     root: Path
     app: AppSpec
     tests_dir: str = "tests"
+    tests_runner: str = "pytest"
     attacks_file: str | None = None
     # Tests funcionales reservados: viven fuera de base/, el parchador no los ve.
     holdout_tests_dir: str | None = None
@@ -312,7 +323,7 @@ class Case:
 
     def target(self) -> Target:
         families = self.families or tuple(sorted({a.family for a in self.attacks()}))
-        return Target(self.app, self.tests_dir, self.inventory, families)
+        return Target(self.app, self.tests_dir, self.inventory, families, tests_runner=self.tests_runner)
 
     def attacks(self) -> list[Attack]:
         path = self.root / self.attacks_file if self.attacks_file else None
@@ -343,6 +354,10 @@ def safe_relpath(rel: str, what: str) -> str:
     if p.is_absolute() or ".." in p.parts or ".git" in p.parts or p.parts[0] in ("", "."):
         raise ValueError(f"{what}: ruta fuera del repo o reservada {rel!r}")
     return str(p)
+
+
+def _bad_runner(d: dict) -> str:
+    raise ValueError(f"tests_runner desconocido: {d.get('tests_runner')!r}")
 
 
 def load_case(path: str | Path) -> Case:
@@ -380,6 +395,7 @@ def load_case(path: str | Path) -> Case:
         root=root.resolve(),
         app=AppSpec.from_dict(d["app"]),
         tests_dir=safe_relpath(d.get("tests_dir", "tests"), "tests_dir"),
+        tests_runner=d.get("tests_runner", "pytest") if d.get("tests_runner", "pytest") in RUNNERS else _bad_runner(d),
         attacks_file=safe_relpath(d["attacks"], "attacks") if d.get("attacks") else None,
         holdout_tests_dir=safe_relpath(d["holdout_tests"], "holdout_tests") if d.get("holdout_tests") else None,
         split_shown=float(sp.get("shown", 0.4)),
@@ -439,10 +455,12 @@ def _confined(repo: Path, rel: str) -> Path:
     return target
 
 
-def materialize(case: Case, dest: str | Path) -> Path:
+def materialize(case: Case, dest: str | Path, base: str | Path | None = None) -> Path:
     """Crea en `dest` un repo git con `main` (la base) y una rama por PR.
 
-    La base lleva además `.cachai.json`, generado desde `case.json`.
+    La base lleva además `.cachai.json`, generado desde `case.json`. Con `base`,
+    `main` es ese árbol tal cual (p. ej. una copia de la base ya configurada con
+    `cachai init`, con su `.cachai.json`) y `case.json` solo aporta los PR.
 
     Los casos son fixtures locales confiables; aun así las capas se validan para
     que no escriban ni borren fuera de `dest` ni toquen `.git`. No es un sandbox.
@@ -452,8 +470,11 @@ def materialize(case: Case, dest: str | Path) -> Path:
         raise FileExistsError(f"{repo} no está vacío")
     repo.mkdir(parents=True, exist_ok=True)
     _git(repo, "init", "-q", "-b", "main")
-    _copy_tree(case.base_dir, repo)
-    (repo / CONFIG_FILE).write_text(json.dumps(case.target().to_dict(), indent=2) + "\n")
+    if base is None:
+        _copy_tree(case.base_dir, repo)
+        (repo / CONFIG_FILE).write_text(json.dumps(case.target().to_dict(), indent=2) + "\n")
+    else:
+        _copy_tree(Path(base), repo)
     _git(repo, "add", "-A", "-f")
     _git(repo, "commit", "-q", "-m", f"{case.id}: rama base")
     for pr in case.prs:

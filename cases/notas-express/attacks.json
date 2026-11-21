@@ -1,0 +1,281 @@
+[
+  {
+    "id": "authz-notes-id-1-beto-a23aae2a",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/notes/1",
+      "headers": {
+        "Authorization": "Bearer tok-beto"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "NOTA-ANA-001"
+      ]
+    },
+    "group": "notes-id-51c75359",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/notes/1",
+        "headers": {
+          "Authorization": "Bearer tok-ana"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "NOTA-ANA-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-notes-id-2-beto-214c5460",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/notes/2",
+      "headers": {
+        "Authorization": "Bearer tok-beto"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "NOTA-ANA-002"
+      ]
+    },
+    "group": "notes-id-51c75359",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/notes/2",
+        "headers": {
+          "Authorization": "Bearer tok-ana"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "NOTA-ANA-002"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-notes-id-3-ana-31ea33e1",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/notes/3",
+      "headers": {
+        "Authorization": "Bearer tok-ana"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "NOTA-BETO-001"
+      ]
+    },
+    "group": "notes-id-51c75359",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/notes/3",
+        "headers": {
+          "Authorization": "Bearer tok-beto"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "NOTA-BETO-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-notes-id-export-1-beto-45b3d540",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/notes/1/export",
+      "headers": {
+        "Authorization": "Bearer tok-beto"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "NOTA-ANA-001"
+      ]
+    },
+    "group": "notes-id-export-28dcbfff",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/notes/1/export",
+        "headers": {
+          "Authorization": "Bearer tok-ana"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "NOTA-ANA-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-notes-id-export-2-beto-f23ba549",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/notes/2/export",
+      "headers": {
+        "Authorization": "Bearer tok-beto"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "NOTA-ANA-002"
+      ]
+    },
+    "group": "notes-id-export-28dcbfff",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/notes/2/export",
+        "headers": {
+          "Authorization": "Bearer tok-ana"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "NOTA-ANA-002"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-notes-id-export-3-ana-7246a3c0",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/notes/3/export",
+      "headers": {
+        "Authorization": "Bearer tok-ana"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "NOTA-BETO-001"
+      ]
+    },
+    "group": "notes-id-export-28dcbfff",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/notes/3/export",
+        "headers": {
+          "Authorization": "Bearer tok-beto"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "NOTA-BETO-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-v2-notes-id-1-beto-694e850b",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/v2/notes/1",
+      "headers": {
+        "Authorization": "Bearer tok-beto"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "NOTA-ANA-001"
+      ]
+    },
+    "group": "v2-notes-id-910563f6",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/v2/notes/1",
+        "headers": {
+          "Authorization": "Bearer tok-ana"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "NOTA-ANA-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-v2-notes-id-2-beto-467d4eaf",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/v2/notes/2",
+      "headers": {
+        "Authorization": "Bearer tok-beto"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "NOTA-ANA-002"
+      ]
+    },
+    "group": "v2-notes-id-910563f6",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/v2/notes/2",
+        "headers": {
+          "Authorization": "Bearer tok-ana"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "NOTA-ANA-002"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-v2-notes-id-3-ana-400f8c94",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/v2/notes/3",
+      "headers": {
+        "Authorization": "Bearer tok-ana"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "NOTA-BETO-001"
+      ]
+    },
+    "group": "v2-notes-id-910563f6",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/v2/notes/3",
+        "headers": {
+          "Authorization": "Bearer tok-beto"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "NOTA-BETO-001"
+        ]
+      }
+    }
+  }
+]

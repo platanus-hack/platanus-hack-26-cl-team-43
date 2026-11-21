@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import configparser
+import json
 import fnmatch
 import re
 import tomllib
@@ -28,9 +29,14 @@ from pathlib import Path, PurePosixPath
 from . import gitio
 
 # Configuración de la evaluación: solo vale la de la rama base.
-EVAL_CONFIG = ("conftest.py", "pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini", ".cachai.json")
-# De estas, las que además configuran otras cosas: solo bloquea el cambio en su sección de pytest.
-SHARED_CONFIG = ("pyproject.toml", "setup.cfg", "tox.ini")
+EVAL_CONFIG = ("conftest.py", "pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini", ".cachai.json",
+               # Node: configuración de jest, vitest y mocha (setupFiles, reporters y globals viven ahí).
+               "jest.config.js", "jest.config.cjs", "jest.config.mjs", "jest.config.ts", "jest.config.json",
+               "vitest.config.js", "vitest.config.mjs", "vitest.config.ts", ".mocharc.js", ".mocharc.cjs",
+               ".mocharc.json", ".mocharc.yml", ".mocharc.yaml", "package.json")
+PYTHON_CONFIG = ("conftest.py", "pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini", ".cachai.json")
+# De estas, las que además configuran otras cosas: solo bloquea el cambio en su sección de tests.
+SHARED_CONFIG = ("pyproject.toml", "setup.cfg", "tox.ini", "package.json")
 
 # Archivos que, si aparecen o cambian, alteran la ejecución de Python o de pytest.
 EVAL_HOOK_PATTERNS = ("conftest.py", "sitecustomize.py", "usercustomize.py", "*.pth")
@@ -92,7 +98,7 @@ def classify(changes: list[tuple[str, str]], test_dirs: tuple[str, ...] = ("test
         elif any(in_dir(path, d) for d in CI_DIRS):
             flags.append(Flag(path, status, "workflow de CI que corre la revisión"))
         elif name in EVAL_CONFIG:
-            flags.append(Flag(path, status, "configuración de pytest"))
+            flags.append(Flag(path, status, "configuración de pytest" if name in PYTHON_CONFIG else "configuración de tests de Node"))
         elif any(in_dir(path, d) for d in test_dirs):
             if status == "A":
                 flags.append(Flag(path, status, "tests nuevos, no se usan para evaluar", "info"))
@@ -113,11 +119,17 @@ def _pytest_section(name: str, data: bytes | None) -> object:
         text = data.decode()
         if name == "pyproject.toml":
             return tomllib.loads(text).get("tool", {}).get("pytest")
+        if name == "package.json":
+            pkg = json.loads(text)
+            if not isinstance(pkg, dict):
+                raise ValueError("package.json no es un objeto")
+            # La configuración de jest y mocha, y el script de tests que podría cambiar el runner.
+            return {k: pkg.get(k) for k in ("jest", "mocha")} | {"test": (pkg.get("scripts") or {}).get("test")}
         cp = configparser.ConfigParser(interpolation=None)
         cp.read_string(text)
         section = "tool:pytest" if name == "setup.cfg" else "pytest"
         return dict(cp[section]) if cp.has_section(section) else None
-    except (UnicodeDecodeError, tomllib.TOMLDecodeError, configparser.Error) as e:
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError, configparser.Error, json.JSONDecodeError) as e:
         raise ValueError(str(e)) from e
 
 
@@ -196,7 +208,7 @@ def scan(repo: str | Path, base_sha: str, pr_sha: str, tests_dir: str = "tests",
     flags = []
     for f in classify(changes, (tests_dir,), eval_files, app_files):
         name = PurePosixPath(f.path).name
-        if f.reason == "configuración de pytest" and name in SHARED_CONFIG:
+        if f.reason in ("configuración de pytest", "configuración de tests de Node") and name in SHARED_CONFIG:
             try:
                 same = _pytest_section(name, gitio.read_blob(repo, base_sha, f.path)) == _pytest_section(
                     name, gitio.read_blob(repo, pr_sha, f.path)

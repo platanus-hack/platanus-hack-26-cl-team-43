@@ -77,6 +77,20 @@ FILE_TEMPLATES: tuple[tuple[str, str, bool], ...] = (
     ("encoded-dots", "%2e%2e/{rel}", True),
 )
 
+# Variantes guardadas para rotar. `generate` no las usa: solo `cachai hidden
+# rotate` (con `rotation=True`), cuando un rechazo quemó reservados y hay que
+# reponerlos con formas que todavía no se usaron. Una vez en el paquete dejan
+# de ser nuevas; si se acaban, la rotación lo dice en vez de inventar.
+ROTATION_FILE_TEMPLATES: tuple[tuple[str, str, bool], ...] = (
+    ("dot-segments", "././../{rel}", False),
+    ("encoded-dots-upper", "%2E%2E/{rel}", True),
+    ("half-encoded-dots", ".%2e/{rel}", True),
+    ("encoded-traversal", "%2e%2e%2f{rel_encoded}", True),
+)
+# Para authz y authn, la rotación además escribe cada ruta con una barra al
+# final: un parche que compara la ruta exacta no la reconoce; uno que comprueba
+# el dueño, sí. Cada ruta con barra es un grupo nuevo.
+
 
 @dataclass(frozen=True)
 class Inventory:
@@ -349,8 +363,14 @@ def anonymous_headers(inv: Inventory) -> dict[str, dict[str, str]]:
 
 def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]],
                families: tuple[str, ...] | None = None, canary_base: str | None = None,
-               write_routes: list | None = None, components: dict | None = None, write_marker: str = "") -> list[Candidate]:
-    """Candidatos de las familias pedidas (todas si `families` es None)."""
+               write_routes: list | None = None, components: dict | None = None, write_marker: str = "",
+               rotation: bool = False) -> list[Candidate]:
+    """Candidatos de las familias pedidas (todas si `families` es None).
+
+    Con `rotation`, suma las variantes guardadas para reponer reservados quemados:
+    otras formas de la ruta del archivo y cada ruta con una barra al final (un
+    parche que compara la ruta exacta no la reconoce; uno que comprueba el dueño, sí).
+    """
     out: list[Candidate] = []
     wanted = set(families) if families is not None else None
     seen: set[str] = set()
@@ -489,6 +509,29 @@ def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]],
                     out.append(Candidate(cid, "writes", make_id(method, template), request,
                                          {"method": "GET", "path": path, "headers": inv.users[rec["owner"]]},
                                          tuple(rec["markers"]) + (write_marker,)))
+    if rotation:
+        # Otras formas de la ruta del archivo.
+        for template, path_params, query_params in routes:
+            if path_params:
+                continue
+            for f in inv.files:
+                rel = f["path"]
+                own_name = urllib.parse.quote(rel.split("/", 1)[-1], safe="/.")
+                for attacker in sorted(inv.users):
+                    if attacker == f["owner"]:
+                        continue
+                    for q in query_params:
+                        for group, pattern, encoded in ROTATION_FILE_TEMPLATES:
+                            if "{root}" in pattern and not inv.files_root:
+                                continue
+                            value = pattern.format(rel=rel, me=attacker, root=inv.files_root, rel_encoded=rel.replace("/", "%2F"))
+                            if not encoded:
+                                value = urllib.parse.quote(value, safe="/.")
+                            add("files", group, ("rota", "files", template, q, group, rel, attacker),
+                                f"{template}?{q}={value}", f"{template}?{q}={own_name}", f["owner"], attacker, f["markers"])
+        # Las mismas rutas con barra al final, como otro grupo.
+        slashed = [(t + "/", path_params, query_params) for t, path_params, query_params in routes if not t.endswith("/")]
+        out += [c for c in candidates(inv, slashed, families, canary_base, None, components, "") if c.id not in seen]
     return out
 
 
@@ -602,10 +645,12 @@ def _confirm_sqli(clients, base_url: str, c: Candidate, deadline: float) -> Atta
 
 def generate(base_url: str, inv: Inventory, budget: float = 60.0, families: tuple[str, ...] | None = None,
              canary: Canary | None = None, canary_host: str | None = None,
-             static_routes: list[dict] | None = None, info: dict | None = None) -> list[Attack]:
+             static_routes: list[dict] | None = None, info: dict | None = None,
+             rotation: bool = False) -> list[Attack]:
     """Genera y confirma candidatos. Las rutas salen del OpenAPI de la app unido con
     `static_routes` (leídas del código, `routes.extract`). En `info` deja las rutas
-    del código que el OpenAPI no publica."""
+    del código que el OpenAPI no publica. Con `rotation`, suma las variantes
+    guardadas para reponer reservados quemados."""
     from .routes import merge
 
     deadline = time.monotonic() + budget
@@ -626,8 +671,45 @@ def generate(base_url: str, inv: Inventory, budget: float = 60.0, families: tupl
     canary_base = f"http://{canary_host}:{canary.port}" if canary is not None and canary_host else None
     marker = f"CNR-WRITE-{secrets.token_hex(6)}"  # aleatoria por corrida: el PR no la conoce
     cands = candidates(inv, routes, families, canary_base, get_write_routes(openapi),
-                       openapi.get("components") or {}, marker)
+                       openapi.get("components") or {}, marker, rotation=rotation)
     return confirm(base_url, cands, deadline - time.monotonic(), canary)
+
+
+MAX_PROBE_BODY = 2_000_000
+
+
+def probe(base_url: str, users: dict[str, dict[str, str]], budget: float = 30.0) -> dict:
+    """Lo que `cachai init` necesita para proponer un inventario: el OpenAPI de la
+    app y, por cada ruta GET sin parámetros, la respuesta JSON que ve cada usuario.
+
+    Solo pedidos GET con los headers que dio quien configura; nada se escribe.
+    """
+    deadline = time.monotonic() + budget
+    samples: dict[str, dict[str, object]] = {}
+    with Clients() as clients:
+        request = {"method": "GET", "path": "/openapi.json"}
+        hops, _ = exchange(clients.for_request(request), base_url, request, deadline)
+        status, body = hops[-1]
+        if status != 200:
+            raise RuntimeError(f"la app no publica /openapi.json (status {status})")
+        openapi = json.loads(body)
+        for template, path_params, query_params in get_routes(openapi):
+            if path_params or query_params:
+                continue
+            for name, headers in sorted(users.items()):
+                req = {"method": "GET", "path": template, "headers": headers}
+                try:
+                    hops, _ = exchange(clients.for_request(req), base_url, req, deadline)
+                except Exception:  # una ruta que no responde no aporta al borrador
+                    continue
+                st, raw = hops[-1]
+                if st != 200 or len(raw) > MAX_PROBE_BODY:
+                    continue
+                try:
+                    samples.setdefault(template, {})[name] = json.loads(raw)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+    return {"openapi": openapi, "samples": samples}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -643,7 +725,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--canary-host", default="", help="nombre con el que la app llega a este contenedor (activa ssrf)")
     p.add_argument("--cmdi-nonce", default="", help="parte aleatoria de los archivos testigo (activa cmdi)")
     p.add_argument("--routes", default="", help="JSON con las rutas leídas del código (routes.extract)")
+    p.add_argument("--probe", action="store_true",
+                   help="no ataca: devuelve el OpenAPI y los listados de cada usuario (--inventory solo necesita users)")
+    p.add_argument("--rotation", action="store_true", help="suma las variantes guardadas para rotar reservados")
     args = p.parse_args(argv)
+    if args.probe:
+        users = json.loads(Path(args.inventory).read_text()).get("users") or {}
+        if not wait_for(args.base_url.rstrip("/") + args.health, time.monotonic() + min(30.0, args.budget)):
+            print(json.dumps({"error": "la app no respondió"}))
+            return 2
+        print(json.dumps(probe(args.base_url, users, args.budget), ensure_ascii=False))
+        return 0
     inv = Inventory.from_dict(json.loads(Path(args.inventory).read_text()))
     if not wait_for(args.base_url.rstrip("/") + args.health, time.monotonic() + min(30.0, args.budget)):
         print(json.dumps({"error": "la app no respondió"}))
@@ -654,7 +746,8 @@ def main(argv: list[str] | None = None) -> int:
     static = json.loads(Path(args.routes).read_text()) if args.routes else None
     info: dict = {}
     try:
-        attacks = generate(args.base_url, inv, args.budget, families, canary, args.canary_host or None, static, info)
+        attacks = generate(args.base_url, inv, args.budget, families, canary, args.canary_host or None, static, info,
+                           rotation=args.rotation)
     finally:
         if canary is not None:
             canary.close()

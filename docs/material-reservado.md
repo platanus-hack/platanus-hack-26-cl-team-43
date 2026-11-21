@@ -40,6 +40,33 @@ El workflow corre con `on: pull_request`.
 - Con `pull_request`, GitHub no entrega secretos a PR que vienen de forks. Para esos PR la revisión queda incompleta (no aprobada) hasta que alguien con permisos la corra. Es lo correcto: la alternativa sería aprobar sin la prueba reservada.
 - El código del PR nunca corre fuera de un contenedor sin red: Cachai lee el PR como datos (blobs de git por hash), construye su imagen y la levanta con `--cap-drop ALL`, sin salida a internet y sin variables del job.
 
+## Quemar y rotar
+
+Un ataque reservado que un rechazo mostró (familia y ruta en el comentario o en
+el reporte) ya no mide generalización: desde ese momento su grupo se da por
+visto. El reporte lleva una señal opaca por grupo revelado, firmada con la
+clave del paquete (HMAC): sin la clave no dice qué grupo es ni se puede fabricar
+para otro grupo.
+
+```bash
+# Quema los grupos que reveló una corrida del CI (el paquete se reescribe cifrado):
+CACHAI_HIDDEN_KEY=... cachai hidden burn .cachai/reservado.cachai --report reporte.json
+
+# Repone reservados para las familias quemadas con variantes nuevas, confirmadas contra la base:
+CACHAI_HIDDEN_KEY=... cachai hidden rotate .cachai/reservado.cachai --repo . --base main
+```
+
+- `burn` pasa el grupo de reservado a visible y lo anota como quemado **dentro
+  del paquete cifrado**: el reporte público solo lleva conteos, nombres de
+  familia y las señales HMAC.
+- `rotate` corre el equipo rojo con variantes guardadas (otras formas de la ruta
+  del archivo y cada ruta con una barra al final), confirma contra la base y
+  suma como reservados los grupos que no estaban. Si una familia no tiene
+  variantes nuevas, lo dice en vez de inventar.
+- El reporte avisa cuántos grupos reservados quedan por familia y cuándo una
+  familia se quedó sin ninguno.
+- El paquete actualizado va en un commit de la rama base: el PR nunca lo ve.
+
 ## Lo que no cubre (y cómo se mitiga)
 
 - **Un PR que edita el workflow.** Con `pull_request` el archivo del workflow sale del commit del PR, así que un PR de una rama del mismo repo podría editarlo para imprimir el secreto. Mitigaciones: el token del agente no debe tener el permiso `workflows` (GitHub rechaza el push de cambios a `.github/workflows/` sin él); la revisión de integridad bloquea cualquier cambio en `.github/workflows/` y `.github/actions/`; y el check de Cachai debe ser obligatorio por regla de la rama, para que un workflow editado que no lo corre no deje mergear.
