@@ -18,6 +18,18 @@ inputs:
   report:
     description: Ruta del reporte JSON v2
     default: cachai-report.json
+  comment:
+    description: "Publica el veredicto en un solo comentario del PR que se edita en cada push (requiere pull-requests: write)"
+    default: "true"
+  check-run:
+    description: "Crea un check run «cachai: veredicto» con el resumen corto (requiere checks: write)"
+    default: "true"
+  comment-author:
+    description: "Login que firma el comentario. Solo se edita un comentario con el marcador de este autor: nadie más puede hacer pasar el suyo por el veredicto. Cámbialo si usas un token propio en github-token."
+    default: github-actions[bot]
+  github-token:
+    description: Token para comentar y crear el check run
+    default: ${{ github.token }}
 
 outputs:
   outcome:
@@ -68,6 +80,60 @@ runs:
           python -c 'import json,sys; print(json.load(open(sys.argv[1]))["public"]["markdown"])' "$REPORT" >> "$GITHUB_STEP_SUMMARY"
         fi
         exit $code
+
+    # Un solo comentario por PR: se busca por el marcador oculto y el autor, y se edita.
+    # En un PR desde un fork el token es de solo lectura: se avisa y el veredicto queda
+    # en el resumen del job y en el artefacto. El job sigue fallando o pasando según el veredicto.
+    - name: Publicar el veredicto en el PR
+      if: ${{ !cancelled() && steps.check.outputs.outcome != '' && (inputs.comment == 'true' || inputs.check-run == 'true') }}
+      uses: actions/github-script@v7
+      env:
+        REPORT: ${{ inputs.report }}
+        COMMENT: ${{ inputs.comment }}
+        CHECK_RUN: ${{ inputs.check-run }}
+        AUTHOR: ${{ inputs.comment-author }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          const MARKER = '<!-- cachai-report -->';
+          const report = JSON.parse(fs.readFileSync(process.env.REPORT, 'utf8'));
+          const { summary, markdown } = report.public;
+          const pr = context.payload.pull_request;
+          const { owner, repo } = context.repo;
+          const fork = pr.head.repo && pr.head.repo.full_name !== `${owner}/${repo}`;
+          const skip = async (what, why) => {
+            core.warning(`Cachai no pudo ${what}: ${why}. El veredicto está en el resumen del job y en el artefacto cachai-report.`);
+            await core.summary.addRaw(`\n> Cachai no pudo ${what}: ${why}.\n`).write();
+          };
+          if (fork) {
+            await skip('comentar ni crear el check run', 'el PR viene de un fork y el token es de solo lectura');
+            return;
+          }
+          if (process.env.COMMENT === 'true') {
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number, per_page: 100 });
+              const mine = comments.find(c => c.user && c.user.login === process.env.AUTHOR && (c.body || '').includes(MARKER));
+              if (mine) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body: markdown });
+              } else {
+                await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: markdown });
+              }
+            } catch (e) {
+              await skip('publicar el comentario', `${e.status || ''} ${e.message} (¿falta pull-requests: write?)`);
+            }
+          }
+          if (process.env.CHECK_RUN === 'true') {
+            try {
+              await github.rest.checks.create({
+                owner, repo, name: 'cachai: veredicto', head_sha: pr.head.sha, status: 'completed',
+                conclusion: report.outcome === 'approved' ? 'success' : 'failure',
+                output: { title: summary.slice(0, 255), summary: markdown.slice(0, 65000) },
+              });
+            } catch (e) {
+              await skip('crear el check run', `${e.status || ''} ${e.message} (¿falta checks: write?)`);
+            }
+          }
 
     - name: Subir el reporte
       if: always()

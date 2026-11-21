@@ -11,8 +11,18 @@ concurrency:
   group: cachai-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+# Permisos mínimos del GITHUB_TOKEN:
+# - contents: read        leer la base y el PR por hash.
+# - pull-requests: write  publicar y editar el comentario con el veredicto (uno por PR).
+# - checks: write         crear el check run «cachai: veredicto» con el resumen corto.
+# En un PR desde un fork, GitHub da un token de solo lectura aunque pidas write: Cachai
+# corre igual, avisa con un warning y deja el veredicto en el resumen del job y en el
+# artefacto. No uses pull_request_target para «arreglarlo»: correría el código del fork
+# con un token con permisos de escritura.
 permissions:
   contents: read
+  pull-requests: write
+  checks: write
 
 jobs:
   cachai:
@@ -26,3 +36,5 @@ jobs:
       - uses: platanus-hack/platanus-hack-26-cl-team-43/action@main
         with:
           hidden-key: ${{ secrets.CACHAI_HIDDEN_KEY }}
+          # comment: "false"    # sin comentario en el PR
+          # check-run: "false"  # sin check run aparte (el job «cachai» sigue siendo el check obligatorio)
