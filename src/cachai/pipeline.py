@@ -30,7 +30,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
-from . import canary, gitio, hidden, integrity, report_md, routes, sandbox, static
+from . import canary, gitio, hidden, integrity, mutation, report_md, routes, sandbox, static
 from .case import CONFIG_FILE, ConfigError, Target, load_target
 from .evaluator import EXIT, SCHEMA
 from .gate import Evidence, Reason, decide
@@ -806,6 +806,14 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
                 r.notes += static.scan(repo, base_sha, pr_sha, pr_tree, target.tests_dir, tmp_path)
             except (sandbox.SandboxError, gitio.GitError, OSError) as e:
                 r.notes.append(f"análisis estático: no corrió ({e})")
+        if mode == "full":
+            # Nota, nunca motivo: mide si los tests de la base detectan que se quita un control.
+            try:
+                with timer.phase("mutantes"):
+                    r.notes += mutation.notes(base_tree, target, workdir, holdout_tests, budget, tmp_path,
+                                              app_kw, base_sha, compose_text)
+            except (sandbox.SandboxError, OSError) as e:
+                r.notes.append(f"pruebas de mutación: no corrieron ({e})")
         r.introduced = [a.to_dict() for a in intro.introduced]
         if intro.existing:
             r.notes.append(existing_note(intro.existing))
