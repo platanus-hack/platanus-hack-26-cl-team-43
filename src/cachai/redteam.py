@@ -26,6 +26,11 @@ rutas que la app publica en su OpenAPI, y arma candidatos:
   corrida. El equipo rojo solo manda las sondas; quien confirma es Cachai
   desde el host, mirando qué archivos aparecieron en el contenedor de la app
   (`sandbox.run_redteam`). El PR no controla esa inspección.
+- `writes`: PUT, PATCH, POST y DELETE sobre el recurso de otro usuario, con un
+  cuerpo mínimo válido tomado del esquema y una marca de escritura aleatoria
+  por corrida. El dueño lee su recurso por el GET de la misma ruta antes y
+  después: se confirma si aparece la marca de escritura o si sus marcas
+  desaparecieron. Van al final: no ensucian los datos de los demás ataques.
 
 Cada recurso del inventario declara sus marcas: textos que solo su dueño debería
 ver. Un candidato solo se conserva si se confirma contra la app de la rama base:
@@ -46,6 +51,7 @@ import http.server
 import threading
 import json
 import re
+import secrets
 import sys
 import time
 import urllib.parse
@@ -138,6 +144,56 @@ def get_routes(openapi: dict) -> list[tuple[str, list[str], list[str]]]:
             [p["name"] for p in params if p.get("in") == "query"],
         ))
     return routes
+
+
+WRITE_METHODS = ("put", "patch", "post", "delete")
+
+
+def get_write_routes(openapi: dict) -> list[tuple[str, str, list[str], dict | None]]:
+    """Rutas de escritura con id en la ruta y GET en la misma plantilla (por donde el dueño lee):
+    (método, plantilla, parámetros de ruta, esquema del cuerpo JSON o None)."""
+    out = []
+    for template, item in sorted((openapi.get("paths") or {}).items()):
+        if not isinstance(item, dict) or not isinstance(item.get("get"), dict):
+            continue
+        for method in WRITE_METHODS:
+            op = item.get(method)
+            if not isinstance(op, dict):
+                continue
+            params = [p for p in op.get("parameters", []) if isinstance(p, dict)]
+            path_params = [p["name"] for p in params if p.get("in") == "path"]
+            if not path_params:
+                continue
+            schema = (((op.get("requestBody") or {}).get("content") or {}).get("application/json") or {}).get("schema")
+            out.append((method.upper(), template, path_params, schema))
+    return out
+
+
+def example_body(schema: dict | None, components: dict, marker: str, depth: int = 0) -> object:
+    """Cuerpo mínimo válido para `schema`: cada texto lleva `marker` para verlo después."""
+    if not isinstance(schema, dict) or depth > 6:
+        return marker
+    if "$ref" in schema:
+        name = schema["$ref"].rsplit("/", 1)[-1]
+        return example_body((components.get("schemas") or {}).get(name), components, marker, depth + 1)
+    for key in ("allOf", "anyOf", "oneOf"):
+        if schema.get(key):
+            return example_body(schema[key][0], components, marker, depth + 1)
+    if "enum" in schema and schema["enum"]:
+        return schema["enum"][0]
+    t = schema.get("type")
+    if t == "object" or "properties" in schema:
+        props = schema.get("properties") or {}
+        return {k: example_body(v, components, marker, depth + 1) for k, v in props.items()}
+    if t == "array":
+        return [example_body(schema.get("items"), components, marker, depth + 1)]
+    if t == "integer":
+        return 1
+    if t == "number":
+        return 1.0
+    if t == "boolean":
+        return True
+    return marker
 
 
 @dataclass(frozen=True)
@@ -292,7 +348,8 @@ def anonymous_headers(inv: Inventory) -> dict[str, dict[str, str]]:
 
 
 def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]],
-               families: tuple[str, ...] | None = None, canary_base: str | None = None) -> list[Candidate]:
+               families: tuple[str, ...] | None = None, canary_base: str | None = None,
+               write_routes: list | None = None, components: dict | None = None, write_marker: str = "") -> list[Candidate]:
     """Candidatos de las familias pedidas (todas si `families` es None)."""
     out: list[Candidate] = []
     wanted = set(families) if families is not None else None
@@ -412,6 +469,26 @@ def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]],
                             value = urllib.parse.quote(value, safe="/.")
                         add("files", group, ("files", route, q, group, rel, attacker), f"{template}?{q}={value}",
                             f"{template}?{q}={own_name}", f["owner"], attacker, f["markers"])
+
+    # writes: al final, porque cambian datos. PUT y PATCH antes que DELETE.
+    if write_routes and write_marker and (wanted is None or "writes" in wanted):
+        order = {"PUT": 0, "PATCH": 1, "POST": 2, "DELETE": 3}
+        for method, template, path_params, schema in sorted(write_routes, key=lambda r: (order[r[0]], r[1])):
+            for rec in inv.records:
+                for attacker in sorted(inv.users):
+                    if attacker == rec["owner"]:
+                        continue
+                    cid = make_id("writes", method, template, rec["id"], attacker)
+                    if cid in seen:
+                        raise ValueError(f"id de candidato repetido: {cid}")
+                    seen.add(cid)
+                    path = _fill(template, path_params, rec["id"])
+                    request = {"method": method, "path": path, "headers": inv.users[attacker]}
+                    if method != "DELETE":
+                        request["json"] = example_body(schema, components or {}, write_marker)
+                    out.append(Candidate(cid, "writes", make_id(method, template), request,
+                                         {"method": "GET", "path": path, "headers": inv.users[rec["owner"]]},
+                                         tuple(rec["markers"]) + (write_marker,)))
     return out
 
 
@@ -433,6 +510,11 @@ def confirm(base_url: str, cands: list[Candidate], budget: float = 60.0, canary:
         for c in cands:
             if time.monotonic() > deadline:
                 raise TimeoutError("presupuesto agotado confirmando candidatos")
+            if c.family == "writes":
+                found = _confirm_write(clients, base_url, c, deadline)
+                if found:
+                    confirmed.append(found)
+                continue
             if c.family == "ssrf":
                 if canary is not None and _confirm_ssrf(clients, base_url, c, canary, deadline):
                     # El canario es el testigo; el predicado (cualquier respuesta) solo deja el pedido registrado.
@@ -460,6 +542,30 @@ def confirm(base_url: str, cands: list[Candidate], budget: float = 60.0, canary:
             if any(leak.matches(status, searchable(body)) for status, body in hops):
                 confirmed.append(Attack(c.id, c.family, c.request, leak, c.group, Control(c.owner_request, leak)))
     return sorted(confirmed, key=lambda a: a.id)
+
+
+def _confirm_write(clients, base_url: str, c: Candidate, deadline: float) -> Attack | None:
+    """El dueño lee antes y después del pedido del atacante. Confirmado si después aparece
+    la marca de escritura (la última de `markers`) o desaparecieron las marcas del dueño."""
+    import httpx
+
+    *owned, written = c.markers
+
+    def owner_text() -> str:
+        hops, _ = exchange(clients.for_request(c.owner_request), base_url, c.owner_request, deadline)
+        return "\n".join(searchable(body) for _, body in hops)
+
+    try:
+        before = owner_text()
+        if not any(m in before for m in owned) or written in before:
+            return None  # el dueño no ve su recurso por esta ruta: no hay estado que comparar
+        exchange(clients.for_request(c.request), base_url, c.request, deadline)
+        after = owner_text()
+    except (httpx.TransportError, Unverifiable):
+        return None
+    if written in after or not any(m in after for m in owned):
+        return Attack(c.id, c.family, c.request, Predicate(status_in=tuple(range(100, 600))), c.group)
+    return None
 
 
 def _confirm_ssrf(clients, base_url: str, c: Candidate, canary: Canary, deadline: float) -> bool:
@@ -504,7 +610,10 @@ def generate(base_url: str, inv: Inventory, budget: float = 60.0, families: tupl
     if status != 200:
         raise RuntimeError(f"la app no publica /openapi.json (status {status})")
     canary_base = f"http://{canary_host}:{canary.port}" if canary is not None and canary_host else None
-    cands = candidates(inv, get_routes(json.loads(body)), families, canary_base)
+    openapi = json.loads(body)
+    marker = f"CNR-WRITE-{secrets.token_hex(6)}"  # aleatoria por corrida: el PR no la conoce
+    cands = candidates(inv, get_routes(openapi), families, canary_base, get_write_routes(openapi),
+                       openapi.get("components") or {}, marker)
     return confirm(base_url, cands, deadline - time.monotonic(), canary)
 
 

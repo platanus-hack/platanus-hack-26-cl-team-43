@@ -31,7 +31,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-FAMILIES = ("authz", "files", "authn", "sqli", "ssrf", "cmdi")
+FAMILIES = ("authz", "files", "authn", "sqli", "ssrf", "cmdi", "writes")
 METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD")
 ATTACK_KEYS = {"id", "family", "request", "succeeded_if"}
 ATTACK_OPTIONAL_KEYS = {"group", "control"}

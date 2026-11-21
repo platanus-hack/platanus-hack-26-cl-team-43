@@ -113,7 +113,7 @@ def test_cases_materialize_a_v2_config(tmp_path):
     repo = materialize(case, tmp_path / "repo")
     d = json.loads((repo / CONFIG_FILE).read_text())
     # facturas declara sus familias en case.json: authn no tiene ataques en la base, pero se caza en el PR.
-    assert d["version"] == 2 and d["attacks"]["families"] == ["authz", "files", "authn"]
+    assert d["version"] == 2 and d["attacks"]["families"] == ["authz", "files", "authn", "writes"]
     assert load_target(json.dumps(d)) == case.target()
 
 

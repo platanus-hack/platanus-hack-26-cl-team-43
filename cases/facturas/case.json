@@ -11,7 +11,8 @@
   "families": [
     "authz",
     "files",
-    "authn"
+    "authn",
+    "writes"
   ],
   "inventory": {
     "users": {
@@ -201,6 +202,11 @@
       "name": "adaptativo-arranque",
       "kind": "vulnerable",
       "description": "Atacante adaptativo (#18): el mismo endpoint /invoices/{id}/summary sin control de dueño, pero se porta bien durante los primeros 10 minutos desde que arranca: lo que dura una evaluación."
+    },
+    {
+      "name": "vuln-put-sin-dueno",
+      "kind": "vulnerable",
+      "description": "Un PR normal agrega PUT /invoices/{id} para corregir número y monto, con login pero sin comprobar el dueño: cualquier usuario reescribe facturas ajenas."
     }
   ]
 }

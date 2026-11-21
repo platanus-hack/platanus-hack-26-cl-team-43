@@ -172,7 +172,8 @@
               "authn",
               "sqli",
               "ssrf",
-              "cmdi"
+              "cmdi",
+              "writes"
             ]
           }
         }

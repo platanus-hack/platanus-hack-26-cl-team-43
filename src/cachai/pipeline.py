@@ -257,12 +257,16 @@ def describe_introduced(attack: Attack, inventory: dict) -> str:
     return f"{attack.family}: {attack.request['method']} {attack.request['path']} como {who(attack, inventory)} recibe datos ajenos ({marks})"
 
 
-def red_team(app: "sandbox.AppHandle", target: Target, tmp: Path, budget: float) -> list[Attack]:
-    """Ataques del equipo rojo que funcionan contra `app`, solo de las familias activas."""
-    inv = tmp / f"inventory-{app.run_id}.json"
+def red_team(app: "sandbox.AppHandle", target: Target, tmp: Path, budget: float,
+             families: tuple[str, ...] | None = None) -> list[Attack]:
+    """Ataques del equipo rojo que funcionan contra `app`, de las familias pedidas (por defecto, las activas)."""
+    families = tuple(f for f in (families if families is not None else target.attack_families) if f in target.attack_families)
+    if not families:
+        return []
+    inv = tmp / f"inventory-{app.run_id}-{'-'.join(families)}.json"
     inv.write_text(json.dumps(target.inventory, ensure_ascii=False))
-    found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, target, inv, budget, target.attack_families)]
-    return [a for a in found if a.family in target.attack_families]
+    found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, target, inv, budget, families)]
+    return [a for a in found if a.family in families]
 
 
 def compare_red_team(pr_found: list[Attack], base_found: list[Attack]) -> Introduced:
@@ -559,11 +563,18 @@ def check(
         try:
             if hunt:
                 # Antes que los tests, con la app recién levantada, igual que la de la base.
+                # Las escrituras cambian datos: van después de los tests, para no ensuciar la evaluación.
+                reads = tuple(f for f in target.attack_families if f != "writes")
                 try:
-                    pr_found = red_team(app, attack_target, tmp_path, budget / 2)
+                    pr_found = red_team(app, attack_target, tmp_path, budget / 2, reads)
                 except (sandbox.SandboxError, ValueError) as e:
                     red_errors.append(f"el equipo rojo no terminó contra la app del PR: {e}")
             code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget, attacks_file)
+            if hunt and not red_errors and "writes" in target.attack_families:
+                try:
+                    pr_found += red_team(app, attack_target, tmp_path, budget / 2, ("writes",))
+                except (sandbox.SandboxError, ValueError) as e:
+                    red_errors.append(f"el equipo rojo no terminó las escrituras contra la app del PR: {e}")
         finally:
             sandbox.stop(app)
         intro = Introduced(incomplete=red_errors)
