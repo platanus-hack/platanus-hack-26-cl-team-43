@@ -207,6 +207,11 @@
       "name": "vuln-put-sin-dueno",
       "kind": "vulnerable",
       "description": "Un PR normal agrega PUT /invoices/{id} para corregir número y monto, con login pero sin comprobar el dueño: cualquier usuario reescribe facturas ajenas."
+    },
+    {
+      "name": "vuln-ruta-oculta",
+      "kind": "vulnerable",
+      "description": "Un PR normal agrega /invoices/{id}/raw sin comprobar el dueño y la saca del OpenAPI (include_in_schema=False) para que no aparezca en la documentación."
     }
   ]
 }

@@ -26,7 +26,7 @@ import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from . import canary, gitio, hidden, integrity, report_md, sandbox
+from . import canary, gitio, hidden, integrity, report_md, routes, sandbox
 from .case import CONFIG_FILE, ConfigError, Target, load_target
 from .evaluator import EXIT, SCHEMA
 from .gate import Evidence, Reason, decide
@@ -258,14 +258,24 @@ def describe_introduced(attack: Attack, inventory: dict) -> str:
 
 
 def red_team(app: "sandbox.AppHandle", target: Target, tmp: Path, budget: float,
-             families: tuple[str, ...] | None = None) -> list[Attack]:
-    """Ataques del equipo rojo que funcionan contra `app`, de las familias pedidas (por defecto, las activas)."""
+             families: tuple[str, ...] | None = None, tree: Path | None = None,
+             info: dict | None = None) -> list[Attack]:
+    """Ataques del equipo rojo que funcionan contra `app`, de las familias pedidas (por defecto, las activas).
+
+    `tree` es el código de esa app: sus rutas se leen por análisis estático y se
+    atacan aunque el OpenAPI no las publique.
+    """
     families = tuple(f for f in (families if families is not None else target.attack_families) if f in target.attack_families)
     if not families:
         return []
-    inv = tmp / f"inventory-{app.run_id}-{'-'.join(families)}.json"
+    tag = f"{app.run_id}-{'-'.join(families)}"
+    inv = tmp / f"inventory-{tag}.json"
     inv.write_text(json.dumps(target.inventory, ensure_ascii=False))
-    found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, target, inv, budget, families)]
+    routes_file = None
+    if tree is not None:
+        routes_file = tmp / f"routes-{tag}.json"
+        routes_file.write_text(json.dumps([r.to_dict() for r in routes.extract(tree)], ensure_ascii=False))
+    found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, target, inv, budget, families, routes_file, info)]
     return [a for a in found if a.family in families]
 
 
@@ -555,6 +565,7 @@ def check(
         attack_target = replace(target, inventory=canary.resolve(target.inventory, canaries)) if canaries else target
         seed_kw = {"seed_context": base_tree, "seed_env": canary.env(canaries)} if target.seed else {}
         pr_found: list[Attack] = []
+        pr_info: dict = {}
         red_errors: list[str] = []
         try:
             app = sandbox.start_app(pr_tree, target, compose_text, **seed_kw)
@@ -566,13 +577,13 @@ def check(
                 # Las escrituras cambian datos: van después de los tests, para no ensuciar la evaluación.
                 reads = tuple(f for f in target.attack_families if f != "writes")
                 try:
-                    pr_found = red_team(app, attack_target, tmp_path, budget / 2, reads)
+                    pr_found = red_team(app, attack_target, tmp_path, budget / 2, reads, pr_tree, pr_info)
                 except (sandbox.SandboxError, ValueError) as e:
                     red_errors.append(f"el equipo rojo no terminó contra la app del PR: {e}")
             code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget, attacks_file)
             if hunt and not red_errors and "writes" in target.attack_families:
                 try:
-                    pr_found += red_team(app, attack_target, tmp_path, budget / 2, ("writes",))
+                    pr_found += red_team(app, attack_target, tmp_path, budget / 2, ("writes",), pr_tree)
                 except (sandbox.SandboxError, ValueError) as e:
                     red_errors.append(f"el equipo rojo no terminó las escrituras contra la app del PR: {e}")
         finally:
@@ -582,7 +593,7 @@ def check(
             try:
                 base_app = sandbox.start_app(base_tree, target, compose_text, **seed_kw)
                 try:
-                    base_found = red_team(base_app, attack_target, tmp_path, budget / 2)
+                    base_found = red_team(base_app, attack_target, tmp_path, budget / 2, tree=base_tree)
                 finally:
                     sandbox.stop(base_app)
                 intro = compare_red_team(pr_found, base_found)
@@ -596,6 +607,11 @@ def check(
         r.introduced = [a.to_dict() for a in intro.introduced]
         if intro.existing:
             r.notes.append(existing_note(intro.existing))
+        off_openapi = pr_info.get("hidden_routes") or []
+        if off_openapi:
+            shown = ", ".join(f"{h['method']} {h['template']} ({h['source']})" for h in off_openapi[:4])
+            more = f" y {len(off_openapi) - 4} más" if len(off_openapi) > 4 else ""
+            r.notes.append(f"{len(off_openapi)} rutas del código no están en el OpenAPI de la app; se atacaron igual: {shown}{more}")
         return r
 
 

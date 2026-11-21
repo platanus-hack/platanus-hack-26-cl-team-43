@@ -601,18 +601,31 @@ def _confirm_sqli(clients, base_url: str, c: Candidate, deadline: float) -> Atta
 
 
 def generate(base_url: str, inv: Inventory, budget: float = 60.0, families: tuple[str, ...] | None = None,
-             canary: Canary | None = None, canary_host: str | None = None) -> list[Attack]:
+             canary: Canary | None = None, canary_host: str | None = None,
+             static_routes: list[dict] | None = None, info: dict | None = None) -> list[Attack]:
+    """Genera y confirma candidatos. Las rutas salen del OpenAPI de la app unido con
+    `static_routes` (leídas del código, `routes.extract`). En `info` deja las rutas
+    del código que el OpenAPI no publica."""
+    from .routes import merge
+
     deadline = time.monotonic() + budget
     with Clients() as clients:
         request = {"method": "GET", "path": "/openapi.json"}
         hops, _ = exchange(clients.for_request(request), base_url, request, deadline)
     status, body = hops[-1]
-    if status != 200:
-        raise RuntimeError(f"la app no publica /openapi.json (status {status})")
+    if status == 200:
+        openapi = json.loads(body)
+    elif static_routes:
+        openapi = {}
+    else:
+        raise RuntimeError(f"la app no publica /openapi.json (status {status}) y no hay rutas leídas del código")
+    routes, hidden = merge(get_routes(openapi), static_routes or [])
+    if info is not None:
+        info["hidden_routes"] = hidden if openapi else []
+        info["openapi"] = bool(openapi)
     canary_base = f"http://{canary_host}:{canary.port}" if canary is not None and canary_host else None
-    openapi = json.loads(body)
     marker = f"CNR-WRITE-{secrets.token_hex(6)}"  # aleatoria por corrida: el PR no la conoce
-    cands = candidates(inv, get_routes(openapi), families, canary_base, get_write_routes(openapi),
+    cands = candidates(inv, routes, families, canary_base, get_write_routes(openapi),
                        openapi.get("components") or {}, marker)
     return confirm(base_url, cands, deadline - time.monotonic(), canary)
 
@@ -629,6 +642,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--families", default="", help="familias a generar, separadas por coma (todas si se omite)")
     p.add_argument("--canary-host", default="", help="nombre con el que la app llega a este contenedor (activa ssrf)")
     p.add_argument("--cmdi-nonce", default="", help="parte aleatoria de los archivos testigo (activa cmdi)")
+    p.add_argument("--routes", default="", help="JSON con las rutas leídas del código (routes.extract)")
     args = p.parse_args(argv)
     inv = Inventory.from_dict(json.loads(Path(args.inventory).read_text()))
     if not wait_for(args.base_url.rstrip("/") + args.health, time.monotonic() + min(30.0, args.budget)):
@@ -637,20 +651,25 @@ def main(argv: list[str] | None = None) -> int:
     families = tuple(f for f in args.families.split(",") if f) or None
     canary = Canary() if args.canary_host and (families is None or "ssrf" in families) else None
     deadline = time.monotonic() + args.budget
+    static = json.loads(Path(args.routes).read_text()) if args.routes else None
+    info: dict = {}
     try:
-        attacks = generate(args.base_url, inv, args.budget, families, canary, args.canary_host or None)
+        attacks = generate(args.base_url, inv, args.budget, families, canary, args.canary_host or None, static, info)
     finally:
         if canary is not None:
             canary.close()
     probes = []
     if args.cmdi_nonce and (families is None or "cmdi" in families):
         # Las rutas se leen de nuevo: generate no las devuelve.
+        from .routes import merge
         with Clients() as clients:
             req = {"method": "GET", "path": "/openapi.json"}
             hops, _ = exchange(clients.for_request(req), args.base_url, req, deadline)
-        probes = cmdi_probes(inv, get_routes(json.loads(hops[-1][1])), args.cmdi_nonce)
+        openapi = json.loads(hops[-1][1]) if hops[-1][0] == 200 else {}
+        probes = cmdi_probes(inv, merge(get_routes(openapi), static or [])[0], args.cmdi_nonce)
         send_probes(args.base_url, probes, deadline)
-    print(json.dumps({"attacks": [a.to_dict() for a in attacks], "cmdi_probes": probes}, ensure_ascii=False))
+    print(json.dumps({"attacks": [a.to_dict() for a in attacks], "cmdi_probes": probes,
+                      "hidden_routes": info.get("hidden_routes", [])}, ensure_ascii=False))
     return 0
 
 

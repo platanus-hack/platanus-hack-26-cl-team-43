@@ -514,9 +514,15 @@ def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_di
 
 
 def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budget: float = 60.0,
-                families: tuple[str, ...] | None = None) -> list[dict]:
-    """Genera y confirma variantes de ataque contra la app (que debe ser la de la rama base)."""
+                families: tuple[str, ...] | None = None, routes_file: Path | None = None,
+                info: dict | None = None) -> list[dict]:
+    """Genera y confirma variantes de ataque contra la app. `routes_file`: rutas leídas
+    del código de esa app; en `info` quedan las que su OpenAPI no publica."""
     args = ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json", "--budget", str(budget)]
+    mounts = [(inventory_file, "/work/inventory.json")]
+    if routes_file is not None:
+        mounts.append((routes_file, "/work/routes.json"))
+        args += ["--routes", "/work/routes.json"]
     if families:
         args += ["--families", ",".join(families)]
     nonce = uuid.uuid4().hex[:12] if not families or "cmdi" in families else ""
@@ -528,7 +534,7 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
         args += ["--canary-host", CANARY_ALIAS]
         aliases = (CANARY_ALIAS,)
     code, out, err = _run_trusted(
-        app, f"{app.run_id}-red", [(inventory_file, "/work/inventory.json")],
+        app, f"{app.run_id}-red", mounts,
         args,
         budget, entrypoint=["python", "-m", "cachai.redteam"], aliases=aliases,
     )
@@ -536,6 +542,8 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
     if data is None or "attacks" not in data:
         raise SandboxError(f"el equipo rojo no terminó: {(out + err).strip()[-500:]}")
     attacks = list(data["attacks"])
+    if info is not None:
+        info["hidden_routes"] = data.get("hidden_routes") or []
     probes = data.get("cmdi_probes") or []
     if probes:
         # Inyección de comandos: Cachai mira desde el host qué archivos testigo aparecieron en la app.

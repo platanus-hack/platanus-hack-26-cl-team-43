@@ -171,6 +171,7 @@ EXPECTED = {
     ("adaptativo-user-agent", "ci"): True, ("adaptativo-user-agent", "full"): False,
     ("adaptativo-cabeceras", "ci"): True, ("adaptativo-cabeceras", "full"): False,
     ("adaptativo-host", "full"): True, ("adaptativo-sin-internet", "full"): True, ("adaptativo-arranque", "full"): True,
+    ("vuln-ruta-oculta", "ci"): True, ("vuln-ruta-oculta", "restore"): True, ("vuln-ruta-oculta", "full"): False,
     ("vuln-put-sin-dueno", "ci"): True, ("vuln-put-sin-dueno", "restore"): True, ("vuln-put-sin-dueno", "full"): False,
     ("vuln-endpoint-nuevo", "ci"): True, ("vuln-endpoint-nuevo", "restore"): True, ("vuln-endpoint-nuevo", "full"): False,
     ("vuln-sin-auth", "ci"): True, ("vuln-sin-auth", "restore"): True, ("vuln-sin-auth", "full"): False,
@@ -202,6 +203,9 @@ def test_hito_matrix(facturas_repo, pr, mode):
     if (pr, mode) == ("parche-correcto", "full"):
         assert r.reasons == [] and not r.evaluator["attacks"]["confirmed"]
         assert r.evaluator["suites"]["holdout"]["ok"]
+    if (pr, mode) == ("vuln-ruta-oculta", "full"):
+        assert any(x.startswith("vulnerabilidad introducida por el PR: authz: GET /invoices/") and "/raw" in x for x in r.reasons), r.to_text()
+        assert any("no están en el OpenAPI" in n and "/invoices/{invoice_id}/raw" in n for n in r.notes), r.notes
     if (pr, mode) == ("vuln-put-sin-dueno", "full"):
         assert any(x.startswith("vulnerabilidad introducida por el PR: writes: PUT /invoices/") for x in r.reasons), r.to_text()
         assert {x["kind"] for x in r.report()["reasons"]} == {"attack_introduced"}
@@ -393,7 +397,7 @@ def test_full_mode_matches_every_label_except_the_declared_false_alarm():
     from cachai import bench
     case = load_case(FACTURAS)
     rows = bench.run([case], modes=("full",), jobs=4, budget=90)
-    assert len(rows) == len(case.prs) == 27
+    assert len(rows) == len(case.prs) == 28
     wrong = sorted(r["pr"] for r in rows if not r["correct"])
     assert wrong == ["adaptativo-arranque", "adaptativo-host", "adaptativo-sin-internet", "honesto-mejora-test"]
     by_pr = {r["pr"]: r["result"] for r in rows}
