@@ -254,6 +254,8 @@ def describe_introduced(attack: Attack, inventory: dict) -> str:
     """Evidencia de una vulnerabilidad introducida: pedido, usuario y marca que recibió."""
     pred = attack.succeeded_if
     marks = ", ".join(pred.body_contains_any + pred.body_contains)
+    if attack.family == "authn":
+        return f"authn: {attack.request['method']} {attack.request['path']} sin sesión válida recibe datos de un usuario ({marks})"
     return f"{attack.family}: {attack.request['method']} {attack.request['path']} como {who(attack, inventory)} recibe datos ajenos ({marks})"
 
 
