@@ -449,10 +449,12 @@ def _confined(repo: Path, rel: str) -> Path:
     return target
 
 
-def materialize(case: Case, dest: str | Path) -> Path:
+def materialize(case: Case, dest: str | Path, base: str | Path | None = None) -> Path:
     """Crea en `dest` un repo git con `main` (la base) y una rama por PR.
 
-    La base lleva además `.cachai.json`, generado desde `case.json`.
+    La base lleva además `.cachai.json`, generado desde `case.json`. Con `base`,
+    `main` es ese árbol tal cual (p. ej. una copia de la base ya configurada con
+    `cachai init`, con su `.cachai.json`) y `case.json` solo aporta los PR.
 
     Los casos son fixtures locales confiables; aun así las capas se validan para
     que no escriban ni borren fuera de `dest` ni toquen `.git`. No es un sandbox.
@@ -462,8 +464,11 @@ def materialize(case: Case, dest: str | Path) -> Path:
         raise FileExistsError(f"{repo} no está vacío")
     repo.mkdir(parents=True, exist_ok=True)
     _git(repo, "init", "-q", "-b", "main")
-    _copy_tree(case.base_dir, repo)
-    (repo / CONFIG_FILE).write_text(json.dumps(case.target().to_dict(), indent=2) + "\n")
+    if base is None:
+        _copy_tree(case.base_dir, repo)
+        (repo / CONFIG_FILE).write_text(json.dumps(case.target().to_dict(), indent=2) + "\n")
+    else:
+        _copy_tree(Path(base), repo)
     _git(repo, "add", "-A", "-f")
     _git(repo, "commit", "-q", "-m", f"{case.id}: rama base")
     for pr in case.prs:

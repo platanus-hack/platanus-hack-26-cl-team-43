@@ -630,6 +630,43 @@ def generate(base_url: str, inv: Inventory, budget: float = 60.0, families: tupl
     return confirm(base_url, cands, deadline - time.monotonic(), canary)
 
 
+MAX_PROBE_BODY = 2_000_000
+
+
+def probe(base_url: str, users: dict[str, dict[str, str]], budget: float = 30.0) -> dict:
+    """Lo que `cachai init` necesita para proponer un inventario: el OpenAPI de la
+    app y, por cada ruta GET sin parámetros, la respuesta JSON que ve cada usuario.
+
+    Solo pedidos GET con los headers que dio quien configura; nada se escribe.
+    """
+    deadline = time.monotonic() + budget
+    samples: dict[str, dict[str, object]] = {}
+    with Clients() as clients:
+        request = {"method": "GET", "path": "/openapi.json"}
+        hops, _ = exchange(clients.for_request(request), base_url, request, deadline)
+        status, body = hops[-1]
+        if status != 200:
+            raise RuntimeError(f"la app no publica /openapi.json (status {status})")
+        openapi = json.loads(body)
+        for template, path_params, query_params in get_routes(openapi):
+            if path_params or query_params:
+                continue
+            for name, headers in sorted(users.items()):
+                req = {"method": "GET", "path": template, "headers": headers}
+                try:
+                    hops, _ = exchange(clients.for_request(req), base_url, req, deadline)
+                except Exception:  # una ruta que no responde no aporta al borrador
+                    continue
+                st, raw = hops[-1]
+                if st != 200 or len(raw) > MAX_PROBE_BODY:
+                    continue
+                try:
+                    samples.setdefault(template, {})[name] = json.loads(raw)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+    return {"openapi": openapi, "samples": samples}
+
+
 def main(argv: list[str] | None = None) -> int:
     """Corre dentro del contenedor de Cachai, contra la app de la rama base."""
     from .evaluator import wait_for
@@ -643,7 +680,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--canary-host", default="", help="nombre con el que la app llega a este contenedor (activa ssrf)")
     p.add_argument("--cmdi-nonce", default="", help="parte aleatoria de los archivos testigo (activa cmdi)")
     p.add_argument("--routes", default="", help="JSON con las rutas leídas del código (routes.extract)")
+    p.add_argument("--probe", action="store_true",
+                   help="no ataca: devuelve el OpenAPI y los listados de cada usuario (--inventory solo necesita users)")
     args = p.parse_args(argv)
+    if args.probe:
+        users = json.loads(Path(args.inventory).read_text()).get("users") or {}
+        if not wait_for(args.base_url.rstrip("/") + args.health, time.monotonic() + min(30.0, args.budget)):
+            print(json.dumps({"error": "la app no respondió"}))
+            return 2
+        print(json.dumps(probe(args.base_url, users, args.budget), ensure_ascii=False))
+        return 0
     inv = Inventory.from_dict(json.loads(Path(args.inventory).read_text()))
     if not wait_for(args.base_url.rstrip("/") + args.health, time.monotonic() + min(30.0, args.budget)):
         print(json.dumps({"error": "la app no respondió"}))
