@@ -296,6 +296,18 @@ def compare_red_team(pr_found: list[Attack], base_found: list[Attack]) -> Introd
     )
 
 
+def not_external_notes(result: object) -> list[str]:
+    """Tests de la base que usan el código de la app y no se pueden evaluar desde otro contenedor."""
+    suites = result.get("suites") if isinstance(result, dict) else None
+    base = suites.get("base") if isinstance(suites, dict) else None
+    items = (base or {}).get("not_external") or [] if isinstance(base, dict) else []
+    if not items:
+        return []
+    names = ", ".join(str(x.get("nodeid", "")).rsplit("::", 1)[-1] for x in items[:5]) + (f" y {len(items) - 5} más" if len(items) > 5 else "")
+    return [f"{len(items)} tests de la base no se evaluaron desde afuera porque usan el código de la app ({names}); "
+            "no aprueban ni fallan: ver docs/tests-por-http.md"]
+
+
 def existing_note(existing: list[Attack]) -> str:
     routes = sorted({a.public_route() for a in existing})
     shown = ", ".join(routes[:4]) + (f" y {len(routes) - 4} más" if len(routes) > 4 else "")
@@ -576,6 +588,7 @@ def check(
         ev.incomplete += intro.incomplete
         ev.introduced_attacks += [describe_introduced(a, target.inventory or {}) for a in intro.introduced]
         r = done(result, ev)
+        r.notes += not_external_notes(result)
         r.introduced = [a.to_dict() for a in intro.introduced]
         if intro.existing:
             r.notes.append(existing_note(intro.existing))
