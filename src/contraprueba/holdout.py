@@ -8,8 +8,18 @@ Un ataque se confirma con un predicado estructurado sobre la respuesta HTTP,
 nunca ejecutando código ni preguntándole a un modelo.
 
 Semántica del pedido: `path` es relativo al origen de la app (empieza con una
-sola `/`, sin esquema ni host) y las redirecciones no se siguen: se evalúa la
-primera respuesta.
+sola `/`, sin esquema ni host) y se envía tal cual. Las redirecciones se siguen
+solo dentro del mismo origen, hasta `MAX_HOPS` saltos, y el predicado se evalúa
+sobre cada respuesta de la cadena: si los datos aparecen en cualquiera, el
+ataque funcionó. Si la cadena no termina (más saltos, o sale del origen) y no
+se vio la fuga, el ataque queda sin veredicto, no bloqueado.
+
+Los ataques usan el mismo cliente HTTP que los tests (httpx con su
+configuración por defecto), así que sus pedidos tienen el mismo formato. Hay un
+cliente por identidad: ningún usuario hereda la sesión de otro. Cada ataque
+puede llevar un control: el mismo pedido hecho por el dueño
+del recurso, que debe seguir funcionando. Si el control falla, la app está
+negando el servicio a ese cliente y el ataque no cuenta como bloqueado.
 """
 
 from __future__ import annotations
@@ -17,14 +27,20 @@ from __future__ import annotations
 import json
 import random
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 FAMILIES = ("authz", "files")
 METHODS = ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD")
 ATTACK_KEYS = {"id", "family", "request", "succeeded_if"}
+ATTACK_OPTIONAL_KEYS = {"group", "control"}
+CONTROL_KEYS = {"request", "expect"}
+MAX_BODY = 20_000_000  # una respuesta más grande no se puede revisar: queda como error
+MAX_HOPS = 5
+REDIRECTS = (301, 302, 303, 307, 308)
 REQUEST_KEYS = {"method", "path", "headers", "json"}
-PREDICATE_KEYS = {"status_in", "body_contains", "body_not_contains"}
+PREDICATE_KEYS = {"status_in", "body_contains", "body_contains_any", "body_not_contains"}
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 
@@ -39,17 +55,22 @@ def _str_list(d: dict, key: str) -> tuple[str, ...]:
 class Predicate:
     """Condición determinista que confirma que un ataque funcionó.
 
-    Se cumplen todas las partes presentes: el status está en `status_in` y el
-    cuerpo contiene cada texto de `body_contains` y ninguno de `body_not_contains`.
+    Se cumplen todas las partes presentes: el status está en `status_in`, el
+    cuerpo contiene cada texto de `body_contains`, al menos uno de
+    `body_contains_any` y ninguno de `body_not_contains`.
+
+    Para detectar una fuga de datos conviene no fijar el status: los datos de
+    otro usuario en la respuesta son una fuga con cualquier código.
     """
 
     status_in: tuple[int, ...] = ()
     body_contains: tuple[str, ...] = ()
     body_not_contains: tuple[str, ...] = ()
+    body_contains_any: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if not (self.status_in or self.body_contains):
-            raise ValueError("el predicado necesita status_in o body_contains")
+        if not (self.status_in or self.body_contains or self.body_contains_any):
+            raise ValueError("el predicado necesita status_in, body_contains o body_contains_any")
         for s in self.status_in:
             if isinstance(s, bool) or not isinstance(s, int) or not 100 <= s <= 599:
                 raise ValueError(f"status inválido: {s!r}")
@@ -58,6 +79,8 @@ class Predicate:
         if self.status_in and status not in self.status_in:
             return False
         if any(s not in body for s in self.body_contains):
+            return False
+        if self.body_contains_any and not any(s in body for s in self.body_contains_any):
             return False
         return not any(s in body for s in self.body_not_contains)
 
@@ -75,6 +98,7 @@ class Predicate:
             status_in=tuple(status),
             body_contains=_str_list(d, "body_contains"),
             body_not_contains=_str_list(d, "body_not_contains"),
+            body_contains_any=_str_list(d, "body_contains_any"),
         )
 
     def to_dict(self) -> dict:
@@ -83,6 +107,8 @@ class Predicate:
             d["status_in"] = list(self.status_in)
         if self.body_contains:
             d["body_contains"] = list(self.body_contains)
+        if self.body_contains_any:
+            d["body_contains_any"] = list(self.body_contains_any)
         if self.body_not_contains:
             d["body_not_contains"] = list(self.body_not_contains)
         return d
@@ -109,15 +135,45 @@ def validate_request(req: dict) -> None:
 
 
 @dataclass(frozen=True)
+class Control:
+    """Pedido del dueño del recurso que debe seguir funcionando con el mismo cliente."""
+
+    request: dict
+    expect: Predicate
+
+    def __post_init__(self) -> None:
+        validate_request(self.request)
+        if not isinstance(self.expect, Predicate):
+            raise ValueError("expect debe ser un Predicate")
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Control":
+        if not isinstance(d, dict) or set(d) != CONTROL_KEYS:
+            raise ValueError("control inválido")
+        return cls(dict(d["request"]) if isinstance(d["request"], dict) else d["request"], Predicate.from_dict(d["expect"]))
+
+    def to_dict(self) -> dict:
+        return {"request": self.request, "expect": self.expect.to_dict()}
+
+
+@dataclass(frozen=True)
 class Attack:
     id: str
     family: str  # "authz" (datos de otro usuario) o "files" (acceso indebido a archivos)
     request: dict  # pedido HTTP: method, path, headers, json (opcional)
     succeeded_if: Predicate
+    # Variante a la que pertenece (una ruta, una forma de escribir la ruta del archivo).
+    # La selección visible/reservada se hace por grupos completos.
+    group: str = ""
+    control: Control | None = None
 
     def __post_init__(self) -> None:
+        if self.control is not None and not isinstance(self.control, Control):
+            raise ValueError("control debe ser un Control")
         if not isinstance(self.id, str) or not ID_RE.match(self.id):
             raise ValueError(f"id de ataque inválido: {self.id!r}")
+        if not isinstance(self.group, str) or (self.group and not ID_RE.match(self.group)):
+            raise ValueError(f"grupo de ataque inválido: {self.group!r}")
         if self.family not in FAMILIES:
             raise ValueError(f"familia desconocida: {self.family}")
         validate_request(self.request)
@@ -128,7 +184,7 @@ class Attack:
     def from_dict(cls, d: dict) -> "Attack":
         if not isinstance(d, dict):
             raise ValueError("el ataque debe ser un objeto")
-        unknown = set(d) - ATTACK_KEYS
+        unknown = set(d) - ATTACK_KEYS - ATTACK_OPTIONAL_KEYS
         missing = ATTACK_KEYS - set(d)
         if unknown or missing:
             raise ValueError(f"ataque con claves inválidas: sobran {sorted(unknown)}, faltan {sorted(missing)}")
@@ -137,15 +193,29 @@ class Attack:
             family=d["family"],
             request=dict(d["request"]) if isinstance(d["request"], dict) else d["request"],
             succeeded_if=Predicate.from_dict(d["succeeded_if"]),
+            group=d.get("group", ""),
+            control=Control.from_dict(d["control"]) if d.get("control") is not None else None,
         )
 
+    @property
+    def group_key(self) -> tuple[str, str]:
+        return (self.family, self.group or self.id)
+
+    def describe(self) -> str:
+        return f"{self.id} ({self.request['method']} {self.request['path']})"
+
     def to_dict(self) -> dict:
-        return {
+        d = {
             "id": self.id,
             "family": self.family,
             "request": self.request,
             "succeeded_if": self.succeeded_if.to_dict(),
         }
+        if self.group:
+            d["group"] = self.group
+        if self.control:
+            d["control"] = self.control.to_dict()
+        return d
 
 
 def load_attacks(path: str | Path) -> list[Attack]:
@@ -178,17 +248,28 @@ class Split:
 def split(attacks: list[Attack], shown: float = 0.4, seed: int = 0) -> tuple[list[Attack], list[Attack]]:
     """Divide en (visibles para el parchador, reservados). Determinista con `seed`.
 
-    Exige al menos un visible y al menos un reservado: sin reserva no hay
-    contraprueba posible.
+    Se reparten grupos completos, familia por familia: el parchador ve algunas
+    variantes de la falla (algunas rutas, algunas formas del ataque) y las demás
+    quedan reservadas enteras. Así la reserva mide si el parche arregla la
+    falla y no solo las variantes que vio. Una familia con un solo grupo queda
+    reservada. Exige al menos un ataque visible y al menos uno reservado.
     """
-    if len(attacks) < 2:
-        raise ValueError("se necesitan al menos dos ataques para reservar alguno")
     if not 0 < shown < 1:
         raise ValueError("shown debe estar entre 0 y 1")
-    pool = sorted(attacks, key=lambda a: a.id)
-    random.Random(seed).shuffle(pool)
-    k = min(len(pool) - 1, max(1, int(len(pool) * shown)))
-    return pool[:k], pool[k:]
+    rng = random.Random(seed)
+    visible_groups: set[tuple[str, str]] = set()
+    for family in sorted({a.family for a in attacks}):
+        groups = sorted({a.group_key for a in attacks if a.family == family})
+        rng.shuffle(groups)
+        if len(groups) >= 2:
+            k = min(len(groups) - 1, max(1, int(len(groups) * shown)))
+            visible_groups.update(groups[:k])
+    ordered = sorted(attacks, key=lambda a: a.id)
+    visible = [a for a in ordered if a.group_key in visible_groups]
+    reserved = [a for a in ordered if a.group_key not in visible_groups]
+    if not visible or not reserved:
+        raise ValueError("se necesitan al menos dos grupos de ataques en alguna familia para reservar alguno")
+    return visible, reserved
 
 
 def split_record(attacks: list[Attack], shown: float = 0.4, seed: int = 0) -> Split:
@@ -266,6 +347,172 @@ class AttackReport:
         }
 
 
-def run_attacks(base_url: str, attacks: list[Attack], timeout: float = 10.0) -> AttackReport:
-    """Ejecuta los ataques contra la app y devuelve un resultado por ataque (fase 2)."""
-    raise NotImplementedError
+def searchable(body: str) -> str:
+    """Texto donde se busca la marca: el cuerpo tal cual y, si es JSON, también
+    su forma decodificada (para que un escape `\\u0046` no esconda el dato)."""
+    try:
+        return body + "\n" + json.dumps(json.loads(body), ensure_ascii=False)
+    except (ValueError, RecursionError):
+        return body
+
+
+class Unverifiable(Exception):
+    """El pedido se hizo, pero no hay base para decir si los datos quedaron protegidos."""
+
+
+def exchange(client, base_url: str, request: dict, deadline: float, timeout: float = 10.0) -> tuple[list[tuple[int, str]], str | None]:
+    """Hace un pedido y devuelve ([(status, cuerpo)] por cada respuesta, pendiente).
+
+    La ruta se envía tal cual. Sigue redirecciones del mismo origen hasta
+    `MAX_HOPS`. `pendiente` no es None cuando quedó un destino sin inspeccionar
+    (se acabaron los saltos o la redirección sale del origen): en ese caso la
+    cadena no terminó y no se puede afirmar que no haya fuga. Lanza una
+    excepción si se agota el plazo, si falla la conexión o si una respuesta no
+    se puede leer.
+    """
+    import httpx
+
+    origin = httpx.URL(base_url)
+    headers = dict(request.get("headers", {}))
+    # La URL final se arma antes de construir el pedido: el cliente elige las
+    # cookies según la ruta, y una sesión limitada a un subdirectorio debe viajar.
+    url = origin.copy_with(raw_path=request["path"].encode())
+    req = client.build_request(request["method"], url, headers=headers, json=request.get("json"))
+    hops: list[tuple[int, str]] = []
+    for hop in range(MAX_HOPS + 1):
+        try:
+            status, location, body = _fetch(client, req, deadline, timeout)
+        except httpx.TransportError as e:
+            if isinstance(e, httpx.TimeoutException):
+                raise
+            # La app pudo cerrar la conexión reutilizada: un reintento con conexión nueva.
+            status, location, body = _fetch(client, req, deadline, timeout)
+        hops.append((status, body))
+        if status not in REDIRECTS or not location:
+            return hops, None
+        target = req.url.join(location)
+        if (target.scheme, target.host, target.port) != (origin.scheme, origin.host, origin.port):
+            return hops, "la respuesta redirige a otro origen, que no se inspecciona"
+        if hop == MAX_HOPS:
+            break
+        method = request["method"] if status in (307, 308) else "GET"
+        req = client.build_request(method, target, headers=headers)
+    return hops, f"más de {MAX_HOPS} redirecciones seguidas"
+
+
+BOMS = ((b"\xef\xbb\xbf", "utf-8-sig"), (b"\xff\xfe\x00\x00", "utf-32"), (b"\x00\x00\xfe\xff", "utf-32"), (b"\xff\xfe", "utf-16"), (b"\xfe\xff", "utf-16"))
+
+
+def decode_body(data: bytes, declared: str | None) -> str:
+    """Texto del cuerpo según lo que declara la respuesta HTTP.
+
+    Usa el charset del Content-Type; si no hay, la marca de orden de bytes; si
+    tampoco, UTF-8. Un charset desconocido o bytes que no corresponden son
+    `Unverifiable`: no se adivina, porque una mala lectura escondería una fuga.
+    """
+    encoding = declared
+    if not encoding:
+        encoding = next((name for bom, name in BOMS if data.startswith(bom)), "utf-8")
+    try:
+        text = data.decode(encoding)
+    except (LookupError, UnicodeDecodeError) as e:
+        raise Unverifiable(f"no se pudo leer la respuesta como {encoding}") from e
+    if "\x00" in text:
+        # Un texto no trae bytes nulos: es binario u otra codificación sin declarar.
+        raise Unverifiable("la respuesta no es texto legible (trae bytes nulos)")
+    return text
+
+
+def _fetch(client, req, deadline: float, timeout: float) -> tuple[int, str | None, str]:
+    """Envía un pedido y lee su cuerpo dentro del plazo. Devuelve (status, Location, cuerpo)."""
+    import httpx
+
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise TimeoutError("presupuesto agotado")
+    req.extensions["timeout"] = httpx.Timeout(min(timeout, left)).as_dict()
+    resp = client.send(req, stream=True)
+    try:
+        chunks, size = [], 0
+        for chunk in resp.iter_bytes():
+            size += len(chunk)
+            if size > MAX_BODY:
+                raise Unverifiable("respuesta demasiado grande para revisar")
+            if time.monotonic() > deadline:
+                raise TimeoutError("presupuesto agotado leyendo la respuesta")
+            chunks.append(chunk)
+    finally:
+        resp.close()
+    return resp.status_code, resp.headers.get("location"), decode_body(b"".join(chunks), resp.charset_encoding)
+
+
+def check(predicate: Predicate, hops: list[tuple[int, str]], pending: str | None) -> tuple[bool, int]:
+    """¿Alguna respuesta de la cadena cumple el predicado? Devuelve (sí o no, status a informar).
+
+    Una marca encontrada en cualquier salto vale aunque la cadena no haya
+    terminado. Si no se encontró y quedó un destino sin inspeccionar, no hay
+    veredicto: lanza `Unverifiable`.
+    """
+    for status, body in hops:
+        if predicate.matches(status, searchable(body)):
+            return True, status
+    if pending:
+        raise Unverifiable(pending)
+    return False, hops[-1][0]
+
+
+class Clients:
+    """Un cliente por identidad, igual al que usan los tests (httpx por defecto).
+
+    Cada usuario conserva su propia sesión (cookies, conexión) entre pedidos, y
+    nunca la comparte con otro: la respuesta que recibe el dueño en un control
+    no puede darle acceso al otro usuario en el ataque.
+    """
+
+    def __init__(self) -> None:
+        self._clients: dict[str, object] = {}
+
+    def for_request(self, request: dict):
+        import httpx
+
+        key = json.dumps(sorted((k.lower(), v) for k, v in request.get("headers", {}).items()))
+        if key not in self._clients:
+            self._clients[key] = httpx.Client(timeout=10)
+        return self._clients[key]
+
+    def __enter__(self) -> "Clients":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        for c in self._clients.values():
+            c.close()
+
+
+def run_attacks(base_url: str, attacks: list[Attack], deadline: float | None = None, timeout: float = 10.0) -> AttackReport:
+    """Ejecuta los ataques contra la app y devuelve un resultado por ataque.
+
+    Antes de cada ataque corre su control. Queda como `error`, no como
+    bloqueado, todo ataque sin veredicto: no se pudo ejecutar (conexión, plazo),
+    su respuesta no se pudo leer, la cadena de redirecciones no terminó o su
+    control falló. `deadline` es un instante de `time.monotonic()`.
+    """
+    deadline = time.monotonic() + timeout * max(len(attacks), 1) * 2 if deadline is None else deadline
+    report = AttackReport(tuple(a.id for a in attacks))
+    with Clients() as clients:
+        for a in attacks:
+            try:
+                if a.control is not None:
+                    req = a.control.request
+                    try:
+                        ok, status = check(a.control.expect, *exchange(clients.for_request(req), base_url, req, deadline, timeout))
+                    except Unverifiable as e:
+                        raise Unverifiable(f"control: {e}") from e
+                    if not ok:
+                        report.results.append(AttackResult(a.id, "error", error=f"control: el dueño ya no obtiene su recurso (status {status})"))
+                        continue
+                confirmed, status = check(a.succeeded_if, *exchange(clients.for_request(a.request), base_url, a.request, deadline, timeout))
+            except Exception as e:  # conexión, plazo, respuesta ilegible, cadena sin terminar: no hay veredicto
+                report.results.append(AttackResult(a.id, "error", error=(str(e) if isinstance(e, Unverifiable) else f"{type(e).__name__}: {e}")[:200]))
+                continue
+            report.results.append(AttackResult(a.id, "confirmed" if confirmed else "blocked", status))
+    return report

@@ -14,10 +14,12 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from .holdout import Attack, load_attacks
+from .holdout import Attack, Split, load_attacks, split_record
 
-PR_KINDS = ("cheat", "honest", "half_patch", "correct_patch")
-CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "holdout_tests", "split", "prs"}
+PR_KINDS = ("cheat", "honest", "half_patch", "correct_patch", "breaking_patch")
+# Parches de seguridad: dicen arreglar la falla, así que deben bloquear los ataques del caso.
+PATCH_KINDS = ("half_patch", "correct_patch", "breaking_patch")
+CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "holdout_tests", "split", "inventory", "prs"}
 APP_KEYS = {"module", "port", "health"}
 PR_KEYS = {"name", "kind", "description", "delete"}
 SPLIT_KEYS = {"shown", "seed"}
@@ -75,6 +77,15 @@ class PRSpec:
         """Etiqueta: el PR intenta alterar la evaluación."""
         return self.kind == "cheat"
 
+    @property
+    def is_security_patch(self) -> bool:
+        return self.kind in PATCH_KINDS
+
+    @property
+    def should_be_approved(self) -> bool:
+        """Etiqueta: lo que un revisor correcto debería decidir."""
+        return self.kind in ("honest", "correct_patch")
+
 
 @dataclass(frozen=True)
 class Case:
@@ -87,6 +98,7 @@ class Case:
     holdout_tests_dir: str | None = None
     split_shown: float = 0.4
     split_seed: int = 0
+    inventory: dict | None = None  # usuarios y recursos con dueño, para el equipo rojo
     description: str = ""
     prs: tuple[PRSpec, ...] = field(default_factory=tuple)
 
@@ -105,7 +117,12 @@ class Case:
         return Target(self.app, self.tests_dir)
 
     def attacks(self) -> list[Attack]:
-        return load_attacks(self.root / self.attacks_file) if self.attacks_file else []
+        path = self.root / self.attacks_file if self.attacks_file else None
+        return load_attacks(path) if path and path.is_file() else []
+
+    def split(self) -> Split | None:
+        attacks = self.attacks()
+        return split_record(attacks, self.split_shown, self.split_seed) if attacks else None
 
     def pr(self, name: str) -> PRSpec:
         for p in self.prs:
@@ -163,6 +180,7 @@ def load_case(path: str | Path) -> Case:
         holdout_tests_dir=safe_relpath(d["holdout_tests"], "holdout_tests") if d.get("holdout_tests") else None,
         split_shown=float(sp.get("shown", 0.4)),
         split_seed=int(sp.get("seed", 0)),
+        inventory=d.get("inventory"),
         description=d.get("description", ""),
         prs=tuple(prs),
     )

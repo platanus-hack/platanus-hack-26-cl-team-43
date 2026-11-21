@@ -1,22 +1,26 @@
 """Orquestador: revisa un PR y devuelve la decisión con su evidencia.
 
-Tres modos sobre el mismo PR:
+Cuatro modos sobre el mismo PR:
 
 - `ci`: línea base. Corre pytest con los tests y la configuración del PR, en
   el mismo contenedor que su código. Es lo que hace un CI normal.
 - `restore`: línea base. Repone los tests, la configuración y los hooks de la
   rama base, pero pytest sigue en el mismo contenedor que el código.
+- `visible`: línea base para parches de seguridad. Evalúa desde otro
+  contenedor, pero solo con los ataques que el parchador vio: es la validación
+  que el parchador puede hacerse a sí mismo.
 - `full`: Contraprueba. La app corre en un contenedor y el evaluador, con los
-  tests de la base, en otro. Además se revisan los cambios que tocan la
-  evaluación. Decide `gate.decide`.
+  tests de la base, en otro. Suma los ataques y los tests funcionales
+  reservados y la revisión de los cambios que tocan la evaluación.
 
 Todo se lee del repo por hash de commit. La configuración (`.contraprueba.json`),
-los tests y los reservados vienen de la rama base o de fuera del repo, nunca
-del PR.
+los tests, los ataques y los reservados vienen de la rama base o de fuera del
+repo, nunca del PR. Decide `gate.decide`.
 """
 
 from __future__ import annotations
 
+import json
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,9 +29,10 @@ from . import gitio, integrity, sandbox
 from .case import CONFIG_FILE, Target, load_target
 from .evaluator import EXIT, SCHEMA
 from .gate import Evidence, decide
+from .holdout import ATTACK_OUTCOMES, Attack, Split
 from .integrity import Flag
 
-MODES = ("ci", "restore", "full")
+MODES = ("ci", "restore", "visible", "full")
 
 
 @dataclass
@@ -39,8 +44,9 @@ class CheckResult:
     reasons: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     flags: list[Flag] = field(default_factory=list)
-    evaluator: dict | None = None  # JSON del evaluador (modo full)
+    evaluator: dict | None = None  # JSON del evaluador (modos visible y full)
     inside: dict | None = None  # resultado de pytest dentro del contenedor (modos ci y restore)
+    split: dict | None = None  # qué ataques vio el parchador y cuáles quedaron reservados
 
     def to_dict(self) -> dict:
         return {
@@ -53,6 +59,7 @@ class CheckResult:
             "flags": [f.__dict__ for f in self.flags],
             "evaluator": self.evaluator,
             "inside": self.inside,
+            "split": self.split,
         }
 
     def to_text(self) -> str:
@@ -60,6 +67,30 @@ class CheckResult:
         lines += [f"  - {r}" for r in self.reasons]
         lines += [f"  · nota: {n}" for n in self.notes]
         return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class AttackPlan:
+    """Ataques que el PR debe bloquear y cuáles de ellos son reservados."""
+
+    attacks: tuple[Attack, ...]
+    split: Split
+
+    def __post_init__(self) -> None:
+        ids = [a.id for a in self.attacks]
+        visible, reserved = set(self.split.visible), set(self.split.reserved)
+        if len(ids) != len(set(ids)) or visible & reserved or visible | reserved != set(ids) or not visible or not reserved:
+            raise ValueError("la selección visible/reservada no coincide con los ataques")
+        groups = {a.id: a.group_key for a in self.attacks}
+        if {groups[i] for i in visible} & {groups[i] for i in reserved}:
+            raise ValueError("un grupo de ataques no puede quedar repartido entre visibles y reservados")
+
+    def subset(self, ids: tuple[str, ...]) -> tuple[Attack, ...]:
+        wanted = set(ids)
+        return tuple(a for a in self.attacks if a.id in wanted)
+
+    def describe(self, attack_id: str) -> str:
+        return next(a.describe() for a in self.attacks if a.id == attack_id)
 
 
 def target_from_base(repo: str | Path, base_sha: str) -> Target:
@@ -100,12 +131,57 @@ def _suite_evidence(name: str, suite: object, required: bool) -> tuple[bool, lis
     return ok and not failed and not incomplete, failed, incomplete
 
 
-def evidence_from(result: object, flags: list[Flag], exit_code: int | None = 0, expect_holdout: bool = False) -> Evidence:
+def _attack_evidence(report: object, expected: tuple[str, ...]) -> tuple[list[str], list[str]]:
+    """Devuelve (ids confirmados, motivos de evaluación incompleta).
+
+    Se recalcula desde los resultados por ataque: cada ataque esperado debe
+    tener exactamente un resultado `confirmed` o `blocked` con su status HTTP.
+    """
+    if not expected:
+        return [], ([] if report is None else ["el evaluador corrió ataques que nadie pidió"])
+    if not isinstance(report, dict) or not isinstance(report.get("results"), list):
+        return [], ["ataques: no corrieron o su resultado está mal formado"]
+    seen: dict[str, str] = {}
+    why: dict[str, str] = {}
+    problems = []
+    for r in report["results"]:
+        if not isinstance(r, dict) or r.get("outcome") not in ATTACK_OUTCOMES or not isinstance(r.get("id"), str):
+            return [], ["ataques: resultado mal formado"]
+        if r["id"] in seen or r["id"] not in expected:
+            problems.append(f"ataques: resultado repetido o no pedido ({r['id']})")
+            continue
+        status = r.get("http_status")
+        if r["outcome"] != "error" and (isinstance(status, bool) or not isinstance(status, int)):
+            return [], ["ataques: resultado sin status HTTP"]
+        seen[r["id"]] = r["outcome"]
+        why[r["id"]] = str(r.get("error") or "")[:160]
+    missing = [i for i in expected if i not in seen]
+    errors = [i for i, o in seen.items() if o == "error"]
+    if missing:
+        problems.append(f"ataques sin resultado: {', '.join(missing)}")
+    if errors:
+        shown = "; ".join(f"{i} ({why[i]})" for i in errors[:3])
+        more = f" y {len(errors) - 3} más" if len(errors) > 3 else ""
+        problems.append(f"{len(errors)} ataques sin veredicto: {shown}{more}")
+    if not problems and report.get("complete") is not True:
+        problems.append("ataques: el evaluador no los dio por completos")
+    return [i for i in expected if seen.get(i) == "confirmed"], problems
+
+
+def evidence_from(
+    result: object,
+    flags: list[Flag],
+    exit_code: int | None = 0,
+    expect_holdout: bool = False,
+    plan: AttackPlan | None = None,
+    attack_ids: tuple[str, ...] = (),
+) -> Evidence:
     """Traduce la salida del evaluador a evidencia.
 
-    Solo hay aprobación posible si el evaluador dijo `ok`, salió con 0 y cada
-    suite obligatoria está presente, completa y aprobada. Todo lo demás es un
-    fallo con detalle o una evaluación incompleta; nunca un éxito por omisión.
+    Solo hay aprobación posible si el evaluador dijo `ok`, salió con 0, cada
+    suite obligatoria está presente, completa y aprobada, y cada ataque pedido
+    (`attack_ids`) tiene resultado. Todo lo demás es un fallo con detalle o una
+    evaluación incompleta; nunca un éxito por omisión.
     """
     if not isinstance(result, dict):
         return Evidence(False, integrity_flags=flags, incomplete=["salida del evaluador mal formada"])
@@ -122,17 +198,11 @@ def evidence_from(result: object, flags: list[Flag], exit_code: int | None = 0, 
     incomplete += inc
     holdout_ok, holdout_failed, inc = _suite_evidence("tests reservados", suites.get("holdout"), expect_holdout)
     incomplete += inc
+    confirmed, inc = _attack_evidence(result.get("attacks"), attack_ids)
+    incomplete += inc
 
-    attacks = result.get("attacks")
-    confirmed: list[str] = []
-    if attacks is not None:
-        try:
-            confirmed = [str(a) for a in attacks["confirmed"]]
-            if attacks["complete"] is not True:
-                incomplete.append("ataques reservados sin resultado")
-        except (KeyError, TypeError):
-            incomplete.append("resultado de ataques mal formado")
-
+    reserved = set(plan.split.reserved) if plan else set()
+    describe = plan.describe if plan else str
     rejected = bool(base_failed or holdout_failed or confirmed)
     if status == "ok" and (rejected or not base_ok or not holdout_ok):
         incomplete.append("el evaluador dijo ok pero su detalle no lo respalda")
@@ -142,7 +212,8 @@ def evidence_from(result: object, flags: list[Flag], exit_code: int | None = 0, 
         base_tests_passed=base_ok,
         base_tests_failed=base_failed,
         integrity_flags=flags,
-        holdout_attacks_succeeded=confirmed,
+        visible_attacks_succeeded=[describe(i) for i in confirmed if i not in reserved],
+        holdout_attacks_succeeded=[describe(i) for i in confirmed if i in reserved],
         holdout_tests_failed=holdout_failed,
         incomplete=incomplete,
     )
@@ -156,7 +227,10 @@ def check(
     target: Target | None = None,
     holdout_tests: Path | None = None,
     budget: float = 120.0,
+    plan: AttackPlan | None = None,
 ) -> CheckResult:
+    """Revisa el PR. `plan` se pasa cuando el PR es un parche de seguridad: son
+    los ataques que debe bloquear."""
     if mode not in MODES:
         raise ValueError(f"modo desconocido: {mode}")
     base_sha, pr_sha = gitio.resolve(repo, base), gitio.resolve(repo, pr)
@@ -176,29 +250,36 @@ def check(
             inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget)
             return _baseline(mode, base_sha, pr_sha, inside)
 
+        if mode == "visible":
+            holdout_tests = None
+        attacks = () if plan is None else (plan.attacks if mode == "full" else plan.subset(plan.split.visible))
+        split = plan.split.to_dict() if plan else None
+
+        def done(result: dict | None, ev: Evidence) -> CheckResult:
+            verdict = decide(ev)
+            return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, verdict.notes, flags, evaluator=result, split=split)
+
         flags = integrity.scan(repo, base_sha, pr_sha, target.tests_dir)
         if not gitio.is_ancestor(repo, base_sha, pr_sha):
-            ev = Evidence(False, integrity_flags=flags, incomplete=["la rama del PR no contiene la punta de la base; hay que actualizarla"])
-            return _full(base_sha, pr_sha, flags, None, ev)
+            return done(None, Evidence(False, integrity_flags=flags, incomplete=["la rama del PR no contiene la punta de la base; hay que actualizarla"]))
         workdir = sandbox.prepare_eval_workdir(base_tree, target.tests_dir, tmp_path / "eval")
+        attacks_file = None
+        if attacks:
+            attacks_file = tmp_path / "attacks.json"
+            attacks_file.write_text(json.dumps([a.to_dict() for a in attacks], ensure_ascii=False))
         sandbox.build_evaluator_image()
         try:
             app = sandbox.start_app(pr_tree, target)
         except sandbox.SandboxError as e:
-            ev = Evidence(False, integrity_flags=flags, incomplete=[f"la app del PR no se pudo construir o levantar: {e}"])
-            return _full(base_sha, pr_sha, flags, None, ev)
+            return done(None, Evidence(False, integrity_flags=flags, incomplete=[f"la app del PR no se pudo construir o levantar: {e}"]))
         try:
-            code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget)
+            code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget, attacks_file)
         finally:
             sandbox.stop(app)
-        return _full(base_sha, pr_sha, flags, result, evidence_from(result, flags, code, holdout_tests is not None))
+        ev = evidence_from(result, flags, code, holdout_tests is not None, plan, tuple(a.id for a in attacks))
+        return done(result, ev)
 
 
 def _baseline(mode: str, base_sha: str, pr_sha: str, inside: dict) -> CheckResult:
     reasons = [] if inside["passed"] else ["pytest falló dentro del contenedor" + (" (tiempo agotado)" if inside["timed_out"] else "")]
     return CheckResult(mode, base_sha, pr_sha, inside["passed"], reasons, inside=inside)
-
-
-def _full(base_sha: str, pr_sha: str, flags: list[Flag], result: dict | None, ev: Evidence) -> CheckResult:
-    verdict = decide(ev)
-    return CheckResult("full", base_sha, pr_sha, verdict.approved, verdict.reasons, verdict.notes, flags, evaluator=result)

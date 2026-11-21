@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "httpx>=0.28"]
 
 [project.scripts]
 contraprueba = "contraprueba.cli:main"

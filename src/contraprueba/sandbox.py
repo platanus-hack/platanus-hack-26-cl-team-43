@@ -203,35 +203,70 @@ def start_app(context: Path, case: Case | Target) -> AppHandle:
     return AppHandle(run_id, run_id, container, image, f"http://app:{case.app.port}")
 
 
-def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_dir: Path | None = None, budget: float = 120.0) -> tuple[int, dict]:
+INCOMPLETE = {"schema": 1, "status": "incomplete", "suites": {}, "attacks": None}
+
+
+def _run_trusted(app: AppHandle, name: str, mounts: list[tuple[Path, str]], args: list[str], budget: float,
+                 entrypoint: list[str] | None = None) -> tuple[int | None, str, str]:
+    """Corre la imagen de Contraprueba en la red de la app. Devuelve (código, stdout, stderr);
+    código None si hubo que matarlo por tiempo."""
+    cmd = ["run", "--rm", "--name", name, "--network", app.network, *HARDENING]
+    for src, dst in mounts:
+        cmd += ["-v", f"{src.resolve()}:{dst}:ro"]
+    if entrypoint:
+        cmd += ["--entrypoint", entrypoint[0]]
+    cmd += [EVALUATOR_IMAGE, *(entrypoint[1:] if entrypoint else []), *args]
+    try:
+        proc = _docker(*cmd, timeout=budget + 45, check=False)
+    except subprocess.TimeoutExpired:
+        _docker("rm", "-f", name, check=False, timeout=60)
+        return None, "", ""
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def _last_json(stdout: str) -> dict | None:
+    try:
+        data = json.loads(stdout.strip().splitlines()[-1])
+    except (IndexError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_dir: Path | None = None,
+                  budget: float = 120.0, attacks_file: Path | None = None) -> tuple[int, dict]:
     """Corre el evaluador contra la app. Devuelve (código de salida, JSON del evaluador).
 
     Si el contenedor no termina en `budget` + margen, se mata y se devuelve una
     evaluación incompleta.
     """
-    name = f"{app.run_id}-eval"
-    args = [
-        "run", "--rm", "--name", name, "--network", app.network, *HARDENING,
-        "-v", f"{workdir.resolve()}:/work/base:ro",
-    ]
+    mounts = [(workdir, "/work/base")]
+    args = ["--base-url", app.base_url, "--health", case.app.health, "--tests-dir", case.tests_dir, "--budget", str(budget)]
     if holdout_dir is not None:
-        args += ["-v", f"{holdout_dir.resolve()}:/work/holdout:ro"]
-    args += [
-        EVALUATOR_IMAGE, "--base-url", app.base_url, "--health", case.app.health,
-        "--tests-dir", case.tests_dir, "--budget", str(budget),
-    ]
-    if holdout_dir is not None:
+        mounts.append((holdout_dir, "/work/holdout"))
         args += ["--holdout-dir", "/work/holdout"]
-    try:
-        proc = _docker(*args, timeout=budget + 45, check=False)
-    except subprocess.TimeoutExpired:
-        _docker("rm", "-f", name, check=False, timeout=60)
-        return 2, {"schema": 1, "status": "incomplete", "errors": ["el evaluador no terminó a tiempo"], "suites": {}, "attacks": None}
-    try:
-        result = json.loads(proc.stdout.strip().splitlines()[-1])
-    except (IndexError, json.JSONDecodeError):
-        return 2, {"schema": 1, "status": "incomplete", "errors": [f"salida ilegible del evaluador: {proc.stderr.strip()[-500:]}"], "suites": {}, "attacks": None}
-    return proc.returncode, result
+    if attacks_file is not None:
+        mounts.append((attacks_file, "/work/attacks.json"))
+        args += ["--attacks", "/work/attacks.json"]
+    code, out, err = _run_trusted(app, f"{app.run_id}-eval", mounts, args, budget)
+    if code is None:
+        return 2, {**INCOMPLETE, "errors": ["el evaluador no terminó a tiempo"]}
+    result = _last_json(out)
+    if result is None:
+        return 2, {**INCOMPLETE, "errors": [f"salida ilegible del evaluador: {err.strip()[-500:]}"]}
+    return code, result
+
+
+def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budget: float = 60.0) -> list[dict]:
+    """Genera y confirma variantes de ataque contra la app (que debe ser la de la rama base)."""
+    code, out, err = _run_trusted(
+        app, f"{app.run_id}-red", [(inventory_file, "/work/inventory.json")],
+        ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json", "--budget", str(budget)],
+        budget, entrypoint=["python", "-m", "contraprueba.redteam"],
+    )
+    data = _last_json(out) if code == 0 else None
+    if data is None or "attacks" not in data:
+        raise SandboxError(f"el equipo rojo no terminó: {(out + err).strip()[-500:]}")
+    return data["attacks"]
 
 
 def stop(app: AppHandle) -> None:

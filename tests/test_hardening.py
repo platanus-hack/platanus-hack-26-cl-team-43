@@ -26,6 +26,8 @@ REQ = {"method": "GET", "path": "/x"}
     {"status_in": [200], "body_contains": [""]},
     {"status_in": [200], "body_contains": [None]},
     {"status_in": [200], "body_not_contains": "x"},
+    {"body_contains_any": "FAC"},
+    {"body_contains_any": [""]},
     None,
     [],
 ])

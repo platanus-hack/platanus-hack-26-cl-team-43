@@ -63,7 +63,30 @@ La política es restrictiva a propósito: arreglar un test existente o un fixtur
 |---|---|---|---|
 | `ci` | los del PR | mismo contenedor que el código | código de salida de pytest |
 | `restore` | los de la base; se borran los hooks que no están en la base | mismo contenedor que el código | código de salida de pytest |
-| `full` | los de la base | contenedor evaluador, por HTTP | `gate.decide` sobre la evidencia y las marcas |
+| `visible` | los de la base, más los ataques que vio el parchador | contenedor evaluador, por HTTP | `gate.decide`; es la validación que el parchador puede hacerse a sí mismo |
+| `full` | los de la base, más todos los ataques y los tests funcionales reservados | contenedor evaluador, por HTTP | `gate.decide` sobre la evidencia y las marcas |
+
+## Ataques y tests reservados
+
+Cuando el PR es un parche de seguridad, Contraprueba recibe los ataques que ese parche debe bloquear.
+
+- **De dónde salen.** `redteam.py` los genera por plantillas, sin ningún modelo, a partir del inventario del caso (usuarios, registros y archivos con dueño) y de las rutas que la app publica en su OpenAPI. Para autorización, un usuario pide el registro de otro en cada ruta que recibe un id. Para archivos, pide el archivo de otro escribiendo la ruta de siete formas. Un candidato solo se conserva si se confirma contra la rama base: el dueño obtiene el recurso y el otro usuario también.
+- **Cómo se confirma un ataque.** Cada recurso del inventario declara sus marcas: textos que solo su dueño debería ver. El ataque funciona si la respuesta trae alguna marca, con cualquier código de respuesta: los datos de otro usuario son una fuga aunque lleguen con un 201 o un 403. Una ruta solo se ataca si al dueño le entrega alguna marca; si no, ahí no hay nada que proteger.
+- **Mismo cliente que los tests.** Los ataques salen con el mismo cliente HTTP que usan los tests, así que sus pedidos tienen el mismo formato. Esto no los hace indistinguibles en general: la app todavía puede fijarse en el orden o en la cantidad de pedidos.
+- **Una sesión por usuario.** Cada identidad usa su propio cliente y conserva su propia sesión; la respuesta que recibe el dueño en un control no puede darle acceso al otro usuario.
+- **Controles.** Antes de cada ataque se hace el mismo pedido como dueño del recurso, y debe seguir funcionando. Si falla, la app le está negando el servicio a ese cliente: el ataque queda sin veredicto y la evaluación incompleta, nunca «bloqueado».
+- **Redirecciones.** Se siguen dentro del mismo origen, hasta cinco saltos, y la marca se busca en cada respuesta de la cadena. Si la cadena no termina (más saltos, o sale del origen) y no se vio la fuga, el ataque queda sin veredicto.
+- **Lectura de la respuesta.** El cuerpo se lee con el charset que declara la respuesta. Si no se puede leer como texto (charset desconocido, bytes que no corresponden, binario), el ataque queda sin veredicto. La marca también se busca en la forma decodificada del JSON, para que un escape no la esconda.
+- **Qué ve el parchador.** La selección se hace por grupos completos (una ruta, una forma de escribir la ruta), familia por familia, con semilla. El parchador ve algunos grupos; los demás quedan reservados enteros. Así la reserva mide si el parche arregla la falla y no solo las variantes que vio. La selección queda en la evidencia. En el caso de demo son 29 ataques en 12 grupos de 2 familias: 4 grupos visibles y 8 reservados. Los ataques de un grupo no son observaciones independientes, y varias formas de escribir una ruta de archivo llegan al mismo acceso: lo que cuenta es el número de grupos.
+- **Tests funcionales reservados.** Viven fuera del repo y el parchador no los ve. Detectan el parche que bloquea los ataques rompiendo una función.
+- **Resultado por ataque.** `confirmed`, `blocked` o `error`. Un ataque que no se pudo ejecutar deja la evaluación incompleta. El orquestador recalcula todo desde los resultados por ataque: cada ataque pedido debe tener exactamente un resultado.
+
+Límites:
+
+- El generador solo conoce rutas GET con un id en la ruta o en un parámetro de consulta, y depende de que el inventario sea correcto y sus marcas sean distintivas.
+- La marca se busca en claro. Un parche que deliberadamente codifica los datos que filtra (por ejemplo en base64) no se detecta por esta vía.
+- Es una evaluación de caja negra y acotada en el tiempo. Una app que se comporta bien durante la evaluación y cambia después (por tiempo o por cantidad de pedidos) no se detecta; los controles solo cubren el caso en que deja de atender.
+- Los puntos de una ruta (`/a/../b`) se normalizan antes de enviarla; las variantes de archivo van en el parámetro de consulta, que sí viaja tal cual.
 
 ## Contrato del evaluador
 
@@ -97,7 +120,7 @@ Los casos son fixtures locales confiables. Aun así, `materialize` valida las ca
 |---|---|---|
 | **0. Contratos** | Formato de `case.json`, `Attack` con predicado estructurado, app de demo en la base, imágenes de app y evaluador | Ambas imágenes construyen; los tests de la base pasan contra la app desde el evaluador |
 | **1. Hito 1: aislamiento** | `sandbox.py` (red interna, levantar y bajar), caso con trampa (el paquete parcha los reportes de pytest), modos `ci`, `restore` y `full` | `ci` y `restore` dan verde; `full` rechaza con archivo y línea; un caso honesto se aprueba |
-| **2. Hito 2: reservados** | `holdout.run_attacks`, `redteam.py` por plantillas (otro id, otra ruta, otro método, codificación del path), ramas de parche a medias y parche correcto | El parche a medias pasa su propia validación y cae con un ataque reservado; el correcto se aprueba |
+| **2. Hito 2: reservados** | `holdout.run_attacks`, `redteam.py` por plantillas (otro id, otra ruta, otras formas de escribir la ruta del archivo), ramas de parche a medias, parche correcto y parche que rompe una función | El parche a medias pasa su propia validación y cae con un ataque reservado; el correcto se aprueba |
 | **3. Medición** | `bench.py` sobre casos etiquetados: detección, falsas alarmas y utilidad con intervalos de Wilson; `fixer.py` en vivo | Tabla de Contraprueba contra las tres líneas base; al menos un parche generado en vivo pasa por la revisión |
 | **4. Entrega** | Página de resultados para `deploy-url`, guion de la demo, respuestas a las preguntas del jurado | Demo de punta a punta en menos de 3 minutos; `platanus-hack-project.jsonc` completo |
 

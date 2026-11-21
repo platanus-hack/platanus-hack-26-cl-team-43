@@ -1,120 +1,6 @@
 [
   {
-    "id": "authz-invoice-1",
-    "family": "authz",
-    "request": {
-      "method": "GET",
-      "path": "/invoices/1",
-      "headers": {
-        "Authorization": "Bearer tok-bob"
-      }
-    },
-    "succeeded_if": {
-      "status_in": [
-        200
-      ],
-      "body_contains": [
-        "FAC-A-001"
-      ]
-    }
-  },
-  {
-    "id": "authz-invoice-2",
-    "family": "authz",
-    "request": {
-      "method": "GET",
-      "path": "/invoices/2",
-      "headers": {
-        "Authorization": "Bearer tok-bob"
-      }
-    },
-    "succeeded_if": {
-      "status_in": [
-        200
-      ],
-      "body_contains": [
-        "FAC-A-002"
-      ]
-    }
-  },
-  {
-    "id": "authz-invoice-reverse",
-    "family": "authz",
-    "request": {
-      "method": "GET",
-      "path": "/invoices/3",
-      "headers": {
-        "Authorization": "Bearer tok-alice"
-      }
-    },
-    "succeeded_if": {
-      "status_in": [
-        200
-      ],
-      "body_contains": [
-        "FAC-B-001"
-      ]
-    }
-  },
-  {
-    "id": "authz-pdf",
-    "family": "authz",
-    "request": {
-      "method": "GET",
-      "path": "/invoices/1/pdf",
-      "headers": {
-        "Authorization": "Bearer tok-bob"
-      }
-    },
-    "succeeded_if": {
-      "status_in": [
-        200
-      ],
-      "body_contains": [
-        "FAC-A-001"
-      ]
-    }
-  },
-  {
-    "id": "authz-total",
-    "family": "authz",
-    "request": {
-      "method": "GET",
-      "path": "/invoices/1/total",
-      "headers": {
-        "Authorization": "Bearer tok-bob"
-      }
-    },
-    "succeeded_if": {
-      "status_in": [
-        200
-      ],
-      "body_contains": [
-        "1428.0"
-      ]
-    }
-  },
-  {
-    "id": "authz-v2",
-    "family": "authz",
-    "request": {
-      "method": "GET",
-      "path": "/v2/invoices/1",
-      "headers": {
-        "Authorization": "Bearer tok-bob"
-      }
-    },
-    "succeeded_if": {
-      "status_in": [
-        200
-      ],
-      "body_contains": [
-        "FAC-A-001"
-      ]
-    }
-  },
-  {
-    "id": "authz-export",
+    "id": "authz-invoices-export-ids-1-bob-9b46aeb8",
     "family": "authz",
     "request": {
       "method": "GET",
@@ -124,54 +10,524 @@
       }
     },
     "succeeded_if": {
-      "status_in": [
-        200
-      ],
-      "body_contains": [
+      "body_contains_any": [
         "FAC-A-001"
       ]
+    },
+    "group": "invoices-export-ids-745d67f9",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/export?ids=1",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-A-001"
+        ]
+      }
     }
   },
   {
-    "id": "files-traversal",
-    "family": "files",
+    "id": "authz-invoices-export-ids-2-bob-57284942",
+    "family": "authz",
     "request": {
       "method": "GET",
-      "path": "/attachments?name=../alice/contrato.txt",
+      "path": "/invoices/export?ids=2",
       "headers": {
         "Authorization": "Bearer tok-bob"
       }
     },
     "succeeded_if": {
-      "status_in": [
-        200
-      ],
-      "body_contains": [
-        "FAC-A-001"
+      "body_contains_any": [
+        "FAC-A-002"
       ]
+    },
+    "group": "invoices-export-ids-745d67f9",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/export?ids=2",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-A-002"
+        ]
+      }
     }
   },
   {
-    "id": "files-encoded",
-    "family": "files",
+    "id": "authz-invoices-export-ids-3-alice-6863ce03",
+    "family": "authz",
     "request": {
       "method": "GET",
-      "path": "/attachments?name=..%2Falice%2Fcontrato.txt",
+      "path": "/invoices/export?ids=3",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "FAC-B-001"
+      ]
+    },
+    "group": "invoices-export-ids-745d67f9",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/export?ids=3",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-B-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-invoices-invoice-id-1-bob-1e5f2d45",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/1",
       "headers": {
         "Authorization": "Bearer tok-bob"
       }
     },
     "succeeded_if": {
-      "status_in": [
-        200
-      ],
-      "body_contains": [
+      "body_contains_any": [
         "FAC-A-001"
       ]
+    },
+    "group": "invoices-invoice-id-83969e81",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/1",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-A-001"
+        ]
+      }
     }
   },
   {
-    "id": "files-dot-prefix",
+    "id": "authz-invoices-invoice-id-2-bob-8ad0c67b",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/2",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "FAC-A-002"
+      ]
+    },
+    "group": "invoices-invoice-id-83969e81",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/2",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-A-002"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-invoices-invoice-id-3-alice-ace16692",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/3",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "FAC-B-001"
+      ]
+    },
+    "group": "invoices-invoice-id-83969e81",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/3",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-B-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-invoices-invoice-id-pdf-1-bob-43ec6304",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/1/pdf",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "FAC-A-001"
+      ]
+    },
+    "group": "invoices-invoice-id-pdf-9899af0d",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/1/pdf",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-A-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-invoices-invoice-id-pdf-2-bob-4a98460f",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/2/pdf",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "FAC-A-002"
+      ]
+    },
+    "group": "invoices-invoice-id-pdf-9899af0d",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/2/pdf",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-A-002"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-invoices-invoice-id-pdf-3-alice-d6d1ac52",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/3/pdf",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "FAC-B-001"
+      ]
+    },
+    "group": "invoices-invoice-id-pdf-9899af0d",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/3/pdf",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-B-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-invoices-invoice-id-total-1-bob-07cc2a7f",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/1/total",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "1428.0"
+      ]
+    },
+    "group": "invoices-invoice-id-total-7d7a4b89",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/1/total",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "1428.0"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-invoices-invoice-id-total-2-bob-82ba5de7",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/2/total",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "952.0"
+      ]
+    },
+    "group": "invoices-invoice-id-total-7d7a4b89",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/2/total",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "952.0"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-invoices-invoice-id-total-3-alice-a197ce1e",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/invoices/3/total",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "535.5"
+      ]
+    },
+    "group": "invoices-invoice-id-total-7d7a4b89",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/invoices/3/total",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "535.5"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-v2-invoices-invoice-id-1-bob-fc09d57b",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/v2/invoices/1",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "FAC-A-001"
+      ]
+    },
+    "group": "v2-invoices-invoice-id-5622d669",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/v2/invoices/1",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-A-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-v2-invoices-invoice-id-2-bob-d9028103",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/v2/invoices/2",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "FAC-A-002"
+      ]
+    },
+    "group": "v2-invoices-invoice-id-5622d669",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/v2/invoices/2",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-A-002"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-v2-invoices-invoice-id-3-alice-e8e4b474",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/v2/invoices/3",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "FAC-B-001"
+      ]
+    },
+    "group": "v2-invoices-invoice-id-5622d669",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/v2/invoices/3",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "FAC-B-001"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-absolute-alice-contrato-txt-bob-b9b62526",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=/app/data/attachments/alice/contrato.txt",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Contrato de servicios"
+      ]
+    },
+    "group": "absolute",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=contrato.txt",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Contrato de servicios"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-absolute-bob-orden-txt-alice-1ce89791",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=/app/data/attachments/bob/orden.txt",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Orden de compra"
+      ]
+    },
+    "group": "absolute",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=orden.txt",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Orden de compra"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-dot-parent-alice-contrato-txt-bo-1cf09eeb",
     "family": "files",
     "request": {
       "method": "GET",
@@ -181,12 +537,365 @@
       }
     },
     "succeeded_if": {
-      "status_in": [
-        200
-      ],
-      "body_contains": [
-        "FAC-A-001"
+      "body_contains_any": [
+        "Contrato de servicios"
       ]
+    },
+    "group": "dot-parent",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=contrato.txt",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Contrato de servicios"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-dot-parent-bob-orden-txt-alice-a6296ecd",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=./../bob/orden.txt",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Orden de compra"
+      ]
+    },
+    "group": "dot-parent",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=orden.txt",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Orden de compra"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-double-slash-alice-contrato-txt-b6d18b81",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=..//alice/contrato.txt",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Contrato de servicios"
+      ]
+    },
+    "group": "double-slash",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=contrato.txt",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Contrato de servicios"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-double-slash-bob-orden-txt-alice-02d44fdb",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=..//bob/orden.txt",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Orden de compra"
+      ]
+    },
+    "group": "double-slash",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=orden.txt",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Orden de compra"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-encoded-dots-alice-contrato-txt-329d0eae",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=%2e%2e/alice/contrato.txt",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Contrato de servicios"
+      ]
+    },
+    "group": "encoded-dots",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=contrato.txt",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Contrato de servicios"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-encoded-dots-bob-orden-txt-alice-d281b830",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=%2e%2e/bob/orden.txt",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Orden de compra"
+      ]
+    },
+    "group": "encoded-dots",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=orden.txt",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Orden de compra"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-encoded-slash-alice-contrato-txt-1a8d1215",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=..%2Falice%2Fcontrato.txt",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Contrato de servicios"
+      ]
+    },
+    "group": "encoded-slash",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=contrato.txt",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Contrato de servicios"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-encoded-slash-bob-orden-txt-alic-f8dcb555",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=..%2Fbob%2Forden.txt",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Orden de compra"
+      ]
+    },
+    "group": "encoded-slash",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=orden.txt",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Orden de compra"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-own-dir-parent-alice-contrato-tx-610af704",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=../bob/../alice/contrato.txt",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Contrato de servicios"
+      ]
+    },
+    "group": "own-dir-parent",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=contrato.txt",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Contrato de servicios"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-own-dir-parent-bob-orden-txt-ali-43311699",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=../alice/../bob/orden.txt",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Orden de compra"
+      ]
+    },
+    "group": "own-dir-parent",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=orden.txt",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Orden de compra"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-parent-alice-contrato-txt-bob-8a232ee6",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=../alice/contrato.txt",
+      "headers": {
+        "Authorization": "Bearer tok-bob"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Contrato de servicios"
+      ]
+    },
+    "group": "parent",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=contrato.txt",
+        "headers": {
+          "Authorization": "Bearer tok-alice"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Contrato de servicios"
+        ]
+      }
+    }
+  },
+  {
+    "id": "files-attachments-name-parent-bob-orden-txt-alice-d9fa07da",
+    "family": "files",
+    "request": {
+      "method": "GET",
+      "path": "/attachments?name=../bob/orden.txt",
+      "headers": {
+        "Authorization": "Bearer tok-alice"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "Orden de compra"
+      ]
+    },
+    "group": "parent",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/attachments?name=orden.txt",
+        "headers": {
+          "Authorization": "Bearer tok-bob"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "Orden de compra"
+        ]
+      }
     }
   }
 ]

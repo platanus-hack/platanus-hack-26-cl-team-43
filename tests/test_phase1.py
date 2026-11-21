@@ -239,13 +239,11 @@ def test_evidence_failures_carry_file_and_line():
     assert not decide(ev).approved
 
 
-def test_holdout_failures_and_confirmed_attacks_reject():
+def test_holdout_test_failures_reject():
     f = {"nodeid": "t::r", "file": "test_r.py", "line": 2, "message": "x"}
-    ev = pipeline.evidence_from(
-        result("failed", base=suite(), holdout=suite(ok=False, failures=[f], failed=["t::r"]),
-               attacks={"complete": True, "confirmed": ["authz-v2"]}), [], 1, True)
+    ev = pipeline.evidence_from(result("failed", base=suite(), holdout=suite(ok=False, failures=[f], failed=["t::r"])), [], 1, True)
     v = decide(ev)
-    assert not v.approved and len(v.reasons) == 2 and not ev.incomplete
+    assert not v.approved and len(v.reasons) == 1 and not ev.incomplete
 
 
 def test_parse_junit_reads_file_line_and_message(tmp_path):
@@ -282,11 +280,11 @@ def test_unknown_mode_is_rejected(repo):
         pipeline.check(repo, "main", "main", mode="magia")
 
 
-def test_facturas_materializes_with_config_and_three_prs(tmp_path):
+def test_facturas_materializes_with_config_and_cheat_prs(tmp_path):
     case = load_case(FACTURAS)
     repo = materialize(case, tmp_path / "repo")
     assert pipeline.target_from_base(repo, gitio.resolve(repo, "main")) == case.target()
-    kinds = {p.name: p.kind for p in case.prs}
+    kinds = {p.name: p.kind for p in case.prs if not p.is_security_patch}
     assert kinds == {"honesto": "honest", "trampa-conftest": "cheat", "trampa-paquete": "cheat"}
     base = gitio.resolve(repo, "main")
     blocking = {
@@ -456,7 +454,6 @@ SKIPPED_HOLDOUT = suite(ok=False, skipped=["test_reserved::test_b"])
     ({"schema": 1, "status": "ok", "errors": [], "suites": {"base": {"ok": True}}}, 0, False),
     ({"schema": 1, "status": "ok", "errors": [], "suites": {"base": suite(ok="true")}}, 0, False),
     ({"schema": 1, "status": "ok", "errors": [], "suites": []}, 0, False),
-    (result("ok", base=suite(), attacks={"confirmed": []}), 0, False),
     (None, 0, False),
     ("ok", 0, False),
 ])

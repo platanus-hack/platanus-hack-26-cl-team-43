@@ -18,6 +18,8 @@ class Evidence:
     # Detalle de cada test de la base que falla (archivo, línea, mensaje).
     base_tests_failed: list[str] = field(default_factory=list)
     integrity_flags: list[Flag] = field(default_factory=list)
+    # Ataques que el parchador vio y que todavía funcionan.
+    visible_attacks_succeeded: list[str] = field(default_factory=list)
     # Ataques reservados que todavía funcionan contra el código del PR.
     holdout_attacks_succeeded: list[str] = field(default_factory=list)
     # Tests funcionales reservados que fallan.
@@ -45,6 +47,8 @@ def decide(ev: Evidence) -> Verdict:
     for f in ev.integrity_flags:
         if f.severity == "block":
             reasons.append(str(f))
+    for a in ev.visible_attacks_succeeded:
+        reasons.append(f"ataque visible sigue funcionando: {a}")
     for a in ev.holdout_attacks_succeeded:
         reasons.append(f"ataque reservado sigue funcionando: {a}")
     for t in ev.holdout_tests_failed:
