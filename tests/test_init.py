@@ -133,6 +133,36 @@ def test_workflow_text_grants_the_permissions_the_action_needs():
     assert "CACHAI_HIDDEN_KEY" in text
 
 
+def _strict_yaml(text):
+    """Carga YAML rechazando claves repetidas, como hace GitHub Actions."""
+    import yaml
+
+    class Strict(yaml.SafeLoader):
+        pass
+
+    def mapping(loader, node, deep=False):
+        keys = [loader.construct_object(k, deep=deep) for k, _ in node.value]
+        assert len(keys) == len(set(keys)), f"claves repetidas: {keys}"
+        return loader.construct_mapping(node, deep)
+
+    Strict.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, mapping)
+    return yaml.load(text, Loader=Strict)
+
+
+@pytest.mark.parametrize("key_env", [init.DEFAULT_KEY_ENV, "OTRA_CLAVE"])
+def test_generated_workflow_is_valid_yaml_without_repeated_keys(key_env):
+    wf = _strict_yaml(init.workflow_text(key_env))
+    assert wf["permissions"] == {"contents": "read", "pull-requests": "write", "checks": "write"}
+
+
+def test_workflow_text_adds_only_missing_permissions(tmp_path):
+    example = tmp_path / "workflow.yml"
+    example.write_text("name: x\non: pull_request\npermissions:\n  contents: read\n\njobs:\n  cachai:\n    runs-on: ubuntu-latest\n"
+                       "    steps:\n      - uses: x\n        with:\n          hidden-key: ${{ secrets.CACHAI_HIDDEN_KEY }}\n")
+    wf = _strict_yaml(init.workflow_text(example=example))
+    assert wf["permissions"] == {"contents": "read", "pull-requests": "write", "checks": "write"}
+
+
 def test_validate_config_uses_the_published_loader():
     target = init.validate_config(load_case(FACTURAS).target().to_dict())
     assert target.tests_dir == "tests"

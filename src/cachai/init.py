@@ -366,8 +366,12 @@ def workflow_text(key_env: str = DEFAULT_KEY_ENV, example: Path = EXAMPLE_WORKFL
     perms = "permissions:\n  contents: read\n"
     if perms not in text:
         raise InitError("examples/workflow.yml cambió de forma: no encuentro su bloque de permisos")
-    text = text.replace(perms, "permissions:\n  contents: read\n  pull-requests: write  # comentario con el veredicto\n"
-                              "  checks: write  # check con el detalle\n")
+    block = text[text.index(perms):].split("\n\n", 1)[0]
+    missing = [(k, why) for k, why in (("pull-requests", "comentario con el veredicto"), ("checks", "check con el detalle"))
+               if not re.search(rf"^  {k}:", block, re.M)]
+    if missing:
+        extra = "".join(f"  {k}: write  # {why}\n" for k, why in missing)
+        text = text.replace(perms, perms + extra, 1)
     if key_env != DEFAULT_KEY_ENV:
         old = "hidden-key: ${{ secrets.CACHAI_HIDDEN_KEY }}"
         if old not in text:
