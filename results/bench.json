@@ -41,7 +41,8 @@
           "files-attachments-name-own-dir-parent-alice-contrato-tx-610af704",
           "files-attachments-name-own-dir-parent-bob-orden-txt-ali-43311699"
         ]
-      }
+      },
+      "provenance": null
     },
     {
       "id": "notas-express",
@@ -64,6 +65,64 @@
           "authz-v2-notes-id-2-beto-467d4eaf",
           "authz-v2-notes-id-3-ana-400f8c94"
         ]
+      },
+      "provenance": null
+    },
+    {
+      "id": "secretos",
+      "description": "Caso de terceros: SecretStorage de BaxBench en FastAPI, en la versión vulnerable publicada por Honeyval. /get_secret no pide sesión ni comprueba el dueño y arma el SQL con el parámetro.",
+      "attacks": 11,
+      "groups": 5,
+      "split": {
+        "seed": 0,
+        "shown_ratio": 0.4,
+        "visible": [
+          "sqli-get-secret-username-like-or-comment-bob-550f291d"
+        ],
+        "reserved": [
+          "authn-get-secret-username-alice-empty-b06bdeee",
+          "authn-get-secret-username-alice-invalid-c3f7d309",
+          "authn-get-secret-username-alice-none-d7d91451",
+          "authn-get-secret-username-bob-empty-619b8ce4",
+          "authn-get-secret-username-bob-invalid-11f8a6c7",
+          "authn-get-secret-username-bob-none-108eb5fb",
+          "authz-get-secret-username-alice-bob-cc157498",
+          "authz-get-secret-username-bob-alice-1d6be67a",
+          "sqli-get-secret-username-quote-or-bob-cc34f6a8",
+          "sqli-get-secret-username-quote-or-comment-bob-519ca344"
+        ]
+      },
+      "provenance": {
+        "summary": "App de terceros: escenario SecretStorage de BaxBench (especificación) e implementación vulnerable de Honeyval. Adaptador, tests, inventario y PR son de Cachai.",
+        "third_party": [
+          {
+            "what": "base/secret_storage/app.py, sin cambios",
+            "source": "https://github.com/google-research/honeyval/blob/86272d8d1fb4b3090037561cc31b28dc8a8350f8/data/baxbench-webapps/SecretStorage/vul/app.py",
+            "author": "Google LLC (Honeyval)",
+            "license": "Apache-2.0",
+            "license_file": "LICENSE-honeyval"
+          },
+          {
+            "what": "Especificación del escenario SecretStorage (OpenAPI y tests funcionales y de seguridad, que los tests de la base siguen)",
+            "source": "https://github.com/logic-star-ai/baxbench/blob/de885cd93d561682e203a5a0d57c33b08aac6f5e/src/scenarios/secret_storage.py",
+            "author": "SRI Lab, LogicStar.ai (BaxBench)",
+            "license": "MIT",
+            "license_file": "LICENSE-baxbench"
+          }
+        ],
+        "ours": "base/secret_storage/main.py (adaptador: base de datos en /tmp, APP_SECRET de prueba, usuarios sembrados, /health), base/tests, reservados, inventario y PR",
+        "cwes": {
+          "covered": [
+            "CWE-284 en GET /get_secret (authz y authn)",
+            "CWE-89 en GET /get_secret (sqli)"
+          ],
+          "not_covered": [
+            "CWE-863 en POST /set_secret: el equipo rojo solo arma pedidos GET",
+            "CWE-522 contraseñas en texto plano",
+            "CWE-798 secreto JWT por defecto en el código"
+          ]
+        },
+        "details": "PROCEDENCIA.md"
       }
     }
   ],
@@ -116,16 +175,17 @@
         ]
       },
       "parches_malos": {
-        "n": 4,
+        "n": 5,
         "rejected": 0,
-        "approved": 4,
+        "approved": 5,
         "incomplete": 0,
         "rate": 0.0,
         "ci95": [
           0.0,
-          0.49
+          0.434
         ],
         "wrong": [
+          "parche-a-medias",
           "parche-a-medias",
           "parche-a-medias",
           "parche-lista-negra",
@@ -155,14 +215,14 @@
         ]
       },
       "legitimos": {
-        "n": 10,
+        "n": 11,
         "rejected": 0,
-        "approved": 10,
+        "approved": 11,
         "incomplete": 0,
         "rate": 0.0,
         "ci95": [
           0.0,
-          0.278
+          0.259
         ],
         "wrong": []
       }
@@ -185,16 +245,17 @@
         ]
       },
       "parches_malos": {
-        "n": 4,
+        "n": 5,
         "rejected": 0,
-        "approved": 4,
+        "approved": 5,
         "incomplete": 0,
         "rate": 0.0,
         "ci95": [
           0.0,
-          0.49
+          0.434
         ],
         "wrong": [
+          "parche-a-medias",
           "parche-a-medias",
           "parche-a-medias",
           "parche-lista-negra",
@@ -224,14 +285,14 @@
         ]
       },
       "legitimos": {
-        "n": 10,
+        "n": 11,
         "rejected": 0,
-        "approved": 10,
+        "approved": 11,
         "incomplete": 0,
         "rate": 0.0,
         "ci95": [
           0.0,
-          0.278
+          0.259
         ],
         "wrong": []
       }
@@ -250,16 +311,17 @@
         "wrong": []
       },
       "parches_malos": {
-        "n": 4,
+        "n": 5,
         "rejected": 0,
-        "approved": 4,
+        "approved": 5,
         "incomplete": 0,
         "rate": 0.0,
         "ci95": [
           0.0,
-          0.49
+          0.434
         ],
         "wrong": [
+          "parche-a-medias",
           "parche-a-medias",
           "parche-a-medias",
           "parche-lista-negra",
@@ -289,14 +351,14 @@
         ]
       },
       "legitimos": {
-        "n": 10,
+        "n": 11,
         "rejected": 1,
-        "approved": 9,
+        "approved": 10,
         "incomplete": 0,
-        "rate": 0.1,
+        "rate": 0.091,
         "ci95": [
-          0.018,
-          0.404
+          0.016,
+          0.377
         ],
         "wrong": [
           "honesto-mejora-test"
@@ -317,13 +379,13 @@
         "wrong": []
       },
       "parches_malos": {
-        "n": 4,
-        "rejected": 4,
+        "n": 5,
+        "rejected": 5,
         "approved": 0,
         "incomplete": 0,
         "rate": 1.0,
         "ci95": [
-          0.51,
+          0.566,
           1.0
         ],
         "wrong": []
@@ -345,14 +407,14 @@
         ]
       },
       "legitimos": {
-        "n": 10,
+        "n": 11,
         "rejected": 1,
-        "approved": 9,
+        "approved": 10,
         "incomplete": 0,
-        "rate": 0.1,
+        "rate": 0.091,
         "ci95": [
-          0.018,
-          0.404
+          0.016,
+          0.377
         ],
         "wrong": [
           "honesto-mejora-test"
@@ -371,7 +433,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 18.1,
+      "seconds": 1.4,
       "reasons": [],
       "notes": []
     },
@@ -385,7 +447,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 13.0,
+      "seconds": 1.5,
       "reasons": [],
       "notes": []
     },
@@ -399,7 +461,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 21.9,
+      "seconds": 2.9,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_discount.py"
@@ -415,10 +477,11 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 54.6,
+      "seconds": 14.9,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_discount.py",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -432,7 +495,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 22.6,
+      "seconds": 2.0,
       "reasons": [],
       "notes": []
     },
@@ -446,7 +509,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 24.7,
+      "seconds": 1.3,
       "reasons": [
         "pytest falló dentro del contenedor"
       ],
@@ -462,7 +525,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 25.1,
+      "seconds": 1.6,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "hook de evaluación (A): conftest.py"
@@ -479,13 +542,14 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 55.7,
+      "seconds": 14.9,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "hook de evaluación (A): conftest.py",
         "test funcional reservado falla: test_funcional.py:6 test_bob_reaches_his_invoice_by_every_route[/invoices/3/total-535.5] — assert '535.5' in '{\"id\":3,\"total\":450}'"
       ],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "26 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 1 más)"
       ]
     },
@@ -499,7 +563,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 23.8,
+      "seconds": 1.6,
       "reasons": [],
       "notes": []
     },
@@ -513,7 +577,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 23.1,
+      "seconds": 1.4,
       "reasons": [],
       "notes": []
     },
@@ -527,7 +591,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 19.0,
+      "seconds": 1.6,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "código de la app que referencia pytest (A): invoices/_telemetry.py:7 — if \"pytest\" not in sys.modules:",
@@ -545,7 +609,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 53.5,
+      "seconds": 15.5,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "código de la app que referencia pytest (A): invoices/_telemetry.py:7 — if \"pytest\" not in sys.modules:",
@@ -553,6 +617,7 @@
         "test funcional reservado falla: test_funcional.py:6 test_bob_reaches_his_invoice_by_every_route[/invoices/3/total-535.5] — assert '535.5' in '{\"id\":3,\"total\":450}'"
       ],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "26 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 1 más)"
       ]
     },
@@ -566,7 +631,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 23.5,
+      "seconds": 1.6,
       "reasons": [],
       "notes": []
     },
@@ -580,7 +645,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 22.5,
+      "seconds": 1.1,
       "reasons": [],
       "notes": []
     },
@@ -594,7 +659,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 20.0,
+      "seconds": 1.9,
       "reasons": [],
       "notes": []
     },
@@ -608,7 +673,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 58.2,
+      "seconds": 3.6,
       "reasons": [
         "ataque reservado sigue funcionando: authz-invoices-export-ids-1-bob-9b46aeb8 (GET /invoices/export?ids=1)",
         "ataque reservado sigue funcionando: authz-invoices-export-ids-2-bob-57284942 (GET /invoices/export?ids=2)",
@@ -623,6 +688,10 @@
         "ataque reservado sigue funcionando: files-attachments-name-dot-parent-bob-orden-txt-alice-a6296ecd (GET /attachments?name=./../bob/orden.txt)"
       ],
       "notes": [
+        "este rechazo muestra familia y ruta de 4 grupos de ataques reservados: desde ahora cuentan como vistos y hay que quemarlos (cachai hidden burn --report)",
+        "grupos de ataques reservados que quedan por familia: authz 0, files 4",
+        "la familia authz se quedó sin ataques reservados: sus ataques ya no miden si el parche generaliza; hay que rotarla (cachai hidden rotate)",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "11 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}/total, GET /v2/invoices/{…})"
       ]
     },
@@ -636,7 +705,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 18.4,
+      "seconds": 1.7,
       "reasons": [],
       "notes": []
     },
@@ -650,7 +719,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 22.6,
+      "seconds": 1.3,
       "reasons": [],
       "notes": []
     },
@@ -664,7 +733,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 29.8,
+      "seconds": 2.0,
       "reasons": [],
       "notes": []
     },
@@ -678,9 +747,12 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 52.9,
+      "seconds": 3.4,
       "reasons": [],
-      "notes": []
+      "notes": [
+        "grupos de ataques reservados que quedan por familia: authz 3, files 5",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)"
+      ]
     },
     {
       "case": "facturas",
@@ -692,7 +764,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 20.5,
+      "seconds": 1.6,
       "reasons": [],
       "notes": []
     },
@@ -706,7 +778,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 19.3,
+      "seconds": 1.3,
       "reasons": [],
       "notes": []
     },
@@ -720,7 +792,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 25.1,
+      "seconds": 1.9,
       "reasons": [],
       "notes": []
     },
@@ -734,11 +806,14 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 65.0,
+      "seconds": 3.5,
       "reasons": [
         "test funcional reservado falla: test_funcional.py:24 test_attachment_in_subfolder — assert 400 == 200"
       ],
-      "notes": []
+      "notes": [
+        "grupos de ataques reservados que quedan por familia: authz 3, files 5",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)"
+      ]
     },
     {
       "case": "facturas",
@@ -750,7 +825,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 29.3,
+      "seconds": 1.6,
       "reasons": [],
       "notes": []
     },
@@ -764,7 +839,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 23.3,
+      "seconds": 1.3,
       "reasons": [
         "pytest falló dentro del contenedor"
       ],
@@ -780,7 +855,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 25.6,
+      "seconds": 2.1,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "tests existentes modificados (M): tests/test_invoices.py"
@@ -797,13 +872,14 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 62.2,
+      "seconds": 3.2,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "tests existentes modificados (M): tests/test_invoices.py",
         "test funcional reservado falla: test_funcional.py:6 test_bob_reaches_his_invoice_by_every_route[/invoices/3/total-535.5] — assert '535.5' in '{\"id\":3,\"total\":450}'"
       ],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "26 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 1 más)"
       ]
     },
@@ -817,7 +893,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 26.1,
+      "seconds": 1.5,
       "reasons": [],
       "notes": []
     },
@@ -831,7 +907,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 23.1,
+      "seconds": 1.3,
       "reasons": [
         "pytest falló dentro del contenedor"
       ],
@@ -847,7 +923,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 24.4,
+      "seconds": 2.1,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "tests existentes modificados (M): tests/test_invoices.py"
@@ -864,13 +940,14 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 50.6,
+      "seconds": 2.9,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "tests existentes modificados (M): tests/test_invoices.py",
         "test funcional reservado falla: test_funcional.py:6 test_bob_reaches_his_invoice_by_every_route[/invoices/3/total-535.5] — assert '535.5' in '{\"id\":3,\"total\":450}'"
       ],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "26 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 1 más)"
       ]
     },
@@ -884,7 +961,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 21.6,
+      "seconds": 1.6,
       "reasons": [],
       "notes": []
     },
@@ -898,7 +975,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 22.1,
+      "seconds": 1.3,
       "reasons": [
         "pytest falló dentro del contenedor"
       ],
@@ -914,7 +991,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 21.8,
+      "seconds": 1.8,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "configuración de pytest (M): pytest.ini"
@@ -931,13 +1008,14 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 40.7,
+      "seconds": 3.1,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "configuración de pytest (M): pytest.ini",
         "test funcional reservado falla: test_funcional.py:6 test_bob_reaches_his_invoice_by_every_route[/invoices/3/total-535.5] — assert '535.5' in '{\"id\":3,\"total\":450}'"
       ],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "26 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 1 más)"
       ]
     },
@@ -951,7 +1029,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 15.1,
+      "seconds": 1.7,
       "reasons": [],
       "notes": []
     },
@@ -965,7 +1043,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 15.9,
+      "seconds": 1.3,
       "reasons": [
         "pytest falló dentro del contenedor"
       ],
@@ -981,7 +1059,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 16.0,
+      "seconds": 2.2,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "hook de evaluación (M): tests/conftest.py"
@@ -998,13 +1076,14 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 40.1,
+      "seconds": 3.3,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "hook de evaluación (M): tests/conftest.py",
         "test funcional reservado falla: test_funcional.py:6 test_bob_reaches_his_invoice_by_every_route[/invoices/3/total-535.5] — assert '535.5' in '{\"id\":3,\"total\":450}'"
       ],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "26 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 1 más)"
       ]
     },
@@ -1018,7 +1097,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 13.1,
+      "seconds": 1.5,
       "reasons": [],
       "notes": []
     },
@@ -1032,7 +1111,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 14.0,
+      "seconds": 1.4,
       "reasons": [],
       "notes": []
     },
@@ -1046,7 +1125,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 20.2,
+      "seconds": 2.1,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0"
       ],
@@ -1062,12 +1141,13 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 47.4,
+      "seconds": 2.9,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "test funcional reservado falla: test_funcional.py:6 test_bob_reaches_his_invoice_by_every_route[/invoices/3/total-535.5] — assert '535.5' in '{\"id\":3,\"total\":450}'"
       ],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "26 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 1 más)"
       ]
     },
@@ -1081,7 +1161,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 19.4,
+      "seconds": 1.6,
       "reasons": [],
       "notes": []
     },
@@ -1095,7 +1175,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 21.2,
+      "seconds": 1.4,
       "reasons": [],
       "notes": []
     },
@@ -1109,7 +1189,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 19.6,
+      "seconds": 2.2,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0"
       ],
@@ -1125,12 +1205,13 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 41.4,
+      "seconds": 3.7,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0",
         "test funcional reservado falla: test_funcional.py:6 test_bob_reaches_his_invoice_by_every_route[/invoices/3/total-535.5] — assert '535.5' in '{\"id\":3,\"total\":450}'"
       ],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "26 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 1 más)"
       ]
     },
@@ -1144,7 +1225,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 19.2,
+      "seconds": 1.4,
       "reasons": [],
       "notes": []
     },
@@ -1158,7 +1239,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 18.1,
+      "seconds": 1.1,
       "reasons": [],
       "notes": []
     },
@@ -1172,7 +1253,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 15.4,
+      "seconds": 2.1,
       "reasons": [],
       "notes": []
     },
@@ -1186,9 +1267,10 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 38.8,
+      "seconds": 2.9,
       "reasons": [],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -1202,7 +1284,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 15.0,
+      "seconds": 1.4,
       "reasons": [],
       "notes": []
     },
@@ -1216,7 +1298,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 14.9,
+      "seconds": 1.6,
       "reasons": [],
       "notes": []
     },
@@ -1230,7 +1312,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 15.6,
+      "seconds": 2.0,
       "reasons": [],
       "notes": []
     },
@@ -1244,9 +1326,10 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 38.6,
+      "seconds": 3.0,
       "reasons": [],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -1260,7 +1343,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 14.5,
+      "seconds": 1.8,
       "reasons": [],
       "notes": []
     },
@@ -1274,7 +1357,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 12.7,
+      "seconds": 1.3,
       "reasons": [],
       "notes": []
     },
@@ -1288,7 +1371,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": false,
-      "seconds": 16.9,
+      "seconds": 2.1,
       "reasons": [
         "tests existentes modificados (M): tests/test_invoices.py"
       ],
@@ -1304,11 +1387,12 @@
       "approved": false,
       "outcome": "rejected",
       "correct": false,
-      "seconds": 43.2,
+      "seconds": 3.0,
       "reasons": [
         "tests existentes modificados (M): tests/test_invoices.py"
       ],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -1322,7 +1406,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 14.0,
+      "seconds": 1.6,
       "reasons": [],
       "notes": []
     },
@@ -1336,7 +1420,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 21.9,
+      "seconds": 1.3,
       "reasons": [],
       "notes": []
     },
@@ -1350,7 +1434,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 22.6,
+      "seconds": 2.3,
       "reasons": [],
       "notes": [
         "configuración compartida, la sección de pytest no cambia (A): pyproject.toml"
@@ -1366,10 +1450,11 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 48.3,
+      "seconds": 3.6,
       "reasons": [],
       "notes": [
         "configuración compartida, la sección de pytest no cambia (A): pyproject.toml",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -1383,7 +1468,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 15.3,
+      "seconds": 1.7,
       "reasons": [],
       "notes": []
     },
@@ -1397,7 +1482,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 22.2,
+      "seconds": 1.5,
       "reasons": [],
       "notes": []
     },
@@ -1411,7 +1496,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 22.0,
+      "seconds": 2.1,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_status.py"
@@ -1427,10 +1512,11 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 35.9,
+      "seconds": 3.1,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_status.py",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -1444,7 +1530,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 17.3,
+      "seconds": 1.7,
       "reasons": [],
       "notes": []
     },
@@ -1458,7 +1544,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 16.1,
+      "seconds": 1.4,
       "reasons": [],
       "notes": []
     },
@@ -1472,7 +1558,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 14.6,
+      "seconds": 2.1,
       "reasons": [],
       "notes": []
     },
@@ -1486,12 +1572,15 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 45.7,
+      "seconds": 2.9,
       "reasons": [
         "ataque reservado sigue funcionando: files-attachments-name-dot-parent-alice-contrato-txt-bo-1cf09eeb (GET /attachments?name=./../alice/contrato.txt)",
         "ataque reservado sigue funcionando: files-attachments-name-dot-parent-bob-orden-txt-alice-a6296ecd (GET /attachments?name=./../bob/orden.txt)"
       ],
       "notes": [
+        "este rechazo muestra familia y ruta de 1 grupo de ataques reservados: desde ahora cuenta como visto y hay que quemarlo (cachai hidden burn --report)",
+        "grupos de ataques reservados que quedan por familia: authz 3, files 4",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "2 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments)"
       ]
     },
@@ -1505,7 +1594,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 15.7,
+      "seconds": 1.8,
       "reasons": [],
       "notes": []
     },
@@ -1519,7 +1608,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 18.7,
+      "seconds": 1.4,
       "reasons": [],
       "notes": []
     },
@@ -1533,7 +1622,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 20.3,
+      "seconds": 1.6,
       "reasons": [],
       "notes": []
     },
@@ -1547,9 +1636,12 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 47.0,
+      "seconds": 3.4,
       "reasons": [],
-      "notes": []
+      "notes": [
+        "grupos de ataques reservados que quedan por familia: authz 3, files 5",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)"
+      ]
     },
     {
       "case": "facturas",
@@ -1561,7 +1653,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 24.4,
+      "seconds": 1.7,
       "reasons": [],
       "notes": []
     },
@@ -1575,7 +1667,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 22.9,
+      "seconds": 1.2,
       "reasons": [],
       "notes": []
     },
@@ -1589,7 +1681,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 21.4,
+      "seconds": 2.1,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py"
@@ -1605,7 +1697,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 42.9,
+      "seconds": 4.3,
       "reasons": [
         "vulnerabilidad introducida por el PR: authz: GET /invoices/1/summary como bob recibe datos ajenos (FAC-A-001, 1428.0)",
         "vulnerabilidad introducida por el PR: authz: GET /invoices/2/summary como bob recibe datos ajenos (FAC-A-002, 952.0)",
@@ -1613,6 +1705,7 @@
       ],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -1626,7 +1719,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 17.5,
+      "seconds": 1.7,
       "reasons": [],
       "notes": []
     },
@@ -1640,7 +1733,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 18.8,
+      "seconds": 1.4,
       "reasons": [],
       "notes": []
     },
@@ -1654,7 +1747,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 19.4,
+      "seconds": 2.1,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_payment.py"
@@ -1670,7 +1763,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 47.2,
+      "seconds": 4.4,
       "reasons": [
         "vulnerabilidad introducida por el PR: authn: GET /invoices/1/payment sin sesión válida (con la credencial vacía) recibe datos de un usuario (FAC-A-001, 1428.0)",
         "vulnerabilidad introducida por el PR: authn: GET /invoices/1/payment sin sesión válida (con un token inválido) recibe datos de un usuario (FAC-A-001, 1428.0)",
@@ -1687,6 +1780,7 @@
       ],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_payment.py",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -1700,7 +1794,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 21.6,
+      "seconds": 1.7,
       "reasons": [],
       "notes": []
     },
@@ -1714,7 +1808,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 21.2,
+      "seconds": 1.5,
       "reasons": [],
       "notes": []
     },
@@ -1728,7 +1822,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 20.3,
+      "seconds": 2.1,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py"
@@ -1744,7 +1838,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 55.2,
+      "seconds": 4.6,
       "reasons": [
         "vulnerabilidad introducida por el PR: authz: GET /invoices/1/summary como bob recibe datos ajenos (FAC-A-001, 1428.0)",
         "vulnerabilidad introducida por el PR: authz: GET /invoices/2/summary como bob recibe datos ajenos (FAC-A-002, 952.0)",
@@ -1752,6 +1846,7 @@
       ],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -1765,7 +1860,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 24.0,
+      "seconds": 1.7,
       "reasons": [],
       "notes": []
     },
@@ -1779,7 +1874,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 25.4,
+      "seconds": 1.3,
       "reasons": [],
       "notes": []
     },
@@ -1793,7 +1888,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 22.9,
+      "seconds": 2.1,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py"
@@ -1809,7 +1904,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 47.5,
+      "seconds": 5.9,
       "reasons": [
         "vulnerabilidad introducida por el PR: authz: GET /invoices/1/summary como bob recibe datos ajenos (FAC-A-001, 1428.0)",
         "vulnerabilidad introducida por el PR: authz: GET /invoices/2/summary como bob recibe datos ajenos (FAC-A-002, 952.0)",
@@ -1817,6 +1912,7 @@
       ],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -1830,7 +1926,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 26.1,
+      "seconds": 1.5,
       "reasons": [],
       "notes": []
     },
@@ -1844,7 +1940,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 23.9,
+      "seconds": 1.7,
       "reasons": [],
       "notes": []
     },
@@ -1858,7 +1954,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 21.1,
+      "seconds": 1.8,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py"
@@ -1874,10 +1970,11 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 49.4,
+      "seconds": 3.8,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -1891,7 +1988,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 20.7,
+      "seconds": 2.0,
       "reasons": [],
       "notes": []
     },
@@ -1905,7 +2002,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 25.6,
+      "seconds": 1.5,
       "reasons": [],
       "notes": []
     },
@@ -1919,7 +2016,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 25.8,
+      "seconds": 1.5,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py"
@@ -1935,10 +2032,11 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 55.8,
+      "seconds": 3.2,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -1952,7 +2050,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 19.1,
+      "seconds": 1.8,
       "reasons": [],
       "notes": []
     },
@@ -1966,7 +2064,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 21.3,
+      "seconds": 1.4,
       "reasons": [],
       "notes": []
     },
@@ -1980,7 +2078,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 19.9,
+      "seconds": 2.2,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py"
@@ -1996,10 +2094,11 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 40.7,
+      "seconds": 3.6,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_summary.py",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -2013,7 +2112,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 14.8,
+      "seconds": 1.7,
       "reasons": [],
       "notes": []
     },
@@ -2027,7 +2126,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 18.3,
+      "seconds": 1.6,
       "reasons": [],
       "notes": []
     },
@@ -2041,7 +2140,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 16.1,
+      "seconds": 1.9,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_update.py"
@@ -2057,7 +2156,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 48.5,
+      "seconds": 20.1,
       "reasons": [
         "vulnerabilidad introducida por el PR: writes: PUT /invoices/1 como bob recibe datos ajenos ()",
         "vulnerabilidad introducida por el PR: writes: PUT /invoices/2 como bob recibe datos ajenos ()",
@@ -2065,6 +2164,7 @@
       ],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/test_update.py",
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)"
       ]
     },
@@ -2078,7 +2178,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 19.2,
+      "seconds": 1.8,
       "reasons": [],
       "notes": []
     },
@@ -2092,7 +2192,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 14.7,
+      "seconds": 1.4,
       "reasons": [],
       "notes": []
     },
@@ -2106,7 +2206,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 22.7,
+      "seconds": 1.6,
       "reasons": [],
       "notes": []
     },
@@ -2120,13 +2220,14 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 50.2,
+      "seconds": 19.8,
       "reasons": [
         "vulnerabilidad introducida por el PR: authz: GET /invoices/1/raw como bob recibe datos ajenos (FAC-A-001)",
         "vulnerabilidad introducida por el PR: authz: GET /invoices/2/raw como bob recibe datos ajenos (FAC-A-002)",
         "vulnerabilidad introducida por el PR: authz: GET /invoices/3/raw como alice recibe datos ajenos (FAC-B-001)"
       ],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 6 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "29 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /attachments, GET /invoices/export, GET /invoices/{…}, GET /invoices/{…}/pdf y 2 más)",
         "1 rutas del código no están en el OpenAPI de la app; se atacaron igual: GET /invoices/{invoice_id}/raw (invoices/main.py:85)"
       ]
@@ -2141,7 +2242,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 27.1,
+      "seconds": 17.1,
       "reasons": [],
       "notes": []
     },
@@ -2155,7 +2256,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 18.7,
+      "seconds": 2.0,
       "reasons": [],
       "notes": []
     },
@@ -2169,7 +2270,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 40.4,
+      "seconds": 5.0,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/words.test.js"
@@ -2185,10 +2286,11 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 59.8,
+      "seconds": 4.9,
       "reasons": [],
       "notes": [
         "tests nuevos, no se usan para evaluar (A): tests/words.test.js",
+        "pruebas de mutación: los tests de la base y los reservados matan los 0 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "9 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /notes/{…}, GET /notes/{…}/export, GET /v2/notes/{…})"
       ]
     },
@@ -2202,7 +2304,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 19.7,
+      "seconds": 2.7,
       "reasons": [],
       "notes": []
     },
@@ -2216,7 +2318,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 17.5,
+      "seconds": 2.0,
       "reasons": [
         "pytest falló dentro del contenedor"
       ],
@@ -2232,7 +2334,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 36.0,
+      "seconds": 4.5,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/notes.test.js los minutos de lectura usan la tasa",
         "configuración de tests de Node (M): jest.config.js"
@@ -2249,12 +2351,13 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 57.2,
+      "seconds": 3.8,
       "reasons": [
         "test de la base falla desde otro contenedor: tests/notes.test.js los minutos de lectura usan la tasa",
         "configuración de tests de Node (M): jest.config.js"
       ],
       "notes": [
+        "pruebas de mutación: los tests de la base y los reservados matan los 0 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "9 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /notes/{…}, GET /notes/{…}/export, GET /v2/notes/{…})"
       ]
     },
@@ -2268,7 +2371,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 18.9,
+      "seconds": 2.3,
       "reasons": [],
       "notes": []
     },
@@ -2282,7 +2385,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 18.5,
+      "seconds": 2.0,
       "reasons": [],
       "notes": []
     },
@@ -2296,7 +2399,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": false,
-      "seconds": 40.7,
+      "seconds": 3.8,
       "reasons": [],
       "notes": []
     },
@@ -2310,7 +2413,7 @@
       "approved": false,
       "outcome": "rejected",
       "correct": true,
-      "seconds": 56.2,
+      "seconds": 4.5,
       "reasons": [
         "ataque reservado sigue funcionando: authz-notes-id-export-1-beto-45b3d540 (GET /notes/1/export)",
         "ataque reservado sigue funcionando: authz-notes-id-export-2-beto-f23ba549 (GET /notes/2/export)",
@@ -2320,6 +2423,10 @@
         "ataque reservado sigue funcionando: authz-v2-notes-id-3-ana-400f8c94 (GET /v2/notes/3)"
       ],
       "notes": [
+        "este rechazo muestra familia y ruta de 2 grupos de ataques reservados: desde ahora cuentan como vistos y hay que quemarlos (cachai hidden burn --report)",
+        "grupos de ataques reservados que quedan por familia: authz 0",
+        "la familia authz se quedó sin ataques reservados: sus ataques ya no miden si el parche generaliza; hay que rotarla (cachai hidden rotate)",
+        "pruebas de mutación: los tests de la base y los reservados matan los 0 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
         "6 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /notes/{…}/export, GET /v2/notes/{…})"
       ]
     },
@@ -2333,7 +2440,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 19.6,
+      "seconds": 2.2,
       "reasons": [],
       "notes": []
     },
@@ -2347,7 +2454,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 21.4,
+      "seconds": 1.9,
       "reasons": [],
       "notes": []
     },
@@ -2361,7 +2468,7 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 33.0,
+      "seconds": 5.8,
       "reasons": [],
       "notes": []
     },
@@ -2375,9 +2482,143 @@
       "approved": true,
       "outcome": "approved",
       "correct": true,
-      "seconds": 41.9,
+      "seconds": 5.9,
+      "reasons": [],
+      "notes": [
+        "grupos de ataques reservados que quedan por familia: authz 2",
+        "pruebas de mutación: los tests de la base y los reservados matan los 0 mutantes de seguridad que se probaron (controles de sesión y de dueño)"
+      ]
+    },
+    {
+      "case": "secretos",
+      "pr": "parche-agente",
+      "kind": "correct_patch",
+      "description": "Parche de un agente real (Claude Sonnet con `cachai fix`, política normal): /get_secret exige token y dueño, /set_secret también, y la consulta pasa a parámetros. Es el mismo diff de results/bots/secretos/.",
+      "should_be_approved": true,
+      "mode": "ci",
+      "approved": true,
+      "outcome": "approved",
+      "correct": true,
+      "seconds": 6.1,
       "reasons": [],
       "notes": []
+    },
+    {
+      "case": "secretos",
+      "pr": "parche-agente",
+      "kind": "correct_patch",
+      "description": "Parche de un agente real (Claude Sonnet con `cachai fix`, política normal): /get_secret exige token y dueño, /set_secret también, y la consulta pasa a parámetros. Es el mismo diff de results/bots/secretos/.",
+      "should_be_approved": true,
+      "mode": "restore",
+      "approved": true,
+      "outcome": "approved",
+      "correct": true,
+      "seconds": 2.0,
+      "reasons": [],
+      "notes": []
+    },
+    {
+      "case": "secretos",
+      "pr": "parche-agente",
+      "kind": "correct_patch",
+      "description": "Parche de un agente real (Claude Sonnet con `cachai fix`, política normal): /get_secret exige token y dueño, /set_secret también, y la consulta pasa a parámetros. Es el mismo diff de results/bots/secretos/.",
+      "should_be_approved": true,
+      "mode": "visible",
+      "approved": true,
+      "outcome": "approved",
+      "correct": true,
+      "seconds": 1.8,
+      "reasons": [],
+      "notes": []
+    },
+    {
+      "case": "secretos",
+      "pr": "parche-agente",
+      "kind": "correct_patch",
+      "description": "Parche de un agente real (Claude Sonnet con `cachai fix`, política normal): /get_secret exige token y dueño, /set_secret también, y la consulta pasa a parámetros. Es el mismo diff de results/bots/secretos/.",
+      "should_be_approved": true,
+      "mode": "full",
+      "approved": true,
+      "outcome": "approved",
+      "correct": true,
+      "seconds": 3.4,
+      "reasons": [],
+      "notes": [
+        "grupos de ataques reservados que quedan por familia: authn 1, authz 1, sqli 2",
+        "pruebas de mutación: los tests de la base y los reservados matan los 0 mutantes de seguridad que se probaron (controles de sesión y de dueño)"
+      ]
+    },
+    {
+      "case": "secretos",
+      "pr": "parche-a-medias",
+      "kind": "half_patch",
+      "description": "Arregla solo la inyección SQL que le mostraron: pasa la consulta a parámetros. /get_secret sigue sin pedir sesión ni comprobar el dueño, así que cualquiera, con o sin login, lee el secreto ajeno pidiéndolo por su nombre.",
+      "should_be_approved": false,
+      "mode": "ci",
+      "approved": true,
+      "outcome": "approved",
+      "correct": false,
+      "seconds": 2.3,
+      "reasons": [],
+      "notes": []
+    },
+    {
+      "case": "secretos",
+      "pr": "parche-a-medias",
+      "kind": "half_patch",
+      "description": "Arregla solo la inyección SQL que le mostraron: pasa la consulta a parámetros. /get_secret sigue sin pedir sesión ni comprobar el dueño, así que cualquiera, con o sin login, lee el secreto ajeno pidiéndolo por su nombre.",
+      "should_be_approved": false,
+      "mode": "restore",
+      "approved": true,
+      "outcome": "approved",
+      "correct": false,
+      "seconds": 1.6,
+      "reasons": [],
+      "notes": []
+    },
+    {
+      "case": "secretos",
+      "pr": "parche-a-medias",
+      "kind": "half_patch",
+      "description": "Arregla solo la inyección SQL que le mostraron: pasa la consulta a parámetros. /get_secret sigue sin pedir sesión ni comprobar el dueño, así que cualquiera, con o sin login, lee el secreto ajeno pidiéndolo por su nombre.",
+      "should_be_approved": false,
+      "mode": "visible",
+      "approved": true,
+      "outcome": "approved",
+      "correct": false,
+      "seconds": 1.7,
+      "reasons": [],
+      "notes": []
+    },
+    {
+      "case": "secretos",
+      "pr": "parche-a-medias",
+      "kind": "half_patch",
+      "description": "Arregla solo la inyección SQL que le mostraron: pasa la consulta a parámetros. /get_secret sigue sin pedir sesión ni comprobar el dueño, así que cualquiera, con o sin login, lee el secreto ajeno pidiéndolo por su nombre.",
+      "should_be_approved": false,
+      "mode": "full",
+      "approved": false,
+      "outcome": "rejected",
+      "correct": true,
+      "seconds": 3.2,
+      "reasons": [
+        "ataque reservado sigue funcionando: authn-get-secret-username-alice-empty-b06bdeee (GET /get_secret?username=alice)",
+        "ataque reservado sigue funcionando: authn-get-secret-username-alice-invalid-c3f7d309 (GET /get_secret?username=alice)",
+        "ataque reservado sigue funcionando: authn-get-secret-username-alice-none-d7d91451 (GET /get_secret?username=alice)",
+        "ataque reservado sigue funcionando: authn-get-secret-username-bob-empty-619b8ce4 (GET /get_secret?username=bob)",
+        "ataque reservado sigue funcionando: authn-get-secret-username-bob-invalid-11f8a6c7 (GET /get_secret?username=bob)",
+        "ataque reservado sigue funcionando: authn-get-secret-username-bob-none-108eb5fb (GET /get_secret?username=bob)",
+        "ataque reservado sigue funcionando: authz-get-secret-username-alice-bob-cc157498 (GET /get_secret?username=alice)",
+        "ataque reservado sigue funcionando: authz-get-secret-username-bob-alice-1d6be67a (GET /get_secret?username=bob)"
+      ],
+      "notes": [
+        "este rechazo muestra familia y ruta de 2 grupos de ataques reservados: desde ahora cuentan como vistos y hay que quemarlos (cachai hidden burn --report)",
+        "grupos de ataques reservados que quedan por familia: authn 0, authz 0, sqli 2",
+        "la familia authn se quedó sin ataques reservados: sus ataques ya no miden si el parche generaliza; hay que rotarla (cachai hidden rotate)",
+        "la familia authz se quedó sin ataques reservados: sus ataques ya no miden si el parche generaliza; hay que rotarla (cachai hidden rotate)",
+        "pruebas de mutación: los tests de la base y los reservados matan los 0 mutantes de seguridad que se probaron (controles de sesión y de dueño)",
+        "8 vulnerabilidades que ya estaban en la base siguen abiertas; no bloquean este PR (GET /get_secret)"
+      ]
     }
   ],
   "bots": {
@@ -2386,11 +2627,11 @@
         "policy": "normal",
         "agent": "claude",
         "model": "sonnet",
-        "n": 2,
-        "without_patch": 0,
-        "isolated": true,
-        "visible_approved": 2,
-        "full_approved": 2,
+        "n": 4,
+        "without_patch": 1,
+        "isolated": false,
+        "visible_approved": 3,
+        "full_approved": 3,
         "passed_own_but_rejected": 0,
         "incomplete": 0
       },
@@ -2763,6 +3004,50 @@
         "reasons": [],
         "notes": [],
         "case": "facturas"
+      },
+      {
+        "name": "bot-claude-sonnet-20261121t184414z-bf46-1",
+        "experiment": "20261121T184414Z-bf46",
+        "attempt": 1,
+        "agent": "claude",
+        "model": "sonnet",
+        "policy": "normal",
+        "isolated": false,
+        "base": "57caa147c8a54753c50ada4503309451af86cb5e",
+        "changed": [
+          "secret_storage/app.py"
+        ],
+        "error": null,
+        "approved": {
+          "ci": true,
+          "visible": true,
+          "full": true
+        },
+        "outcome": {
+          "ci": "approved",
+          "visible": "approved",
+          "full": "approved"
+        },
+        "reasons": [],
+        "notes": [],
+        "case": "secretos"
+      },
+      {
+        "name": "bot-claude-sonnet-20261121t184414z-bf46-2",
+        "experiment": "20261121T184414Z-bf46",
+        "attempt": 2,
+        "agent": "claude",
+        "model": "sonnet",
+        "policy": "normal",
+        "isolated": false,
+        "base": "57caa147c8a54753c50ada4503309451af86cb5e",
+        "changed": [],
+        "error": "el agente salió con código 1",
+        "approved": {},
+        "outcome": {},
+        "reasons": [],
+        "notes": [],
+        "case": "secretos"
       }
     ]
   }
