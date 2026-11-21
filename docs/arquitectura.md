@@ -3,7 +3,7 @@
 ## Vista general
 
 ```
-                 cachai check --repo R --base main --pr rama [--mode ci|restore|full]
+                 cachai check --repo R --base main --pr rama [--mode ci|restore|visible|full]
                                          │
    ┌─────────────────────────────────────┼──────────────────────────────────────┐
    │ Orquestador (cli.py → pipeline.py), proceso confiable en el host            │

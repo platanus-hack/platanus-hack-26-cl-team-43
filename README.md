@@ -78,8 +78,11 @@ pip install -e ".[dev]"
 # Tabla de modos por PR del caso de demo
 cachai case cases/facturas
 
-# Un PR de un repo cuya rama base tiene .cachai.json
+# Un PR de un repo cuya rama base tiene .cachai.json.
+# En tu máquina, sin el material reservado, corre en modo visible y lo avisa:
+# no es el veredicto final, pero reproduce lo que el CI muestra.
 cachai check --repo <ruta> --base main --pr <rama>
+# En CI el modo va explícito (sin --mode, falla): el veredicto final es --mode full.
 
 # Medición completa y parches generados por un agente real
 cachai bench

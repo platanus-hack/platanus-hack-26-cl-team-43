@@ -8,6 +8,9 @@
 
 `check` revisa un PR de un repo cuya rama base tiene `.cachai.json`. Si
 el PR es un parche de seguridad, `--attacks` son los ataques que debe bloquear.
+Sin material reservado (`--holdout-tests`) y sin `--mode`, corre en modo
+`visible` y avisa que no es el veredicto final: es la revisión local del dev,
+que reproduce lo que vio sin que lo reservado salga del CI.
 `case` arma el repo de un caso de `cases/` y lo revisa; con `all` imprime la
 tabla de modos por PR. `redteam` genera las variantes de ataque del caso y las
 confirma contra su rama base. `check` y `case` salen con 0 si todo se aprueba.
@@ -18,8 +21,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 from . import bench, fixer, hidden, pipeline, sandbox
@@ -47,6 +52,80 @@ def _print(result: pipeline.CheckResult, args: argparse.Namespace) -> None:
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2) if args.json else result.to_text(use_color(args)))
 
 
+VISIBLE_WARNING = "faltan los ataques reservados, esto no es el veredicto final"
+CI_ENV = ("CI", "GITHUB_ACTIONS")
+
+
+class ModeError(Exception):
+    pass
+
+
+def check_mode(args: argparse.Namespace) -> str:
+    """El modo pedido o, si no se pidió, `full` con tests reservados a mano y
+    `visible` sin ellos. En CI no se adivina: un default que degrada a
+    `visible` aprobaría en silencio lo que `full` rechaza."""
+    if args.mode:
+        return args.mode
+    if args.holdout_tests:
+        return "full"
+    if any(os.environ.get(k) for k in CI_ENV):
+        raise ModeError("en CI hay que pasar --mode explícito (full para el veredicto final)")
+    return "visible"
+
+
+def visible_banner(color: bool) -> str:
+    lines = [f"MODO VISIBLE: {VISIBLE_WARNING}.",
+             "El CI suma ataques y tests que nadie ve antes del merge; allá este PR todavía puede caer.",
+             "Para el veredicto final, el CI corre --mode full con el material reservado."]
+    width = max(len(line) for line in lines) + 4
+    if not color:
+        return "\n".join(["!" * (width + 2), *(f"!! {line.ljust(width - 4)} !!" for line in lines), "!" * (width + 2)])
+    return "\n".join(["", *(f"\033[1;30;43m  {line.ljust(width - 2)}\033[0m" for line in lines), ""])
+
+
+def curl_command(request: dict, base_url: str) -> str:
+    """El pedido como lo manda el evaluador: ruta tal cual (sin normalizar `..` ni
+    expandir `[]{}`) y siguiendo redirecciones."""
+    method = request["method"]
+    cmd = ["curl", "-i", "--path-as-is", "--globoff", "-L"]
+    cmd += ["-I"] if method == "HEAD" else ["-X", method]
+    headers = request.get("headers") or {}
+    for k, v in headers.items():
+        cmd += ["-H", f"{k}: {v}"]
+    if "json" in request:
+        if not any(k.lower() == "content-type" for k in headers):
+            cmd += ["-H", "Content-Type: application/json"]
+        cmd += ["--data", json.dumps(request["json"], ensure_ascii=False)]
+    return " ".join(shlex.quote(c) for c in cmd) + f' "${{BASE_URL:-{base_url}}}"' + shlex.quote(request["path"])
+
+
+def reproduce_commands(result: pipeline.CheckResult, plan: "pipeline.AttackPlan | None", base_url: Callable[[], str]) -> list[str]:
+    """Un curl por cada ataque visible que sigue funcionando, para probarlo contra
+    la app local. Nunca uno reservado, aunque el evaluador lo devolviera."""
+    if plan is None or not result.evaluator or not result.evaluator.get("attacks"):
+        return []
+    visible = set(plan.split.visible)
+    by_id = {a.id: a for a in plan.attacks}
+    shown = [by_id[aid] for aid in result.evaluator["attacks"].get("confirmed", []) if aid in visible and aid in by_id]
+    if not shown:
+        return []
+    url = base_url()  # lee .cachai.json de la base solo si hay algo que reproducir
+    return [curl_command(a.request, url) for a in shown]
+
+
+def local_base_url(repo: str, base_sha: str) -> str:
+    try:
+        port = pipeline.target_from_base(repo, base_sha).app.port
+    except (ConfigError, ValueError, OSError):
+        port = 8000
+    return f"http://localhost:{port}"
+
+
+def warn_visible(color: bool) -> None:
+    sys.stdout.flush()  # que el aviso no se adelante al veredicto si stdout va a un archivo
+    print(visible_banner(color), file=sys.stderr, flush=True)
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     holdout = Path(args.holdout_tests) if args.holdout_tests else None
     plan = None
@@ -54,11 +133,27 @@ def cmd_check(args: argparse.Namespace) -> int:
         attacks = load_attacks(args.attacks)
         plan = pipeline.AttackPlan(tuple(attacks), split_record(attacks, args.shown, args.seed))
     try:
-        result = pipeline.check(args.repo, args.base, args.pr, args.mode, holdout_tests=holdout, budget=args.budget, plan=plan)
+        mode = check_mode(args)
+    except ModeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    # El aviso va a stderr: con --json la salida estándar sigue siendo JSON válido.
+    banner_color = args.color == "always" or (args.color == "auto" and sys.stderr.isatty() and not os.environ.get("NO_COLOR"))
+    if mode == "visible":
+        warn_visible(banner_color)
+    try:
+        result = pipeline.check(args.repo, args.base, args.pr, mode, holdout_tests=holdout, budget=args.budget, plan=plan)
     except ConfigError as e:
         print(f"error de configuración en la rama base: {e}", file=sys.stderr)
         return 2
     _print(result, args)
+    if mode == "visible":
+        if not args.json:
+            commands = reproduce_commands(result, plan, lambda: local_base_url(args.repo, result.base))
+            if commands:
+                print("\nPara reproducir cada ataque visible contra tu app local:")
+                print("\n".join(f"  {c}" for c in commands))
+        warn_visible(banner_color)
     return 0 if result.approved else 1
 
 
@@ -197,7 +292,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--repo", default=".")
     c.add_argument("--base", default="main")
     c.add_argument("--pr", required=True)
-    c.add_argument("--mode", choices=pipeline.MODES, default="full")
+    c.add_argument("--mode", choices=pipeline.MODES, default=None,
+                   help="por defecto: full si hay material reservado (--holdout-tests); si no, visible y lo avisa")
     c.add_argument("--holdout-tests", help="carpeta con tests funcionales reservados, fuera del repo")
     c.add_argument("--attacks", help="JSON con los ataques que el parche debe bloquear, fuera del repo")
     c.add_argument("--shown", type=float, default=0.4, help="proporción de grupos de ataques que vio el parchador")
