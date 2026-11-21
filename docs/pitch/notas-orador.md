@@ -28,15 +28,15 @@ Fin del pitch. Lo que sigue es respaldo: si falla la demo en vivo o para pregunt
 
 ## 7. Respaldo acto 1
 
-Usar solo si la terminal falla. «No arregló nada: metió un archivo que hace mentir a pytest. Evaluamos desde otro contenedor: ahí no puede tocar nada.»
+Usar solo si la terminal falla. Salida real del caso facturas, PR trampa-paquete. «Le pedimos agregar el descuento por pronto pago. Rompió el impuesto y lo tapó con un módulo dentro del paquete que parcha los reportes de pytest. El CI normal y hasta restaurar los tests dan verde. Desde otro contenedor no puede tocar nada: rechazado, con archivo y línea.»
 
 ## 8. Respaldo acto 2 (a medias)
 
-«El bot vio dos ataques y los tapó. Su validación: verde. Nosotros guardamos otros que nunca vio. Uno entra: rechazado.»
+«El bot vio dos ataques y los tapó. Su validación: verde. Nosotros guardamos otros que nunca vio. Uno entra: rechazado.» Ids y rutas reales de cases/facturas/attacks.json; la salida es provisional hasta que existan las ramas parche-a-medias y parche-correcto (Hito 2).
 
 ## 9. Respaldo acto 2 (correcto)
 
-«El segundo parche arregla la falla de verdad: aprobado, y con la evidencia de qué se probó.»
+«El segundo parche arregla la falla de verdad: aprobado, y con la evidencia de qué se probó.» Números provisionales hasta Hito 2: 12 tests de la base y 5 ataques authz reservados (7 menos 2 visibles).
 
 ## 10. Cómo funciona
 

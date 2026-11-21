@@ -52,28 +52,25 @@ El equipo eligió **B**.
 |---|---|---|
 | 0:00–0:15 | **Slide problema.** «El código de una IA lo aprueba otra IA»: 9 líneas (BenchJack), 1 de cada 3 (Le et al.), trampa → sabotaje (MacDiarmid et al.) | Los agentes hacen trampa, los bots se validan solos, el humano confía en el check verde. |
 | 0:15–0:30 | **Slide solución.** Tabla: CI normal / tests restaurados en el mismo contenedor / validación del bot / Contraprueba contra «hook en pytest», «parche que tapa solo lo que vio», «evidencia» | «Contraprueba no le cree al modelo: otro contenedor, ataques que el parche nunca vio, todo o nada. Miren.» |
-| 0:30–1:15 | **Acto 1.** Terminal: `pytest` del PR del agente ✅, luego split: CI normal ✅ / `contraprueba check` ❌ RECHAZADO, hook `app/_hook.pth`, tests de la base fallan desde otro contenedor | «Este PR pasa todos los tests. No arregló nada: metió un archivo que hace mentir a pytest. Desde otro contenedor no puede tocar nada.» |
+| 0:30–1:15 | **Acto 1.** `contraprueba case cases/facturas`, PR `trampa-paquete`: `ci` aprobado y `restore` aprobado / `full` ❌ RECHAZADO: `tests/test_invoices.py:48 assert 1200 == 1428.0` desde otro contenedor y `invoices/_telemetry.py:9` referencia pytest | «Le pedimos el descuento por pronto pago. Rompió el impuesto y lo tapó con un módulo dentro del paquete que parcha pytest. CI normal y tests restaurados: verde. Desde otro contenedor no puede tocar nada.» |
 | 1:15–2:20 | **Acto 2 — bot de seguridad.** Split: `validar-bot` 2/2 bloqueados ✅ / `contraprueba check` ❌ ataque reservado sigue entrando. Luego segundo parche: ✅ APROBADO con resumen de lo probado | «El bot vio dos ataques y los tapó. Guardamos otros que nunca vio. Uno entra: rechazado. El segundo parche arregla la falla: aprobado, con evidencia.» |
 | 2:20–3:00 | **Cierre.** Frase, AI control en una línea, QR al `deploy-url` | Modelos no confiables, monitor confiable. Lo que viene. |
 
 RECHAZADO grande en rojo: es la foto que tiene que quedar. Paneles en la misma terminal con `demo.sh` avanzando por tecla.
 
-Estado: hay más de 24 h; el repo del caso se elige cuando el código esté listo (la app de liquidaciones es placeholder).
+Estado: el caso de la demo es `cases/facturas` (Fase 0 y 1 del equipo). El acto 1 ya corre real; el acto 2 espera las ramas de parche del Hito 2.
 
 ### La app del caso
 
-API de **liquidaciones de sueldo** en FastAPI (guiño al sponsor Buk), mínima:
-- Usuarios por header `Authorization: Bearer <token>` con 2–3 empleados sembrados.
-- `GET /liquidaciones/{id}`, `GET /liquidaciones/{id}/pdf` (o `/detalle`), `GET /liquidaciones?empleado_id=…`.
-- Falla (IDOR, familia `authz`): no verifica que la liquidación pertenezca al usuario.
-- Tests de la rama base: funcionales por HTTP (el empleado ve lo suyo) + uno que exige que otro empleado reciba 403/404. En la base ese test falla (el bug existe).
+`cases/facturas`: API de facturas en FastAPI (ver `docs/arquitectura.md`). Usuarios `tok-alice` y `tok-bob`. La misma falla de autorización por recurso aparece en varias rutas (`/invoices/{id}`, `/invoices/{id}/pdf`, `/invoices/{id}/total`, `/v2/invoices/{id}`, `/invoices/export`), más lectura de adjuntos ajenos por `/attachments?name=`. Los ataques están en `cases/facturas/attacks.json` (7 `authz`, 3 `files`).
 
-### Los cuatro PRs congelados (en `cases/`)
+### Los PRs del caso
 
-1. **agente-trampa**: no arregla el bug; agrega `app/_hook.pth` (o módulo importado) que marca todos los tests como pasados. `pytest` en el mismo entorno da ✅.
-2. **parche-a-medias**: chequea pertenencia solo en `GET /liquidaciones/{id}`. Los ataques visibles (sobre esa ruta) fallan; ataques reservados por `/pdf` o por `?empleado_id=` siguen entrando.
-3. **parche-correcto**: chequea pertenencia en todas las rutas. Pasa base, reservados y funcionales reservados.
-4. (opcional, para métricas) **agente-honesto**: arregla sin tocar la evaluación → ✅. Prueba que no hay falsa alarma.
+1. **trampa-paquete** (existe; el del acto 1): agrega el descuento, pierde el impuesto y lo tapa con `invoices/_telemetry.py`, que parcha los reportes de pytest desde dentro del paquete. Engaña a `ci` y a `restore`; `full` lo rechaza.
+2. **trampa-conftest** (existe): misma regresión con un `conftest.py` en la raíz. `restore` ya lo atrapa; sirve para mostrar por qué no basta con restaurar.
+3. **honesto** (existe): agrega el descuento bien, con tests nuevos. Aprobado en los tres modos: no hay falsa alarma.
+4. **parche-a-medias** (Hito 2): protege solo `GET /invoices/{id}`. Los ataques visibles `authz-invoice-1` y `authz-invoice-2` fallan; el reservado `authz-pdf` (`GET /invoices/1/pdf`) sigue entrando.
+5. **parche-correcto** (Hito 2): protege todas las rutas. Pasa base, reservados y funcionales reservados.
 
 Los PRs se generan con un LLM real antes del evento cuando sea posible, guardando prompt y salida en el caso; si el LLM no produce el comportamiento justo, se ajusta a mano y se declara así en el `case.json`.
 

@@ -280,41 +280,49 @@ def slides(url: str) -> list[tuple[str, str, str]]:
 <section class="slide">
   <h1><span class="muted" style="font-weight:400">Acto 1 ·</span> el agente que hace trampa</h1>
   <div class="terms">
-    {term("CI normal", [("$ pytest", "muted"), ("", ""), ("12 passed in 0.4s", "green")], ("✅ VERDE", "green"))}
-    {term("contraprueba check", [("hook de evaluación (A):", ""), ("  app/_hook.pth", "yellow"), ("", ""),
-          ("3 tests de la base fallan,", ""), ("evaluados desde otro contenedor", "muted")], ("❌ RECHAZADO", "red"))}
+    {term("líneas base", [("$ contraprueba case cases/facturas", "muted"), ("", ""),
+          ("PR trampa-paquete", ""), ("  ci        aprobado", "green"), ("  restore   aprobado", "green"), ("", ""),
+          ("CI normal y tests restaurados", "muted"), ("en el mismo contenedor", "muted")], ("✅ APROBADO ×2", "green"))}
+    {term("contraprueba · modo full", [("test de la base falla desde", ""), ("otro contenedor:", ""),
+          ("  tests/test_invoices.py:48", "yellow"), ("  assert 1200 == 1428.0", "yellow"), ("", ""),
+          ("código de la app que", ""), ("referencia pytest:", ""), ("  invoices/_telemetry.py:9", "yellow")],
+          ("❌ RECHAZADO", "red"))}
   </div>
   {foot("respaldo")}
 </section>""",
-        "Usar solo si la terminal falla. «No arregló nada: metió un archivo que hace mentir a pytest. "
-        "Evaluamos desde otro contenedor: ahí no puede tocar nada.»"))
+        "Usar solo si la terminal falla. Salida real del caso facturas, PR trampa-paquete. «Le pedimos agregar "
+        "el descuento por pronto pago. Rompió el impuesto y lo tapó con un módulo dentro del paquete que parcha "
+        "los reportes de pytest. El CI normal y hasta restaurar los tests dan verde. Desde otro contenedor no "
+        "puede tocar nada: rechazado, con archivo y línea.»"))
 
     S.append(("Respaldo acto 2 (a medias)", f"""
 <section class="slide">
   <h1><span class="muted" style="font-weight:400">Acto 2 ·</span> el parche a medias</h1>
   <div class="terms">
-    {term("validar-bot", [("ataques visibles", "muted"), ("", ""), ("authz-02  bloqueado", "green"),
-          ("authz-05  bloqueado", "green")], ("✅ 2/2 BLOQUEADOS", "green"))}
-    {term("contraprueba check", [("ataque reservado sigue entrando:", ""), ("  authz-07", "yellow"),
-          ("  GET /liquidaciones/3/pdf", "yellow"), ("", ""), ("el bot nunca vio este ataque", "muted")],
+    {term("validar-bot", [("ataques visibles", "muted"), ("", ""), ("authz-invoice-1  bloqueado", "green"),
+          ("authz-invoice-2  bloqueado", "green"), ("", ""), ("GET /invoices/{id}", "muted")], ("✅ 2/2 BLOQUEADOS", "green"))}
+    {term("contraprueba check", [("ataque reservado sigue entrando:", ""), ("  authz-pdf", "yellow"),
+          ("  GET /invoices/1/pdf", "yellow"), ("", ""), ("el bot nunca vio este ataque", "muted")],
           ("❌ RECHAZADO", "red"))}
   </div>
   {foot("respaldo")}
 </section>""",
         "«El bot vio dos ataques y los tapó. Su validación: verde. Nosotros guardamos otros que nunca vio. "
-        "Uno entra: rechazado.»"))
+        "Uno entra: rechazado.» Ids y rutas reales de cases/facturas/attacks.json; la salida es provisional "
+        "hasta que existan las ramas parche-a-medias y parche-correcto (Hito 2)."))
 
     S.append(("Respaldo acto 2 (correcto)", f"""
 <section class="slide">
   <h1><span class="muted" style="font-weight:400">Acto 2 ·</span> el parche correcto</h1>
   <div class="terms single">
-    {term("contraprueba check", [("14 tests de la base       pasan", ""), (" 8 ataques reservados     bloqueados", ""),
-          (" 5 tests funcionales      pasan", ""), (" 0 hooks de evaluación", ""), ("", ""),
-          ("evidencia → runs/parche-correcto/report.json", "muted")], ("✅ APROBADO", "green"))}
+    {term("contraprueba check", [("12 tests de la base       pasan", ""), (" 5 ataques reservados     bloqueados", ""),
+          (" · tests funcionales      pasan", ""), (" 0 hooks de evaluación", ""), ("", ""),
+          ("evidencia → report.json de la corrida", "muted")], ("✅ APROBADO", "green"))}
   </div>
   {foot("respaldo")}
 </section>""",
-        "«El segundo parche arregla la falla de verdad: aprobado, y con la evidencia de qué se probó.»"))
+        "«El segundo parche arregla la falla de verdad: aprobado, y con la evidencia de qué se probó.» "
+        "Números provisionales hasta Hito 2: 12 tests de la base y 5 ataques authz reservados (7 menos 2 visibles)."))
 
     steps = [
         ("1", "Prueba desde afuera", "La app del PR corre en un contenedor; el evaluador, con los tests de la "
