@@ -8,6 +8,11 @@
   },
   "tests_dir": "tests",
   "attacks": "attacks.json",
+  "families": [
+    "authz",
+    "files",
+    "authn"
+  ],
   "inventory": {
     "users": {
       "alice": {
@@ -166,6 +171,11 @@
       "name": "vuln-endpoint-nuevo",
       "kind": "vulnerable",
       "description": "Un PR normal, sin decir nada de seguridad: agrega /invoices/{id}/summary con login pero sin comprobar el dueño. Cualquier usuario lee el resumen de facturas ajenas."
+    },
+    {
+      "name": "vuln-sin-auth",
+      "kind": "vulnerable",
+      "description": "Un PR normal para un widget de cobro: agrega /invoices/{id}/payment sin pedir sesión. Cualquiera, sin login, lee el número y el total de cualquier factura."
     }
   ]
 }

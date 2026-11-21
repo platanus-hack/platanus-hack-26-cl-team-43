@@ -112,8 +112,24 @@ def test_cases_materialize_a_v2_config(tmp_path):
     case = load_case(FACTURAS)
     repo = materialize(case, tmp_path / "repo")
     d = json.loads((repo / CONFIG_FILE).read_text())
-    assert d["version"] == 2 and d["attacks"]["families"] == ["authz", "files"]
+    # facturas declara sus familias en case.json: authn no tiene ataques en la base, pero se caza en el PR.
+    assert d["version"] == 2 and d["attacks"]["families"] == ["authz", "files", "authn"]
     assert load_target(json.dumps(d)) == case.target()
+
+
+def test_case_families_default_to_the_attacks_and_are_validated(tmp_path):
+    import shutil
+    root = tmp_path / "caso"
+    shutil.copytree(FACTURAS, root)
+    d = json.loads((root / "case.json").read_text())
+    del d["families"]
+    (root / "case.json").write_text(json.dumps(d))
+    assert load_case(root).target().attack_families == ("authz", "files")
+    for bad in (["rce"], ["authz", "authz"], "authz"):
+        d["families"] = bad
+        (root / "case.json").write_text(json.dumps(d))
+        with pytest.raises(ValueError):
+            load_case(root)
 
 
 def _git(repo, *args):

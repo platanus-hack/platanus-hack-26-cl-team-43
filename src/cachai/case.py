@@ -21,7 +21,7 @@ PR_KINDS = ("cheat", "honest", "half_patch", "correct_patch", "breaking_patch", 
 # vulnerable: PR normal (no dice ser de seguridad) que introduce una vulnerabilidad nueva.
 # Parches de seguridad: dicen arreglar la falla, así que deben bloquear los ataques del caso.
 PATCH_KINDS = ("half_patch", "correct_patch", "breaking_patch")
-CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "holdout_tests", "split", "inventory", "prs"}
+CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "families", "holdout_tests", "split", "inventory", "prs"}
 APP_KEYS = {"module", "port", "health", "dockerfile", "compose", "env"}
 COMPOSE_KEYS = {"file", "service"}
 PR_KEYS = {"name", "kind", "description", "delete"}
@@ -279,6 +279,8 @@ class Case:
     inventory: dict | None = None  # usuarios y recursos con dueño, para el equipo rojo
     description: str = ""
     prs: tuple[PRSpec, ...] = field(default_factory=tuple)
+    # Familias que el equipo rojo caza en el PR. Sin declarar: las de los ataques del caso.
+    families: tuple[str, ...] = ()
 
     @property
     def base_dir(self) -> Path:
@@ -292,7 +294,7 @@ class Case:
         return self.root / self.holdout_tests_dir if self.holdout_tests_dir else None
 
     def target(self) -> Target:
-        families = tuple(sorted({a.family for a in self.attacks()}))
+        families = self.families or tuple(sorted({a.family for a in self.attacks()}))
         return Target(self.app, self.tests_dir, self.inventory, families)
 
     def attacks(self) -> list[Attack]:
@@ -350,6 +352,9 @@ def load_case(path: str | Path) -> Case:
         raise ValueError("nombres de PR repetidos")
     sp = d.get("split", {})
     _check_keys(sp, SPLIT_KEYS, "split")
+    families = d.get("families", [])
+    if not isinstance(families, list) or len(families) != len(set(families)) or any(f not in FAMILIES for f in families):
+        raise ValueError(f"families debe ser una lista sin repetidos de: {', '.join(FAMILIES)}")
     case = Case(
         id=d["id"],
         root=root.resolve(),
@@ -362,6 +367,7 @@ def load_case(path: str | Path) -> Case:
         inventory=d.get("inventory"),
         description=d.get("description", ""),
         prs=tuple(prs),
+        families=tuple(families),
     )
     if not case.base_dir.is_dir():
         raise ValueError(f"falta {case.base_dir}")
