@@ -624,6 +624,46 @@ class Timer:
         return {**self.phases, "total": round(time.monotonic() - self.started, 2)}
 
 
+def attacks_open_in_base(base_app: "sandbox.AppHandle", target: Target, attacks_file: Path, budget: float) -> set[str] | None:
+    """Ids de los ataques que funcionan contra la app de la base, o None si no se pudo saber."""
+    try:
+        report = sandbox.run_attacks_only(base_app, target, attacks_file, budget)
+    except sandbox.SandboxError:
+        return None
+    results = report.get("results") if isinstance(report, dict) else None
+    if not isinstance(results, list) or report.get("complete") is not True:
+        return None
+    return {r["id"] for r in results if isinstance(r, dict) and r.get("outcome") == "confirmed"}
+
+
+def excuse_existing(ev: Evidence, plan: "AttackPlan", attack_ids: tuple[str, ...], pr_confirmed: list[str],
+                    base_open: set[str]) -> list[str]:
+    """Ataques del paquete reservado que no bloquean este PR. Modifica `ev`.
+
+    El paquete lo arma `cachai init` corriendo el equipo rojo contra la base: si
+    la base es vulnerable, sus ataques funcionan contra cualquier PR. Regla:
+
+    - Un ataque que la base bloquea y el PR no, siempre bloquea (el PR lo reabrió).
+    - Si el PR cierra al menos uno de los que la base sufre, es un intento de
+      arreglo y debe cerrarlos todos, visibles y reservados: así se rechaza el
+      parche que solo tapa lo que vio.
+    - Si no cierra ninguno, los que ya funcionaban en la base son fallas
+      existentes: no son culpa del PR y quedan como nota.
+    """
+    wanted = set(attack_ids)
+    open_base = base_open & wanted
+    if open_base - set(pr_confirmed):
+        return []  # intento de arreglo: debe cerrar todo
+    excused = [i for i in pr_confirmed if i in open_base]
+    drop = {plan.describe(i) for i in excused}
+    keep = [k for k, d in enumerate(ev.holdout_attacks_succeeded) if d not in drop]
+    if len(ev.holdout_attacks_public) == len(ev.holdout_attacks_succeeded):
+        ev.holdout_attacks_public = [ev.holdout_attacks_public[k] for k in keep]
+    ev.holdout_attacks_succeeded = [ev.holdout_attacks_succeeded[k] for k in keep]
+    ev.visible_attacks_succeeded = [d for d in ev.visible_attacks_succeeded if d not in drop]
+    return excused
+
+
 def check(
     repo: str | Path,
     base: str,
@@ -680,10 +720,14 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
         # paquete en vez de quedar incompleto. En full, la falta de clave sí lo deja incompleto.
         local_visible = (allow_missing_hidden and mode == "visible" and target.hidden is not None
                          and not os.environ.get(target.hidden.key_env))
+        # Los ataques del paquete se juzgan contra la base (ver `excuse_existing`); los que llegan
+        # por `plan` (un parche de seguridad declarado) se deben bloquear todos.
+        from_package = False
         if plan is None and holdout_tests is None and target.hidden is not None and not local_visible:
             try:
                 with timer.phase("preparar"):
                     plan, holdout_tests = load_hidden(repo, base_sha, target, tmp_path / "reservado")
+                from_package = plan is not None
             except (hidden.HiddenError, ValueError, OSError) as e:
                 msg = f"evaluación incompleta: no se pudo abrir el material reservado ({e})"
                 return CheckResult(mode, base_sha, pr_sha, False, [msg], outcome="incomplete", typed=[Reason("incomplete", msg, msg)])
@@ -730,6 +774,11 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
         attack_target = replace(target, inventory=canary.resolve(target.inventory, canaries)) if canaries else target
         seed_kw = {"seed_context": base_tree, "seed_env": canary.env(canaries)} if target.seed else {}
         app_kw = {**seed_kw, "trusted_deps": base_tree}
+        attack_ids = tuple(a.id for a in attacks)
+        # El paquete sellado por `cachai init` se armó contra la base: sus ataques pueden
+        # funcionar ya en la base, y entonces no son culpa de este PR (ver `excuse_existing`).
+        needs_base_open = from_package and bool(attacks)
+        needs_base = hunt or needs_base_open
         hunt_key = base_hunt_key(base_sha, target, compose_text) if hunt else ""
         cached_base = load_base_hunt(hunt_key, base_sha) if hunt else None
         if cached_base is not None:
@@ -739,16 +788,20 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
             with timer.phase("imagen_evaluador"):
                 sandbox.build_evaluator_image()
 
-        def base_hunt() -> set[str]:
+        def base_hunt() -> tuple[set[str], set[str] | None]:
             """Equipo rojo contra la app de la base (en paralelo con la evaluación del PR)."""
             with timer.phase("rojo_base"):
                 base_app = sandbox.start_app(base_tree, target, compose_text, **app_kw)
                 try:
-                    found = {a.id for a in red_team(base_app, attack_target, tmp_path, budget / 2, tree=base_tree)}
+                    found = ({a.id for a in red_team(base_app, attack_target, tmp_path, budget / 2, tree=base_tree)}
+                             if hunt else set())
+                    base_open = (attacks_open_in_base(base_app, target, attacks_file, budget / 2)
+                                 if needs_base_open else None)
                 finally:
                     sandbox.stop(base_app)
-            save_base_hunt(hunt_key, base_sha, found)
-            return found
+            if hunt:
+                save_base_hunt(hunt_key, base_sha, found)
+            return found, base_open
 
         pr_found: list[Attack] = []
         pr_info: dict = {}
@@ -765,7 +818,7 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
                 return done(None, Evidence(False, integrity_flags=flags, incomplete=[f"la app del PR no se pudo construir o levantar: {e}"]))
             try:
                 eval_ready.result()
-                base_future = pool.submit(base_hunt) if hunt and cached_base is None else None
+                base_future = pool.submit(base_hunt) if needs_base and (cached_base is None or needs_base_open) else None
                 if hunt:
                     # Antes que los tests, con la app recién levantada, igual que la de la base.
                     # Las escrituras cambian datos: van después de los tests, para no ensuciar la evaluación.
@@ -786,16 +839,34 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
             finally:
                 with timer.phase("parar"):
                     sandbox.stop(app)
+            pr_confirmed: list[str] = []
+            if from_package and isinstance(result, dict):
+                pr_confirmed, _ = _attack_evidence(result.get("attacks"), attack_ids)
             intro = Introduced(incomplete=red_errors)
-            if hunt:
+            base_open: set[str] | None = None
+            base_notes: list[str] = []
+            if needs_base:
                 try:
-                    base_ids = cached_base if cached_base is not None else base_future.result()
-                    if not red_errors:
-                        intro = compare_red_team(pr_found, base_ids)
+                    if base_future is None:
+                        base_found, base_open = cached_base or set(), None
+                    else:
+                        base_found, base_open = base_future.result()
+                    if hunt and not red_errors:
+                        intro = compare_red_team(pr_found, base_found)
                 except (sandbox.SandboxError, ValueError) as e:
                     if not red_errors:
                         intro = Introduced(incomplete=[f"el equipo rojo no terminó contra la app de la base: {e}"])
-        ev = evidence_from(result, flags, code, holdout_tests is not None, plan, tuple(a.id for a in attacks))
+                    if needs_base_open:
+                        base_notes.append(f"no se pudieron correr los ataques del paquete contra la base ({e}); "
+                                          "se exige bloquearlos todos")
+            if needs_base_open and base_open is None and not base_notes:
+                base_notes.append("no se pudo saber qué ataques del paquete ya funcionaban en la base; se exige bloquearlos todos")
+        ev = evidence_from(result, flags, code, holdout_tests is not None, plan, attack_ids)
+        if base_open is not None and plan is not None:
+            excused = excuse_existing(ev, plan, attack_ids, pr_confirmed, base_open)
+            if excused:
+                base_notes.append(f"{len(excused)} ataques del paquete reservado ya funcionaban contra la base y el PR no intenta "
+                                  "arreglar ninguno; no bloquean este PR")
         ev.incomplete += intro.incomplete
         ev.introduced_attacks += [describe_introduced(a, attack_target.inventory or {}) for a in intro.introduced]
         r = done(result, ev)
@@ -814,6 +885,7 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
             shown = ", ".join(f"{h['method']} {h['template']} ({h['source']})" for h in off_openapi[:4])
             more = f" y {len(off_openapi) - 4} más" if len(off_openapi) > 4 else ""
             r.notes.append(f"{len(off_openapi)} rutas del código no están en el OpenAPI de la app; se atacaron igual: {shown}{more}")
+        r.notes += base_notes
         return r
 
 

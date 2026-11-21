@@ -671,6 +671,29 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
     return attacks
 
 
+def run_attacks_only(app: AppHandle, case: Case | Target, attacks_file: Path, budget: float = 60.0) -> dict:
+    """Corre solo los ataques contra la app (sin suites). Devuelve el reporte de ataques."""
+    args = ["--base-url", app.base_url, "--health", case.app.health, "--attacks", "/work/attacks.json",
+            "--budget", str(budget), "--attacks-only"]
+    code, out, err = _run_trusted(app, f"{app.run_id}-atk", [(attacks_file, "/work/attacks.json")], args, budget)
+    data = _last_json(out) if code == 0 else None
+    if data is None or not isinstance(data.get("attacks"), dict):
+        raise SandboxError(f"los ataques no terminaron: {(out + err).strip()[-500:]}")
+    return data["attacks"]
+
+
+def run_probe(app: AppHandle, case: Case | Target, users_file: Path, budget: float = 60.0) -> dict:
+    """Lee `/openapi.json` de la app y lo que cada usuario de prueba ve en sus listados (para `cachai init`)."""
+    args = ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/users.json",
+            "--budget", str(budget), "--probe"]
+    code, out, err = _run_trusted(app, f"{app.run_id}-probe", [(users_file, "/work/users.json")], args, budget,
+                                  entrypoint=["python", "-m", "cachai.redteam"])
+    data = _last_json(out) if code == 0 else None
+    if data is None or "openapi" not in data:
+        raise SandboxError(f"no se pudo leer la app: {(out + err).strip()[-500:]}")
+    return data
+
+
 def stop(app: AppHandle) -> None:
     _docker("rm", "-f", app.container, *app.extra, check=False, timeout=60)
     _docker("network", "rm", app.network, check=False, timeout=60)

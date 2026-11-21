@@ -190,7 +190,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--holdout-dir", default=None, help="tests funcionales reservados")
     p.add_argument("--attacks", default=None, help="archivo JSON con los ataques que la app debe bloquear")
     p.add_argument("--budget", type=float, default=120.0, help="segundos para toda la evaluación")
+    p.add_argument("--attacks-only", action="store_true",
+                   help="solo corre los ataques (sin suites): para saber cuáles ya funcionan contra la base")
     args = p.parse_args(argv)
+    if args.attacks_only:
+        if not args.attacks:
+            p.error("--attacks-only necesita --attacks")
+        deadline = time.monotonic() + args.budget
+        if not wait_for(args.base_url.rstrip("/") + args.health, deadline):
+            print(json.dumps({"error": "la app no respondió en la ruta de salud dentro del plazo"}))
+            return 2
+        report = run_attacks(args.base_url, load_attacks(Path(args.attacks)), deadline).to_dict()
+        print(json.dumps({"attacks": report}, ensure_ascii=False))
+        return 0
     result = evaluate(
         args.base_url, args.health, Path(args.base_dir), args.tests_dir,
         Path(args.holdout_dir) if args.holdout_dir else None, args.budget,

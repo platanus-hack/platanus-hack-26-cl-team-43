@@ -1,5 +1,6 @@
 """CLI de Cachai.
 
+    cachai init [--repo .] [--yes] [--user alice='Authorization: Bearer tok-alice' ...]
     cachai check --repo <ruta> --base main --pr <rama> [--mode ci|restore|visible|full]
     cachai case <carpeta del caso> [--pr <nombre>|all] [--mode <modo>|all]
     cachai redteam <carpeta del caso> [--write]
@@ -27,7 +28,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from . import bench, fixer, gitio, hidden, pipeline, sandbox
+from . import bench, fixer, gitio, hidden, init, pipeline, sandbox
 from .case import ConfigError, load_case, materialize
 from .holdout import Attack, load_attacks, split_record
 
@@ -297,9 +298,60 @@ def cmd_hidden(args: argparse.Namespace) -> int:
         return 2
 
 
+def cmd_init(args: argparse.Namespace) -> int:
+    families = None if args.families is None else [f for f in args.families.split(",") if f]
+    opts = init.InitOptions(
+        repo=Path(args.repo), yes=args.yes, force=args.force, module=args.module, port=args.port, health=args.health,
+        tests_dir=args.tests_dir, users=args.user, logins=args.login, families=families,
+        holdout_tests=Path(args.holdout_tests) if args.holdout_tests else None, package=args.package,
+        key_env=args.key_env, key_file=Path(args.key_file) if args.key_file else None, shown=args.shown, seed=args.seed,
+        budget=args.budget, sandbox=not args.no_sandbox, redteam=not args.no_redteam, add_health=args.add_health,
+        workflow=not args.no_workflow,
+    )
+    try:
+        result = init.run(opts)
+    except (init.InitError, ConfigError, hidden.HiddenError, ValueError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    except (EOFError, KeyboardInterrupt):
+        print("\ninit cancelado: no se escribió nada más", file=sys.stderr)
+        return 130
+    print(f"Listo en {result.seconds:.0f} s. Prueba un PR con: cachai check --repo {args.repo} --base main --pr <rama>")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="cachai")
     sub = parser.add_subparsers(dest="cmd", required=True)
+
+    i = sub.add_parser("init", help="configura un repo FastAPI: .cachai.json, workflow y paquete reservado",
+                       description="Detecta la app, la levanta en el sandbox, propone el inventario, corre el equipo rojo "
+                                   "contra la base y sella el paquete reservado. Escribe .cachai.json y "
+                                   ".github/workflows/cachai.yml. Debe correrlo quien mantiene el repo: ve el material reservado.")
+    i.add_argument("--repo", default=".")
+    i.add_argument("--yes", "-y", action="store_true", help="no pregunta nada: acepta cada propuesta (agentes y CI)")
+    i.add_argument("--force", action="store_true", help="reemplaza .cachai.json y el workflow si ya existen")
+    i.add_argument("--module", help="objeto ASGI (paquete.modulo:app); por defecto, el detectado")
+    i.add_argument("--port", type=int)
+    i.add_argument("--health", help="ruta de salud; por defecto, la detectada")
+    i.add_argument("--add-health", action="store_true", help="si no hay ruta de salud, agrega GET /health al módulo de la app")
+    i.add_argument("--tests-dir")
+    i.add_argument("--user", action="append", default=[], metavar="NOMBRE='Header: valor'",
+                   help="usuario de prueba y un header suyo; se repite (al menos dos usuarios para el equipo rojo)")
+    i.add_argument("--login", action="append", default=[], metavar="NOMBRE='comando'",
+                   help="comando de login de un usuario; su última línea es «Header: valor» o un token Bearer")
+    i.add_argument("--families", help="familias de ataque separadas por coma; por defecto, según el inventario")
+    i.add_argument("--holdout-tests", help="carpeta con tests funcionales reservados para sellar (fuera del repo)")
+    i.add_argument("--package", default=init.DEFAULT_PACKAGE, help="dónde escribir el paquete reservado cifrado")
+    i.add_argument("--key-env", default=init.DEFAULT_KEY_ENV, help="secreto del CI con la clave (si existe en el entorno, se usa)")
+    i.add_argument("--key-file", help="escribe la clave nueva en este archivo (0600) en vez de imprimirla")
+    i.add_argument("--shown", type=float, default=0.4, help="proporción de grupos de ataques visibles")
+    i.add_argument("--seed", type=int, default=0)
+    i.add_argument("--budget", type=float, default=60.0, help="segundos para leer la app y para el equipo rojo")
+    i.add_argument("--no-sandbox", action="store_true", help="solo detecta y escribe: sin inventario ni equipo rojo")
+    i.add_argument("--no-redteam", action="store_true")
+    i.add_argument("--no-workflow", action="store_true")
+    i.set_defaults(func=cmd_init)
 
     c = sub.add_parser("check", help="revisa un PR escrito por IA antes del merge")
     c.add_argument("--repo", default=".")
