@@ -18,6 +18,18 @@ inputs:
   report:
     description: Ruta del reporte JSON v2
     default: cachai-report.json
+  comment:
+    description: "Publica el veredicto en un solo comentario del PR que se edita en cada push (requiere pull-requests: write)"
+    default: "true"
+  check-run:
+    description: "Crea un check run «cachai: veredicto» con el resumen corto (requiere checks: write)"
+    default: "true"
+  comment-author:
+    description: "Login que firma el comentario. Solo se edita un comentario con el marcador de este autor: nadie más puede hacer pasar el suyo por el veredicto. Cámbialo si usas un token propio en github-token."
+    default: github-actions[bot]
+  github-token:
+    description: Token para comentar y crear el check run
+    default: ${{ github.token }}
 
 outputs:
   outcome:
@@ -50,8 +62,16 @@ runs:
         REPORT: ${{ inputs.report }}
         CACHAI_ACTION_KEY: ${{ inputs.hidden-key }}
         KEY_ENV: ${{ inputs.hidden-key-env }}
+        EVENT: ${{ github.event_name }}
       run: |
         set +e
+        # Con pull_request_target el código del fork correría con un token de escritura y con la clave del paquete reservado.
+        if [ "$EVENT" = "pull_request_target" ]; then
+          echo "::error::Cachai no corre en pull_request_target: el código del PR tendría token de escritura y la clave reservada. Usa pull_request."
+          exit 2
+        fi
+        # Un reporte viejo (o uno que el PR trae en su checkout) nunca se publica como si fuera de esta corrida.
+        rm -f "$REPORT"
         if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
           echo "::error::Cachai corre en eventos pull_request"
           exit 2
@@ -68,6 +88,26 @@ runs:
           python -c 'import json,sys; print(json.load(open(sys.argv[1]))["public"]["markdown"])' "$REPORT" >> "$GITHUB_STEP_SUMMARY"
         fi
         exit $code
+
+    # Un solo comentario por PR: el propio (autor, título y marcador al final) se edita en cada push.
+    # Corre también si la revisión se cayó o se canceló: sin reporte, el comentario anterior pasa a
+    # «sin veredicto» para que no siga diciendo APROBADO. En un PR desde un fork el token es de solo
+    # lectura: se avisa y el veredicto queda en el resumen del job y en el artefacto.
+    # La lógica está en publish.js (probada con node --test en action/publish.test.js).
+    - name: Publicar el veredicto en el PR
+      if: ${{ always() && github.event_name != 'pull_request_target' && github.event.pull_request && (inputs.comment == 'true' || inputs.check-run == 'true') }}
+      uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
+      env:
+        REPORT: ${{ inputs.report }}
+        COMMENT: ${{ inputs.comment }}
+        CHECK_RUN: ${{ inputs.check-run }}
+        AUTHOR: ${{ inputs.comment-author }}
+        ACTION_PATH: ${{ github.action_path }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const { publish } = require(`${process.env.ACTION_PATH}/publish.js`);
+          await publish({ github, context, core, env: process.env });
 
     - name: Subir el reporte
       if: always()

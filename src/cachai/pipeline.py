@@ -26,7 +26,7 @@ import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from . import canary, gitio, hidden, integrity, sandbox
+from . import canary, gitio, hidden, integrity, report_md, sandbox
 from .case import CONFIG_FILE, ConfigError, Target, load_target
 from .evaluator import EXIT, SCHEMA
 from .gate import Evidence, Reason, decide
@@ -36,7 +36,6 @@ from .integrity import Flag
 MODES = ("ci", "restore", "visible", "full")
 REPORT_VERSION = 2
 REDACTED = "[reservado]"
-OUTCOME_TITLE = {"approved": "APROBADO", "rejected": "RECHAZADO", "incomplete": "SIN VEREDICTO"}
 MAX_SHOWN = 6  # motivos que caben en pantalla en la salida en colores
 
 
@@ -107,8 +106,10 @@ class CheckResult:
         """Reporte v2 (`schema/report.schema.json`): lo que la Action sube y comenta en el PR.
 
         Todo el reporte es público: los motivos de un reservado llevan solo
-        familia y ruta, y una última pasada borra cualquier texto del material
-        reservado (ids, pedidos, marcas, nombres de tests) que se haya colado.
+        familia y ruta, y antes de armar el texto se borra de los motivos, las
+        notas y lo comprobado cualquier texto del material reservado (ids,
+        pedidos, marcas, nombres de tests) que se haya colado. El texto fijo del
+        comentario se agrega después y `report_md.ensure_intact` lo verifica.
         El detalle completo queda en `to_dict`, para quien tiene el material.
         """
         typed = self.typed or [Reason("incomplete" if self.outcome == "incomplete" else "test_base", r, r) for r in self.reasons]
@@ -127,12 +128,14 @@ class CheckResult:
             "pr": self.pr,
             "approved": self.approved,
             "outcome": self.outcome,
-            "checked": self.checked(),
-            "reasons": reasons,
-            "notes": list(self.notes),
+            # Solo los campos que vienen de datos se redactan, y antes de armar el texto: el texto fijo
+            # del comentario (títulos, comando, marcador) no se toca aunque un secreto coincida con él.
+            "checked": _redact(self.checked(), self.secrets),
+            "reasons": _redact(reasons, self.secrets),
+            "notes": _redact(list(self.notes), self.secrets),
         }
-        report["public"] = {"summary": _summary(report), "markdown": _markdown(report)}
-        return _redact(report, self.secrets)
+        report["public"] = {"summary": report_md.summary(report), "markdown": report_md.markdown(report)}
+        return report
 
 
 def checked_lines(report: dict) -> list[str]:
@@ -168,29 +171,6 @@ def checked_lines(report: dict) -> list[str]:
         held = sum(r["id"] in reserved for r in results)
         out.append(f"{len(results)} ataques bloqueados" + (f", {held} de ellos reservados" if held else " (solo los que vio el parchador)"))
     return out
-
-
-def _summary(report: dict) -> str:
-    title = OUTCOME_TITLE[report["outcome"]]
-    n = len(report["reasons"])
-    if report["approved"]:
-        return f"Cachai: {title}. " + "; ".join(report["checked"])
-    return f"Cachai: {title}, {n} motivo{'s' if n != 1 else ''}."
-
-
-def _markdown(report: dict) -> str:
-    """Texto del comentario en el PR."""
-    lines = [f"### Cachai: {OUTCOME_TITLE[report['outcome']]}", "",
-             f"PR `{report['pr'][:10]}` sobre base `{report['base'][:10]}`, modo `{report['mode']}`."]
-    if report["reasons"]:
-        lines += ["", "**Motivos**", ""] + [f"- `{r['kind']}` {r['text']}" for r in report["reasons"]]
-    if report["checked"]:
-        lines += ["", "**Comprobado**", ""] + [f"- {c}" for c in report["checked"]]
-    if report["notes"]:
-        lines += ["", "**Notas**", ""] + [f"- {n}" for n in report["notes"]]
-    if report["outcome"] == "incomplete":
-        lines += ["", "No se detectó un problema, pero faltó evidencia: sin evidencia no hay aprobado."]
-    return "\n".join(lines) + "\n"
 
 
 def _redact(value: object, secrets: frozenset[str]) -> object:
