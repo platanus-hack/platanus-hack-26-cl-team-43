@@ -45,9 +45,14 @@ def main() -> int:
         print("no hay casos", file=sys.stderr)
         return 2
     commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
-    rows = bench.run(cases, modes=("full",), jobs=args.jobs, budget=args.budget)
-    sandbox.build_evaluator_image()
-    routes = {c.id: fetch_routes(c) for c in cases}
+    rows = bench.run(cases, modes=("full",), jobs=args.jobs, budget=args.budget, harvest=True)
+    routes = {}
+    for c in cases:
+        try:
+            routes[c.id] = fetch_routes(c)
+        except sandbox.SandboxError as e:
+            llm.warn(f"caso {c.id}: no se pudieron leer las rutas, el prompt rojo va sin ellas: {e}")
+            routes[c.id] = []
     data = bench.harvest(cases, rows, commit, args.seed, routes)
     for path in bench.write_harvest(data, args.out):
         print(f"{path}: {len(data[path.stem])} ejemplos")

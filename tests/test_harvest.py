@@ -335,12 +335,47 @@ def test_red_never_uses_reserved_attacks(cases):
     assert records(bench.harvest(cases, rows, COMMIT), "red") == []
 
 
-def test_red_only_accepts_evidence_from_vulnerable_or_half_patch_prs(cases):
+def fake_check(calls):
+    """Un `pipeline.check` sin Docker: ataca el plan completo y confirma todo solo en la rama base y en PR `vulnerable`."""
+    def check(repo, base, pr, mode, target=None, holdout_tests=None, budget=0, plan=None):
+        calls.append((pr, mode, plan))
+        open_flaw = pr in ("main", "vuln")
+        results = [{"id": a.id, "outcome": "confirmed" if open_flaw else "blocked", "http_status": 200, "error": None}
+                   for a in (plan.attacks if plan else ())]
+        ev = {"schema": 1, "status": "failed" if open_flaw else "ok", "suites": {"base": suite(True)},
+              "attacks": {"results": results, "complete": True} if plan else None}
+        return bench.pipeline.CheckResult(mode, "b", pr, not open_flaw, evaluator=ev, outcome="rejected" if open_flaw else "approved")
+    return check
+
+
+def test_red_evidence_comes_from_rows_shaped_like_run_produces(cases, monkeypatch):
+    c = cases[0]
+    (c.root / "prs" / "vuln").mkdir()
+    (c.root / "prs" / "vuln" / "app.py").write_text("print('vuln')\n")
+    data = json.loads((c.root / "case.json").read_text())
+    data["prs"].append({"name": "vuln", "kind": "vulnerable", "description": "introduce una falla"})
+    (c.root / "case.json").write_text(json.dumps(data))
+    c = load_case(c.root)
+    calls = []
+    monkeypatch.setattr(bench.sandbox, "build_evaluator_image", lambda: None)
+    monkeypatch.setattr(bench.pipeline, "check", fake_check(calls))
+    # La corrida normal no cambia: ni fila de la base ni ataques contra el PR vulnerable.
+    normal = bench.run([c], modes=("full",), jobs=1)
+    assert "main" not in {r["pr"] for r in normal} and dict((p, plan) for p, _, plan in calls)["vuln"] is None
+    calls.clear()
+    rows = bench.run([c], modes=("full",), jobs=1, harvest=True)
+    assert {r["pr"] for r in rows} == {p.name for p in c.prs} | {"main"}
+    assert dict((p, plan is not None) for p, _, plan in calls)["main"] and dict((p, plan is not None) for p, _, plan in calls)["vuln"]
+    red = records(bench.harvest([c], rows, COMMIT), "red")
+    assert [e["attack"] for e in red[0]["metadata"]["evidence"]] == [f"{c.id}-visible-1"]  # solo el visible
+    assert {e["pr"] for e in red[0]["metadata"]["evidence"]} == {"main"}  # la base, primera en orden
+
+
+def test_red_ignores_confirmations_from_prs_that_are_not_vulnerable_or_half(cases):
     c = cases[0]
     v = f"{c.id}-visible-1"
-    for kind, expected in (("vulnerable", True), ("half_patch", True), ("breaking_patch", False), ("correct_patch", False)):
-        out = bench.harvest([c], [row(c.id, "x", kind, False, "rejected", confirmed=[v])], COMMIT)
-        assert bool(records(out, "red")) is expected, kind
+    out = bench.harvest([c], [row(c.id, "x", "breaking_patch", False, "rejected", confirmed=[v])], COMMIT)
+    assert records(out, "red") == []
 
 
 def test_sealed_material_is_refused(cases):
@@ -403,3 +438,34 @@ def test_skipped_red_attacks_are_counted_on_stderr(cases, capsys):
     capsys.readouterr()
     bench.harvest([load_case(c.root)], [row(c.id, "bad", "half_patch", False, "rejected", confirmed=[f"{c.id}-visible-1"])], COMMIT)
     assert "1 ataque" in capsys.readouterr().err
+
+
+def test_summary_is_neutral_and_never_a_pr_description(cases):
+    out = run(cases)
+    for rec in records(out, "blue_sft") + records(out, "blue_pref"):
+        for key in ("completion", "chosen", "rejected"):
+            if key in rec:
+                assert json.loads(rec[key])["summary"] == "Modifica app.py."
+    assert not any(f"parche {n}" in json.dumps(records(out, k)) for k in ("blue_sft", "blue_pref") for n in ("good", "half", "breaks"))
+
+
+def test_pairs_are_capped_per_case_with_round_robin_chosen(cases):
+    c = cases[0]
+    v, r = f"{c.id}-visible-1", f"{c.id}-reserved-1"
+    data = json.loads((c.root / "case.json").read_text())
+    for n in ("good2", "good3"):
+        (c.root / "prs" / n).mkdir()
+        (c.root / "prs" / n / "app.py").write_text(f"print('{n}')\n")
+        data["prs"].append({"name": n, "kind": "correct_patch"})
+    (c.root / "case.json").write_text(json.dumps(data))
+    c = load_case(c.root)
+    rows = rows_for(c.id) + [row(c.id, n, "correct_patch", True, "approved", blocked=[v, r]) for n in ("good2", "good3")]
+    pairs = bench.harvest([c], rows, COMMIT)["blue_pref.train"] + bench.harvest([c], rows, COMMIT)["blue_pref.val"]
+    assert len(pairs) == 2  # half y breaks, cada uno con un solo chosen
+    chosen = {p["metadata"]["rejected"]["pr"]: p["metadata"]["chosen"]["pr"] for p in pairs}
+    assert chosen == {"half": "good", "breaks": "good2"}  # chosen por orden de nombre, en rotación
+    assert bench.harvest([c], rows, COMMIT) == bench.harvest([c], rows, COMMIT)
+
+
+def test_undecodable_patch_file_drops_the_pr_without_crashing(cases, capsys):
+    patch_is_dropped(cases, capsys, lambda d: (d / "app.py").write_bytes(b"\xff\xfe\x00"))

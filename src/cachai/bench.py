@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from . import fixer, llm, pipeline, redteam, sandbox
-from .case import Case, load_case, materialize
+from .case import Case, PRSpec, load_case, materialize
 from .holdout import MIN_SECRET, Attack, Split
 
 # Grupos de PR según su etiqueta. `expected` es lo que debería decidir un revisor correcto.
@@ -65,8 +65,13 @@ def find_cases(root: str | Path) -> list[Case]:
     return [load_case(p.parent) for p in sorted(root.glob("*/case.json"))]
 
 
-def run(cases: list[Case], modes: tuple[str, ...] = pipeline.MODES, jobs: int = 4, budget: float = 120.0) -> list[dict]:
-    """Corre cada PR de cada caso en cada modo. Devuelve una fila por corrida."""
+def run(cases: list[Case], modes: tuple[str, ...] = pipeline.MODES, jobs: int = 4, budget: float = 120.0, harvest: bool = False) -> list[dict]:
+    """Corre cada PR de cada caso en cada modo. Devuelve una fila por corrida.
+
+    Con `harvest` (solo para la cosecha de trazas) los ataques del caso también se corren contra la rama
+    base y contra los PR `vulnerable`: es la evidencia de que el ataque filtra en la versión vulnerable.
+    Sin `harvest`, los resultados no cambian.
+    """
     sandbox.build_evaluator_image()
     rows: list[dict] = []
     with tempfile.TemporaryDirectory(prefix="cachai-bench-") as tmp:
@@ -75,9 +80,11 @@ def run(cases: list[Case], modes: tuple[str, ...] = pipeline.MODES, jobs: int = 
             repo = materialize(case, Path(tmp) / case.id)
             split = case.split()
             plan = pipeline.AttackPlan(tuple(case.attacks()), split) if split else None
-            for pr in case.prs:
+            # La rama base como un PR más (vacío): sus ataques son los que filtran en la versión vulnerable.
+            base = [PRSpec("main", "vulnerable", "Rama base, sin parche")] if harvest and plan else []
+            for pr in [*base, *case.prs]:
                 for mode in modes:
-                    tasks.append((case, repo, pr, mode, plan if pr.is_security_patch else None))
+                    tasks.append((case, repo, pr, mode, plan if pr.is_security_patch or (harvest and pr.kind == "vulnerable") else None))
 
         def one(task) -> dict:
             case, repo, pr, mode, plan = task
@@ -377,7 +384,14 @@ def _patch(case: Case, pr, editable: set[str]) -> str | None:
     rels = [p.relative_to(overlay).as_posix() for p in files]
     why = ("borra archivos" if pr.delete else
            next((f"toca {r}, que un parche del modelo no puede tocar" for r in rels if r not in editable), None))
-    data = {"summary": (pr.description or pr.name)[:2000], "files": [{"path": r, "content": p.read_text()} for r, p in zip(rels, files)]}
+    if not why:
+        try:
+            contents = [p.read_text() for p in files]
+        except UnicodeDecodeError:
+            why = "tiene un archivo que no es texto UTF-8"
+    # Resumen neutro y con la misma plantilla en chosen y rejected: la descripción del PR la escribe
+    # quien conoce los ataques reservados y delataría cuál parche es el malo.
+    data = {"summary": f"Modifica {', '.join(rels)}."[:2000], "files": [] if why else [{"path": r, "content": c} for r, c in zip(rels, contents)]}
     if not why:
         try:
             llm.validate_schema(data, llm.PATCH_SCHEMA)
@@ -435,14 +449,18 @@ def _blue_records(case: Case, rows: list[dict], commit: str) -> tuple[list[dict]
                 seen.add(p)
                 chosen.append((r, p))
     sft = [{"system": fixer.PATCH_SYSTEM, "prompt": prompt, "completion": p, "metadata": meta | side(r)} for r, p in chosen]
+    # Cada rechazado se une a un solo chosen, en rotación por orden de nombre: así un caso con muchos
+    # parches buenos no pesa más que otro.
+    chosen.sort(key=lambda cp: cp[0]["pr"])
     pref = []
     for r in rows:
-        kinds = _failure_kinds(r, split) if r["kind"] in HALF_KINDS else None
+        kinds = _failure_kinds(r, split) if chosen and r["kind"] in HALF_KINDS else None
         bad = _patch(case, case.pr(r["pr"]), editable) if kinds else None
         if bad and bad not in seen:
             seen.add(bad)
-            pref += [{"system": fixer.PATCH_SYSTEM, "prompt": prompt, "chosen": p, "rejected": bad,
-                      "metadata": meta | {"chosen": side(c), "rejected": side(r, failure_kinds=kinds)}} for c, p in chosen]
+            c, p = chosen[len(pref) % len(chosen)]
+            pref.append({"system": fixer.PATCH_SYSTEM, "prompt": prompt, "chosen": p, "rejected": bad,
+                         "metadata": meta | {"chosen": side(c), "rejected": side(r, failure_kinds=kinds)}})
     return sft, pref
 
 
