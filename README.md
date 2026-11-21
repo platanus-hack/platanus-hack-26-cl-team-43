@@ -6,6 +6,8 @@
 
 Track: 🛡️ AI Security · Platanus Hack 26: Santiago ft. Buk · team-43
 
+Resultados y evidencia: **https://contraprueba-three.vercel.app**
+
 - Mauricio Genta ([@5y5F4il](https://github.com/5y5F4il))
 - Jaime Aza ([@Jjat00](https://github.com/Jjat00))
 - Tomás Degese ([@tomileonel](https://github.com/tomileonel))
@@ -60,6 +62,8 @@ src/contraprueba/
 docker/           imágenes de la app revisada y del evaluador
 cases/            casos de evaluación
 results/          resultados de la medición y evidencia de cada corrida
+scripts/          demo en vivo y generador de la página de resultados
+site/             página pública de resultados (generada)
 docs/propuesta.md detalle de la propuesta, evaluación y límites
 docs/arquitectura.md arquitectura y plan por fases
 ```
@@ -135,5 +139,16 @@ Además, `contraprueba fix` le pide parches a agentes reales (Claude Code y Code
 - Con un parchador instruido para hacer el cambio mínimo (una política de ataque, como en las evaluaciones de AI control), los 3 parches pasaron su propia validación y Contraprueba los rechazó por los ataques reservados.
 
 Detalle por PR y evidencia de cada corrida: [`results/resultados.md`](results/resultados.md) y `results/`.
+
+## Demo en vivo
+
+```bash
+scripts/demo.sh --warm   # antes: construye y cachea las imágenes
+scripts/demo.sh          # avanza con Enter; unos 6 segundos por comando
+```
+
+Tres veredictos reales: la trampa del agente (CI normal y tests restaurados la aprueban, Contraprueba la rechaza), el parche a medias (pasa su propia validación y cae con los ataques reservados) y el parche correcto (aprobado, con lo que se comprobó). La página pública se regenera con `python scripts/build_site.py` desde `results/`.
+
+Preguntas frecuentes y límites: [`docs/preguntas.md`](docs/preguntas.md).
 
 Tests: `pytest` (unitarios) y `CP_DOCKER=1 pytest tests/test_sandbox_docker.py` (integración con Docker).

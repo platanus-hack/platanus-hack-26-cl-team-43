@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -26,8 +27,20 @@ from .case import load_case, materialize
 from .holdout import Attack, load_attacks, split_record
 
 
-def _print(result: pipeline.CheckResult, as_json: bool) -> None:
-    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2) if as_json else result.to_text())
+def use_color(args: argparse.Namespace) -> bool:
+    if getattr(args, "color", "auto") != "auto":
+        return args.color == "always"
+    return sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+
+def save_report(result: pipeline.CheckResult, args: argparse.Namespace) -> None:
+    if getattr(args, "report", None):
+        Path(args.report).write_text(json.dumps(result.to_dict(), ensure_ascii=False, indent=2) + "\n")
+
+
+def _print(result: pipeline.CheckResult, args: argparse.Namespace) -> None:
+    save_report(result, args)
+    print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2) if args.json else result.to_text(use_color(args)))
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -37,7 +50,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         attacks = load_attacks(args.attacks)
         plan = pipeline.AttackPlan(tuple(attacks), split_record(attacks, args.shown, args.seed))
     result = pipeline.check(args.repo, args.base, args.pr, args.mode, holdout_tests=holdout, budget=args.budget, plan=plan)
-    _print(result, args.json)
+    _print(result, args)
     return 0 if result.approved else 1
 
 
@@ -112,20 +125,31 @@ def cmd_case(args: argparse.Namespace) -> int:
     case = load_case(args.case)
     prs = [p.name for p in case.prs] if args.pr == "all" else [case.pr(args.pr).name]
     modes = list(pipeline.MODES) if args.mode == "all" else [args.mode]
+    if args.report and len(prs) * len(modes) != 1:
+        print("--report guarda una sola corrida: elige un PR con --pr y un modo con --mode", file=sys.stderr)
+        return 2
     results = run_case(case, prs, modes, args.budget)
     if args.json:
+        if len(results) == 1:
+            save_report(next(iter(results.values())), args)
         print(json.dumps({f"{pr}/{mode}": r.to_dict() for (pr, mode), r in results.items()}, ensure_ascii=False, indent=2))
     elif len(results) == 1:
-        print(next(iter(results.values())).to_text())
+        _print(next(iter(results.values())), args)
     else:
+        color = use_color(args)
+
+        def cell(r: pipeline.CheckResult) -> str:
+            text = ("aprobado" if r.approved else "RECHAZADO").ljust(9)
+            return f"\033[{'32' if r.approved else '1;31'}m{text}\033[0m" if color else text
+
         width = max(len(p) for p in prs)
         print(f"{'PR'.ljust(width)}  {'tipo'.ljust(14)}  " + "  ".join(m.ljust(9) for m in modes))
         for pr in prs:
-            cells = "  ".join(("aprobado" if results[pr, m].approved else "RECHAZADO").ljust(9) for m in modes)
+            cells = "  ".join(cell(results[pr, m]) for m in modes)
             print(f"{pr.ljust(width)}  {case.pr(pr).kind.ljust(14)}  {cells}")
         for (pr, mode), r in results.items():
             if mode == "full":
-                print(f"\n[{pr}] {r.to_text()}")
+                print(f"\n[{pr}] {r.to_text(color).lstrip()}")
     return 0 if all(r.approved for r in results.values()) else 1
 
 
@@ -179,6 +203,8 @@ def main(argv: list[str] | None = None) -> int:
     for p in (c, k):
         p.add_argument("--budget", type=float, default=120.0, help="segundos por evaluación")
         p.add_argument("--json", action="store_true")
+        p.add_argument("--color", choices=("auto", "always", "never"), default="auto")
+        p.add_argument("--report", help="guarda el reporte de la corrida en este archivo JSON (una sola corrida)")
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -122,7 +122,7 @@ Los casos son fixtures locales confiables. Aun así, `materialize` valida las ca
 | **1. Hito 1: aislamiento** | `sandbox.py` (red interna, levantar y bajar), caso con trampa (el paquete parcha los reportes de pytest), modos `ci`, `restore` y `full` | `ci` y `restore` dan verde; `full` rechaza con archivo y línea; un caso honesto se aprueba |
 | **2. Hito 2: reservados** | `holdout.run_attacks`, `redteam.py` por plantillas (otro id, otra ruta, otras formas de escribir la ruta del archivo), ramas de parche a medias, parche correcto y parche que rompe una función | El parche a medias pasa su propia validación y cae con un ataque reservado; el correcto se aprueba |
 | **3. Medición** | `bench.py` sobre los PR etiquetados: detección y falsas alarmas por modo con intervalos de Wilson; `fixer.py` con agentes reales | Tabla de Contraprueba contra las tres líneas base; parches generados en vivo pasan por la revisión |
-| **4. Entrega** | Página de resultados para `deploy-url`, guion de la demo, respuestas a las preguntas del jurado | Demo de punta a punta en menos de 3 minutos; `platanus-hack-project.jsonc` completo |
+| **4. Entrega** | Página de resultados (`scripts/build_site.py`, publicada en el `deploy-url`), demo ejecutable (`scripts/demo.sh`), respuestas a las preguntas del jurado (`docs/preguntas.md`) | Demo de punta a punta en menos de 3 minutos; `platanus-hack-project.jsonc` completo |
 
 La ruta crítica es 0 → 1 → 2. La medición y la página avanzan en paralelo desde que existen los contratos de la fase 0.
 

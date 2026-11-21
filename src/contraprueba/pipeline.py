@@ -33,6 +33,7 @@ from .holdout import ATTACK_OUTCOMES, Attack, Split
 from .integrity import Flag
 
 MODES = ("ci", "restore", "visible", "full")
+MAX_SHOWN = 6  # motivos que caben en pantalla en la salida en colores
 
 
 @dataclass
@@ -69,11 +70,64 @@ class CheckResult:
             "split": self.split,
         }
 
-    def to_text(self) -> str:
-        lines = [f"{'APROBADO' if self.approved else 'RECHAZADO'}  (modo {self.mode}, PR {self.pr[:10]} sobre base {self.base[:10]})"]
-        lines += [f"  - {r}" for r in self.reasons]
-        lines += [f"  · nota: {n}" for n in self.notes]
+    def to_text(self, color: bool = False) -> str:
+        """Veredicto y motivos. Con `color`, el veredicto va en un bloque verde o rojo para leerlo de lejos."""
+        word = "APROBADO" if self.approved else "RECHAZADO"
+        where = f"(modo {self.mode}, PR {self.pr[:10]} sobre base {self.base[:10]})"
+        if not color:
+            lines = [f"{word}  {where}"]
+            lines += [f"  - {r}" for r in self.reasons]
+            lines += [f"  · nota: {n}" for n in self.notes]
+            return "\n".join(lines)
+        block = "\033[1;97;42m" if self.approved else "\033[1;97;41m"
+        mark = "\033[32m" if self.approved else "\033[31m"
+        lines = ["", f"{block}  {word}  \033[0m  \033[2m{where}\033[0m", ""]
+        lines += [f"  {mark}✗\033[0m {r}" for r in self.reasons[:MAX_SHOWN]]
+        if len(self.reasons) > MAX_SHOWN:
+            lines.append(f"  \033[2m… y {len(self.reasons) - MAX_SHOWN} motivos más (--json los muestra todos)\033[0m")
+        if self.approved:
+            lines += [f"  {mark}✓\033[0m {line}" for line in self.checked()]
+        lines += [f"  \033[2m· nota: {n}\033[0m" for n in self.notes]
         return "\n".join(lines)
+
+    def checked(self) -> list[str]:
+        """Qué se comprobó, para mostrar junto a un aprobado."""
+        return checked_lines(self.to_dict())
+
+
+def checked_lines(report: dict) -> list[str]:
+    """Qué se comprobó en una corrida aprobada, leído de su reporte.
+
+    Solo afirma lo que el reporte respalda: una corrida no aprobada no devuelve
+    nada, y un reporte aprobado cuyo detalle no cierra (una suite sin aprobar,
+    un ataque que no quedó bloqueado) es un error, no una lista de aciertos.
+    """
+    if report.get("approved") is not True or report.get("outcome", "approved") != "approved":
+        return []
+    inside = report.get("inside")
+    if inside is not None:
+        if inside.get("passed") is not True:
+            raise ValueError("reporte contradictorio: aprobado sin que pytest pasara")
+        return ["pytest salió con 0 dentro del mismo contenedor que el código"]
+    ev = report.get("evaluator") or {}
+    suites = ev.get("suites") or {}
+    base, holdout = suites.get("base"), suites.get("holdout")
+    if not base or base.get("ok") is not True or ev.get("status") != "ok":
+        raise ValueError("reporte contradictorio: aprobado sin los tests de la base en verde")
+    out = [f"{base['passed']} tests de la rama base pasan desde otro contenedor"]
+    if holdout is not None:
+        if holdout.get("ok") is not True:
+            raise ValueError("reporte contradictorio: aprobado con tests reservados sin aprobar")
+        out.append(f"{holdout['passed']} tests funcionales reservados pasan")
+    attacks, split = ev.get("attacks"), report.get("split")
+    if attacks is not None:
+        results = attacks.get("results") or []
+        if not split or attacks.get("complete") is not True or not results or any(r.get("outcome") != "blocked" for r in results):
+            raise ValueError("reporte contradictorio: aprobado con ataques sin bloquear o sin resultado")
+        reserved = set(split["reserved"])
+        held = sum(r["id"] in reserved for r in results)
+        out.append(f"{len(results)} ataques bloqueados" + (f", {held} de ellos reservados" if held else " (solo los que vio el parchador)"))
+    return out
 
 
 @dataclass(frozen=True)
