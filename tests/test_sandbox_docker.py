@@ -192,6 +192,9 @@ def _check(repo, pr, mode):
 def test_hito_matrix(facturas_repo, pr, mode):
     r = _check(facturas_repo, pr, mode)
     assert r.approved is EXPECTED[pr, mode], r.to_text()
+    if mode == "full" and EXPECTED[pr, mode]:
+        # Los PR legítimos de facturas no tocan código sensible: sin notas del estático (#32).
+        assert not any(n.startswith("análisis estático") for n in r.notes), r.notes
     if (pr, mode) == ("parche-a-medias", "full"):
         assert r.reasons and all(x.startswith("ataque reservado sigue funcionando") for x in r.reasons)
         assert {"GET /v2/invoices/1" in x for x in r.reasons} == {True, False}
@@ -564,6 +567,8 @@ def test_concatenated_search_is_rejected_as_introduced_sqli(tmp_path):
     r = pipeline.check(repo, "main", "sqli", "full", budget=120)
     assert not r.approved and r.reasons, r.to_text()
     assert all(x.startswith("vulnerabilidad introducida por el PR: sqli: GET /notes/search?q=") for x in r.reasons), r.to_text()
+    # El estático también la marca, como nota (#32).
+    assert any("bandit B608" in n and "notas/main.py:" in n for n in r.notes), r.notes
     assert {x["kind"] for x in r.report()["reasons"]} == {"attack_introduced"}
 
 

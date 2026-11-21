@@ -26,7 +26,7 @@ import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from . import canary, gitio, hidden, integrity, report_md, routes, sandbox
+from . import canary, gitio, hidden, integrity, report_md, routes, sandbox, static
 from .case import CONFIG_FILE, ConfigError, Target, load_target
 from .evaluator import EXIT, SCHEMA
 from .gate import Evidence, Reason, decide
@@ -604,6 +604,12 @@ def check(
         ev.introduced_attacks += [describe_introduced(a, attack_target.inventory or {}) for a in intro.introduced]
         r = done(result, ev)
         r.notes += not_external_notes(result)
+        if mode == "full":
+            # Nota, nunca motivo: el estático da falsos positivos.
+            try:
+                r.notes += static.scan(repo, base_sha, pr_sha, pr_tree, target.tests_dir, tmp_path)
+            except (sandbox.SandboxError, gitio.GitError, OSError) as e:
+                r.notes.append(f"análisis estático: no corrió ({e})")
         r.introduced = [a.to_dict() for a in intro.introduced]
         if intro.existing:
             r.notes.append(existing_note(intro.existing))
