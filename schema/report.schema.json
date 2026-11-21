@@ -41,6 +41,17 @@
       "additionalProperties": {"type": "number", "minimum": 0},
       "description": "Segundos por fase de la revisión (preparar, integridad, imagen_evaluador, app_pr, rojo_pr, rojo_base, evaluador, parar, pytest_dentro) y total. Las fases en paralelo se miden cada una por su lado; rojo_base vale 0 si vino de la caché."
     },
+    "reserve": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["remaining", "revealed"],
+      "description": "Solo en modo full con ataques. Cuántos grupos reservados quedan por familia después de esta corrida y cuántos reveló. `burn`: una señal opaca (HMAC con la clave del paquete) por grupo revelado, para `cachai hidden burn --report`; sin la clave no dice qué grupo es.",
+      "properties": {
+        "remaining": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+        "revealed": {"type": "integer", "minimum": 0},
+        "burn": {"type": "array", "items": {"type": "string", "pattern": "^[0-9a-f]{16}$"}}
+      }
+    },
     "public": {
       "type": "object",
       "additionalProperties": false,

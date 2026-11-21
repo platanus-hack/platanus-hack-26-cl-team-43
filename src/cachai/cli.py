@@ -274,13 +274,114 @@ def cmd_case(args: argparse.Namespace) -> int:
     return 0 if all(r.approved for r in results.values()) else 1
 
 
+def parse_group(text: str) -> tuple[str, str]:
+    family, sep, group = text.partition(":")
+    if not sep or not family or not group:
+        raise ValueError(f"grupo inválido (se escribe familia:grupo): {text!r}")
+    return family, group
+
+
+def cmd_burn(args: argparse.Namespace, key: str | None) -> int:
+    """Quema los grupos que reveló una corrida (señales de su reporte) o los que se nombran a mano."""
+    if not args.package or not (args.report or args.group):
+        print("burn necesita el paquete y --report o --group", file=sys.stderr)
+        return 2
+    sealed = Path(args.package).read_bytes()
+    groups = {parse_group(g) for g in args.group or []}
+    for path in args.report or []:
+        found, unknown = hidden.groups_from_report(sealed, key, json.loads(Path(path).read_text()))
+        groups |= found
+        if unknown:
+            # Una señal que no corresponde: de otro paquete, otra clave o un reporte alterado. No quema nada.
+            print(f"aviso: {len(unknown)} señales de {path} no corresponden a ningún grupo de este paquete", file=sys.stderr)
+    new, r = hidden.burn(sealed, key, groups)
+    out = Path(args.out or args.package)
+    if new is not None:
+        out.write_bytes(new)
+    for f, g in r.burned:
+        print(f"quemado: {f}:{g}")
+    for f, g in r.already:
+        print(f"ya era visible: {f}:{g}")
+    for g in r.unknown:
+        print(f"aviso: {g} no está en el paquete", file=sys.stderr)
+    print("grupos reservados que quedan: " + ", ".join(f"{f} {n}" for f, n in r.remaining.items()))
+    print(f"paquete escrito en {out}; commitéalo en la rama base" if new is not None else "nada que quemar: el paquete no cambió")
+    for f, n in r.remaining.items():
+        if n == 0:
+            print(f"nota: la familia {f} se quedó sin reservados; corre `cachai hidden rotate`")
+    return 0
+
+
+def rotation_attacks(args: argparse.Namespace) -> list[Attack]:
+    """Corre el equipo rojo, con las variantes de rotación, contra la app de la base."""
+    from . import canary
+
+    with tempfile.TemporaryDirectory(prefix="cachai-rotar-") as tmp:
+        tmp_path = Path(tmp)
+        if args.case:
+            case = load_case(args.case)
+            spec, inventory = case, case.inventory
+
+            def start():
+                return sandbox.start_app(case.base_dir, case)
+        else:
+            base_sha = gitio.resolve(args.repo, args.base)
+            spec = pipeline.target_from_base(args.repo, base_sha)
+            inventory = spec.inventory
+            base_tree = gitio.export_tree(args.repo, base_sha, tmp_path / "base")
+            compose = gitio.read_blob(args.repo, base_sha, spec.app.compose.file) if spec.app.compose else None
+            seed_kw = {"seed_context": base_tree, "seed_env": {}} if spec.seed else {}
+
+            def start():
+                return sandbox.start_app(base_tree, spec, compose, **seed_kw)
+        if not inventory:
+            raise ValueError("la configuración no tiene inventario: el equipo rojo no tiene con qué atacar")
+        if canary.names(inventory):
+            raise ValueError("el inventario usa marcas canario, que cambian en cada corrida: sus ataques no se pueden guardar en el paquete")
+        inv = tmp_path / "inventory.json"
+        inv.write_text(json.dumps(inventory, ensure_ascii=False))
+        sandbox.build_evaluator_image()
+        app = start()
+        try:
+            return [Attack.from_dict(d) for d in sandbox.run_redteam(app, spec, inv, args.budget, rotation=True)]
+        finally:
+            sandbox.stop(app)
+
+
+def cmd_rotate(args: argparse.Namespace, key: str | None) -> int:
+    if not args.package:
+        print("rotate necesita el paquete", file=sys.stderr)
+        return 2
+    sealed = Path(args.package).read_bytes()
+    hidden.rotate(sealed, key, [])  # comprueba la clave y el paquete antes de levantar contenedores
+    found = rotation_attacks(args)
+    new, r = hidden.rotate(sealed, key, found, set(args.family) if args.family else None)
+    out = Path(args.out or args.package)
+    if new is not None:
+        out.write_bytes(new)
+    for f, n in r.new_groups.items():
+        print(f"{f}: {n} grupos reservados nuevos")
+    if r.joined:
+        print(f"{r.joined} ataques nuevos en grupos que ya existían")
+    print("grupos reservados que quedan: " + ", ".join(f"{f} {n}" for f, n in r.remaining.items()))
+    for n in r.notes:
+        print(f"nota: {n}")
+    print(f"paquete escrito en {out}; commitéalo en la rama base" if new is not None else "sin ataques nuevos: el paquete no cambió")
+    return 0
+
+
 def cmd_hidden(args: argparse.Namespace) -> int:
-    """Paquete reservado: `keygen` crea la clave, `seal` lo cifra y `open` lo extrae."""
+    """Paquete reservado: `keygen` crea la clave, `seal` lo cifra, `open` lo extrae,
+    `burn` quema los grupos revelados y `rotate` repone reservados."""
     if args.action == "keygen":
         print(hidden.keygen())
         return 0
     key = os.environ.get(args.key_env)
     try:
+        if args.action == "burn":
+            return cmd_burn(args, key)
+        if args.action == "rotate":
+            return cmd_rotate(args, key)
         if args.action == "seal":
             if not args.out:
                 print("seal necesita --out", file=sys.stderr)
@@ -297,7 +398,7 @@ def cmd_hidden(args: argparse.Namespace) -> int:
         n_tests = sum(1 for _ in m.holdout_tests.rglob("test_*.py")) if m.holdout_tests else 0
         print(f"{len(m.attacks)} ataques ({len(m.split.reserved) if m.split else 0} reservados) y {n_tests} archivos de tests en {args.out}")
         return 0
-    except hidden.HiddenError as e:
+    except (hidden.HiddenError, ValueError, ConfigError, gitio.GitError, sandbox.SandboxError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
 
@@ -404,13 +505,20 @@ def main(argv: list[str] | None = None) -> int:
     f.set_defaults(func=cmd_fix)
 
     h = sub.add_parser("hidden", help="cifra o abre el paquete de material reservado (lo usa quien mantiene el repo)")
-    h.add_argument("action", choices=("keygen", "seal", "open"))
-    h.add_argument("package", nargs="?", help="paquete a abrir (open)")
+    h.add_argument("action", choices=("keygen", "seal", "open", "burn", "rotate"))
+    h.add_argument("package", nargs="?", help="paquete a abrir, quemar o rotar")
+    h.add_argument("--report", action="append", help="burn: reporte JSON de una corrida del CI (se repite)")
+    h.add_argument("--group", action="append", help="burn: grupo a quemar a mano, familia:grupo (se repite)")
+    h.add_argument("--repo", default=".", help="rotate: repo cuya rama base se ataca")
+    h.add_argument("--base", default="main", help="rotate: rama base")
+    h.add_argument("--case", help="rotate: carpeta de un caso de cases/ en vez de un repo")
+    h.add_argument("--family", action="append", help="rotate: familia a rotar (por defecto, las que tienen grupos quemados)")
+    h.add_argument("--budget", type=float, default=120.0, help="rotate: segundos para el equipo rojo")
     h.add_argument("--attacks", help="seal: JSON de ataques")
     h.add_argument("--holdout-tests", help="seal: carpeta de tests funcionales reservados")
     h.add_argument("--shown", type=float, default=0.4, help="seal: proporción de grupos de ataques visibles")
     h.add_argument("--seed", type=int, default=0)
-    h.add_argument("--out", help="seal: archivo de salida; open: carpeta nueva")
+    h.add_argument("--out", help="seal: archivo de salida; open: carpeta nueva; burn y rotate: por defecto, el mismo paquete")
     h.add_argument("--key-env", default="CACHAI_HIDDEN_KEY", help="variable de entorno con la clave")
     h.set_defaults(func=cmd_hidden)
 
