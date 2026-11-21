@@ -1,12 +1,12 @@
 {
   // Your project's name, as it will appear on the voting page.
-  "project-name": "<FILL THIS>",
+  "project-name": "Contraprueba",
 
   // Short one-line summary of your project (in Spanish).
-  "project-oneliner-spanish": "<FILL THIS>",
+  "project-oneliner-spanish": "Ninguna IA aprueba el código de otra IA: un revisor determinista que verifica el código de agentes y los parches de bots de seguridad antes del merge.",
 
   // Brief description of your project (in Spanish).
-  "project-description-spanish": "<FILL THIS>",
+  "project-description-spanish": "Los agentes de código hacen trampa con los tests y los bots de seguridad validan sus propios parches. Contraprueba prueba el código desde otro contenedor con los tests de la rama base, guarda ataques y tests que el parchador nunca vio y, si algo falla, no deja entrar nada.",
 
   // Public URL where your project is deployed and running.
   // Must be a valid URL, for example: https://my-project.vercel.app

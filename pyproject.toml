@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "contraprueba"
+version = "0.0.1"
+description = "Ninguna IA aprueba el código de otra IA: revisor determinista antes del merge."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+contraprueba = "contraprueba.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/contraprueba"]
