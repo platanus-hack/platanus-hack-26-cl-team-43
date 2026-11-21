@@ -104,3 +104,23 @@ def test_schema_rejects_contradictions(approved, outcome, reasons):
     r, _ = run(confirmed="none", holdout_fail=False)
     rep = r.report() | {"approved": approved, "outcome": outcome, "reasons": reasons}
     assert not VALIDATOR.is_valid(rep)
+
+
+def test_cli_public_output_hides_reserved_detail(monkeypatch, capsys):
+    r, plan = run()
+    monkeypatch.setattr(pipeline, "check", lambda *a, **k: r)
+    assert cli.main(["check", "--pr", "x", "--public"]) == 1
+    out = capsys.readouterr().out
+    assert out.startswith("### Cachai: RECHAZADO")
+    for a in plan.subset(plan.split.reserved):
+        assert a.id not in out and a.request["path"] not in out
+
+
+def test_action_and_example_workflow_are_valid_yaml():
+    yaml = pytest.importorskip("yaml")
+    action = yaml.safe_load((ROOT / "action" / "action.yml").read_text())
+    assert action["runs"]["using"] == "composite"
+    step = next(s for s in action["runs"]["steps"] if s.get("id") == "check")
+    assert "--public" in step["run"] and "pull_request_target" not in (ROOT / "examples" / "workflow.yml").read_text().split("#")[0]
+    wf = yaml.safe_load((ROOT / "examples" / "workflow.yml").read_text())
+    assert list(wf[True]) == ["pull_request"]  # `on:` se lee como True en YAML 1.1

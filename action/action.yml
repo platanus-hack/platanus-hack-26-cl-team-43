@@ -1,0 +1,78 @@
+name: Cachai
+description: Revisa el PR antes del merge desde otro contenedor, con tests de la base y ataques reservados que el autor nunca vio.
+author: Platanus Hack 26, equipo 43
+
+inputs:
+  mode:
+    description: "full (por defecto) o visible"
+    default: full
+  budget:
+    description: Segundos por evaluación
+    default: "120"
+  hidden-key:
+    description: Clave del paquete reservado (pásala desde un secreto). Sin ella, si la base declara un paquete, la revisión queda incompleta.
+    default: ""
+  hidden-key-env:
+    description: Variable de entorno que nombra `hidden.key_env` en .cachai.json
+    default: CACHAI_HIDDEN_KEY
+  report:
+    description: Ruta del reporte JSON v2
+    default: cachai-report.json
+
+outputs:
+  outcome:
+    description: approved, rejected o incomplete
+    value: ${{ steps.check.outputs.outcome }}
+  report:
+    description: Ruta del reporte JSON v2
+    value: ${{ inputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    # Cachai se instala desde la versión de la Action, nunca desde el checkout del PR.
+    - name: Instalar Cachai
+      shell: bash
+      run: python -m pip install --quiet -e "${{ github.action_path }}/.."  # editable: el sandbox lee docker/ junto al código
+
+    - name: Revisar el PR
+      id: check
+      shell: bash
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        MODE: ${{ inputs.mode }}
+        BUDGET: ${{ inputs.budget }}
+        REPORT: ${{ inputs.report }}
+        CACHAI_ACTION_KEY: ${{ inputs.hidden-key }}
+        KEY_ENV: ${{ inputs.hidden-key-env }}
+      run: |
+        set +e
+        if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
+          echo "::error::Cachai corre en eventos pull_request"
+          exit 2
+        fi
+        git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null || { echo "::error::falta el commit de la base: usa actions/checkout con fetch-depth: 0"; exit 2; }
+        if [ -n "$CACHAI_ACTION_KEY" ]; then export "$KEY_ENV=$CACHAI_ACTION_KEY"; fi
+        unset CACHAI_ACTION_KEY
+        # --public: el log lo ve el autor del PR; nunca lleva el detalle de los reservados.
+        cachai check --repo . --base "$BASE_SHA" --pr "$HEAD_SHA" --mode "$MODE" --budget "$BUDGET" \
+          --report "$REPORT" --public --color never
+        code=$?
+        if [ -f "$REPORT" ]; then
+          python -c 'import json,sys; r=json.load(open(sys.argv[1])); print("outcome=" + r["outcome"])' "$REPORT" >> "$GITHUB_OUTPUT"
+          python -c 'import json,sys; print(json.load(open(sys.argv[1]))["public"]["markdown"])' "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit $code
+
+    - name: Subir el reporte
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: cachai-report
+        path: ${{ inputs.report }}
+        if-no-files-found: ignore

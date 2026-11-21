@@ -1,0 +1,28 @@
+# Copia este archivo a .github/workflows/cachai.yml y marca el check «cachai» como obligatorio
+# en la regla de la rama principal. Ver docs/material-reservado.md.
+name: cachai
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Una revisión por PR: un push nuevo cancela la anterior.
+concurrency:
+  group: cachai-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cachai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Cachai lee la base y el PR por hash
+          persist-credentials: false
+      - uses: platanus-hack/platanus-hack-26-cl-team-43/action@main
+        with:
+          hidden-key: ${{ secrets.CACHAI_HIDDEN_KEY }}

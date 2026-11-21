@@ -40,6 +40,10 @@ def save_report(result: pipeline.CheckResult, args: argparse.Namespace) -> None:
 
 def _print(result: pipeline.CheckResult, args: argparse.Namespace) -> None:
     save_report(result, args)
+    if getattr(args, "public", False):
+        # En CI el log lo ve el autor del PR: solo el texto público, sin detalle de los reservados.
+        print(json.dumps(result.report(), ensure_ascii=False, indent=2) if args.json else result.report()["public"]["markdown"], end="" if not args.json else "\n")
+        return
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2) if args.json else result.to_text(use_color(args)))
 
 
@@ -198,6 +202,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--attacks", help="JSON con los ataques que el parche debe bloquear, fuera del repo")
     c.add_argument("--shown", type=float, default=0.4, help="proporción de grupos de ataques que vio el parchador")
     c.add_argument("--seed", type=int, default=0, help="semilla de la selección visible/reservada")
+    c.add_argument("--public", action="store_true",
+                   help="imprime solo la versión pública del reporte (para CI: el autor del PR ve el log)")
     c.set_defaults(func=cmd_check)
 
     k = sub.add_parser("case", help="revisa los PR de un caso de evaluación")
