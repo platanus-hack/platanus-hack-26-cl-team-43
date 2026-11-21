@@ -14,9 +14,13 @@ primera respuesta.
 
 from __future__ import annotations
 
+import http.client
 import json
 import random
 import re
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -266,6 +270,69 @@ class AttackReport:
         }
 
 
-def run_attacks(base_url: str, attacks: list[Attack], timeout: float = 10.0) -> AttackReport:
-    """Ejecuta los ataques contra la app y devuelve un resultado por ataque (fase 2)."""
-    raise NotImplementedError
+MAX_BODY = 1_000_000  # bytes de cuerpo que se leen por respuesta
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """No sigue redirecciones: se evalúa la primera respuesta."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def _read_body(r) -> tuple[str, bool]:
+    """Lee hasta MAX_BODY. Devuelve (cuerpo, truncado): un cuerpo más largo que el
+    tope no se puede evaluar entero, así que avisa para no dar por bloqueado de más."""
+    raw = r.read(MAX_BODY + 1)
+    truncated = len(raw) > MAX_BODY
+    return raw[:MAX_BODY].decode("utf-8", errors="replace"), truncated
+
+
+def _send(base_url: str, attack: Attack, timeout: float) -> tuple[int, str, bool]:
+    """Hace el pedido del ataque y devuelve (status, cuerpo, truncado). Un 3xx, 4xx o 5xx también es respuesta."""
+    req = attack.request
+    headers = dict(req.get("headers", {}))
+    data = None
+    if "json" in req:
+        data = json.dumps(req["json"]).encode()
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(base_url.rstrip("/") + req["path"], data=data, headers=headers, method=req["method"])
+    try:
+        with _OPENER.open(request, timeout=timeout) as r:
+            body, truncated = _read_body(r)
+            return r.status, body, truncated
+    except urllib.error.HTTPError as e:
+        with e:
+            body, truncated = _read_body(e)
+            return e.code, body, truncated
+
+
+def run_attacks(base_url: str, attacks: list[Attack], timeout: float = 10.0, deadline: float | None = None) -> AttackReport:
+    """Ejecuta los ataques contra la app y devuelve un resultado por ataque.
+
+    `deadline` (en segundos de `time.monotonic()`) acota toda la ejecución: los
+    ataques que no alcanzan a enviarse quedan como `error`, nunca como bloqueados.
+    """
+    results = []
+    for a in attacks:
+        left = None if deadline is None else deadline - time.monotonic()
+        if left is not None and left <= 0:
+            results.append(AttackResult(a.id, "error", error="plazo agotado antes de enviar el ataque"))
+            continue
+        try:
+            status, body, truncated = _send(base_url, a, timeout if left is None else min(timeout, left))
+        except (OSError, http.client.HTTPException, ValueError) as e:
+            results.append(AttackResult(a.id, "error", error=f"{type(e).__name__}: {e}"))
+            continue
+        if a.succeeded_if.matches(status, body):
+            results.append(AttackResult(a.id, "confirmed", http_status=status))
+        elif truncated:
+            # Cuerpo más largo que MAX_BODY sin coincidir: no se puede descartar el ataque.
+            # Falla cerrado (error -> incompleto -> rechazo), nunca "bloqueado" de más.
+            results.append(AttackResult(a.id, "error", error=f"respuesta excede {MAX_BODY} bytes, no se puede confirmar ni descartar el ataque"))
+        else:
+            results.append(AttackResult(a.id, "blocked", http_status=status))
+    return AttackReport(expected=tuple(a.id for a in attacks), results=results)

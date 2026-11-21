@@ -1,6 +1,7 @@
 """CLI de Contraprueba.
 
-    contraprueba check --repo <ruta> --base main --pr <rama> [--mode ci|restore|full]
+    contraprueba check --repo <ruta> --base main --pr <rama> [--mode ci|restore|bot|full]
+                       [--holdout-tests <carpeta>] [--attacks <archivo>]
     contraprueba case <carpeta del caso> [--pr <nombre>|all] [--mode <modo>|all]
 
 `check` revisa un PR de un repo cuya rama base tiene `.contraprueba.json`.
@@ -18,6 +19,7 @@ from pathlib import Path
 
 from . import pipeline
 from .case import load_case, materialize
+from .holdout import load_attacks
 
 
 def _print(result: pipeline.CheckResult, as_json: bool) -> None:
@@ -26,7 +28,8 @@ def _print(result: pipeline.CheckResult, as_json: bool) -> None:
 
 def cmd_check(args: argparse.Namespace) -> int:
     holdout = Path(args.holdout_tests) if args.holdout_tests else None
-    result = pipeline.check(args.repo, args.base, args.pr, args.mode, holdout_tests=holdout, budget=args.budget)
+    attacks = load_attacks(args.attacks) if args.attacks else None
+    result = pipeline.check(args.repo, args.base, args.pr, args.mode, holdout_tests=holdout, budget=args.budget, attacks=attacks)
     _print(result, args.json)
     return 0 if result.approved else 1
 
@@ -40,9 +43,16 @@ def cmd_case(args: argparse.Namespace) -> int:
         repo = materialize(case, Path(tmp) / "repo")
         for pr in prs:
             for mode in modes:
+                attacks = case.attacks_for(pr, mode)
+                if mode == "bot" and attacks is None:
+                    continue  # el bot solo valida PR que parchean la falla
                 results[pr, mode] = pipeline.check(
-                    repo, "main", pr, mode, target=case.target(), holdout_tests=case.holdout_tests_path, budget=args.budget
+                    repo, "main", pr, mode, target=case.target(), holdout_tests=case.holdout_tests_path,
+                    budget=args.budget, attacks=attacks,
                 )
+    if not results:
+        print("No se ejecutó ninguna revisión (el modo bot solo aplica a PR que parchean la falla).", file=sys.stderr)
+        return 2
     if args.json:
         print(json.dumps({f"{pr}/{mode}": r.to_dict() for (pr, mode), r in results.items()}, ensure_ascii=False, indent=2))
     elif len(results) == 1:
@@ -51,7 +61,9 @@ def cmd_case(args: argparse.Namespace) -> int:
         width = max(len(p) for p in prs)
         print(f"{'PR'.ljust(width)}  tipo           " + "  ".join(m.ljust(9) for m in modes))
         for pr in prs:
-            cells = "  ".join(("aprobado" if results[pr, m].approved else "RECHAZADO").ljust(9) for m in modes)
+            cells = "  ".join(
+                ("—" if (pr, m) not in results else "aprobado" if results[pr, m].approved else "RECHAZADO").ljust(9) for m in modes
+            )
             print(f"{pr.ljust(width)}  {case.pr(pr).kind.ljust(13)}  {cells}")
         for (pr, mode), r in results.items():
             if mode == "full":
@@ -69,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--pr", required=True)
     c.add_argument("--mode", choices=pipeline.MODES, default="full")
     c.add_argument("--holdout-tests", help="carpeta con tests funcionales reservados, fuera del repo")
+    c.add_argument("--attacks", help="archivo JSON con ataques reservados: todos se ejecutan contra el PR")
     c.set_defaults(func=cmd_check)
 
     k = sub.add_parser("case", help="revisa los PR de un caso de evaluación")

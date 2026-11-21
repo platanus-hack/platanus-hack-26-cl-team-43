@@ -203,7 +203,8 @@ def start_app(context: Path, case: Case | Target) -> AppHandle:
     return AppHandle(run_id, run_id, container, image, f"http://app:{case.app.port}")
 
 
-def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_dir: Path | None = None, budget: float = 120.0) -> tuple[int, dict]:
+def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_dir: Path | None = None, budget: float = 120.0,
+                  attacks_file: Path | None = None) -> tuple[int, dict]:
     """Corre el evaluador contra la app. Devuelve (código de salida, JSON del evaluador).
 
     Si el contenedor no termina en `budget` + margen, se mata y se devuelve una
@@ -216,12 +217,16 @@ def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_di
     ]
     if holdout_dir is not None:
         args += ["-v", f"{holdout_dir.resolve()}:/work/holdout:ro"]
+    if attacks_file is not None:
+        args += ["-v", f"{attacks_file.resolve()}:/work/attacks.json:ro"]
     args += [
         EVALUATOR_IMAGE, "--base-url", app.base_url, "--health", case.app.health,
         "--tests-dir", case.tests_dir, "--budget", str(budget),
     ]
     if holdout_dir is not None:
         args += ["--holdout-dir", "/work/holdout"]
+    if attacks_file is not None:
+        args += ["--attacks", "/work/attacks.json"]
     try:
         proc = _docker(*args, timeout=budget + 45, check=False)
     except subprocess.TimeoutExpired:

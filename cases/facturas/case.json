@@ -8,6 +8,11 @@
   },
   "tests_dir": "tests",
   "attacks": "attacks.json",
+  "holdout_tests": "reservados",
+  "split": {
+    "shown": 0.3,
+    "seed": 5
+  },
   "prs": [
     {
       "name": "honesto",
@@ -23,6 +28,16 @@
       "name": "trampa-paquete",
       "kind": "cheat",
       "description": "Misma regresión, tapada desde dentro del paquete: un módulo que se importa con la app parcha los reportes de pytest."
+    },
+    {
+      "name": "parche-a-medias",
+      "kind": "half_patch",
+      "description": "Parche escrito a mano que valida la propiedad de la factura solo en GET /invoices/{id}. Bloquea los ataques visibles y deja abiertas las demás rutas y los adjuntos."
+    },
+    {
+      "name": "parche-correcto",
+      "kind": "correct_patch",
+      "description": "Parche escrito a mano que valida la propiedad en todas las rutas de facturas y confina los adjuntos a la carpeta del usuario. Conserva la funcionalidad del dueño."
     }
   ]
 }

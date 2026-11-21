@@ -1,14 +1,18 @@
 """Orquestador: revisa un PR y devuelve la decisión con su evidencia.
 
-Tres modos sobre el mismo PR:
+Cuatro modos sobre el mismo PR:
 
 - `ci`: línea base. Corre pytest con los tests y la configuración del PR, en
   el mismo contenedor que su código. Es lo que hace un CI normal.
 - `restore`: línea base. Repone los tests, la configuración y los hooks de la
   rama base, pero pytest sigue en el mismo contenedor que el código.
+- `bot`: la validación del bot de seguridad. Mismo contenedor separado que
+  `full`, pero solo con los ataques visibles: sin revisión de integridad ni
+  tests reservados. Es lo que el bot ve antes de proponer el parche.
 - `full`: Contraprueba. La app corre en un contenedor y el evaluador, con los
   tests de la base, en otro. Además se revisan los cambios que tocan la
-  evaluación. Decide `gate.decide`.
+  evaluación y, en los PR que parchean la falla, se ejecutan los ataques
+  reservados y los tests funcionales reservados. Decide `gate.decide`.
 
 Todo se lee del repo por hash de commit. La configuración (`.contraprueba.json`),
 los tests y los reservados vienen de la rama base o de fuera del repo, nunca
@@ -17,6 +21,7 @@ del PR.
 
 from __future__ import annotations
 
+import json
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,9 +30,10 @@ from . import gitio, integrity, sandbox
 from .case import CONFIG_FILE, Target, load_target
 from .evaluator import EXIT, SCHEMA
 from .gate import Evidence, decide
+from .holdout import Attack
 from .integrity import Flag
 
-MODES = ("ci", "restore", "full")
+MODES = ("ci", "restore", "bot", "full")
 
 
 @dataclass
@@ -39,7 +45,7 @@ class CheckResult:
     reasons: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     flags: list[Flag] = field(default_factory=list)
-    evaluator: dict | None = None  # JSON del evaluador (modo full)
+    evaluator: dict | None = None  # JSON del evaluador (modos bot y full)
     inside: dict | None = None  # resultado de pytest dentro del contenedor (modos ci y restore)
 
     def to_dict(self) -> dict:
@@ -100,12 +106,15 @@ def _suite_evidence(name: str, suite: object, required: bool) -> tuple[bool, lis
     return ok and not failed and not incomplete, failed, incomplete
 
 
-def evidence_from(result: object, flags: list[Flag], exit_code: int | None = 0, expect_holdout: bool = False) -> Evidence:
+def evidence_from(
+    result: object, flags: list[Flag], exit_code: int | None = 0, expect_holdout: bool = False, expect_attacks: bool = False
+) -> Evidence:
     """Traduce la salida del evaluador a evidencia.
 
     Solo hay aprobación posible si el evaluador dijo `ok`, salió con 0 y cada
-    suite obligatoria está presente, completa y aprobada. Todo lo demás es un
-    fallo con detalle o una evaluación incompleta; nunca un éxito por omisión.
+    suite obligatoria está presente, completa y aprobada, y, si se esperaban
+    ataques, su resultado llegó completo. Todo lo demás es un fallo con detalle
+    o una evaluación incompleta; nunca un éxito por omisión.
     """
     if not isinstance(result, dict):
         return Evidence(False, integrity_flags=flags, incomplete=["salida del evaluador mal formada"])
@@ -125,7 +134,10 @@ def evidence_from(result: object, flags: list[Flag], exit_code: int | None = 0, 
 
     attacks = result.get("attacks")
     confirmed: list[str] = []
-    if attacks is not None:
+    if attacks is None:
+        if expect_attacks:
+            incomplete.append("ataques reservados sin resultado")
+    else:
         try:
             confirmed = [str(a) for a in attacks["confirmed"]]
             if attacks["complete"] is not True:
@@ -156,9 +168,12 @@ def check(
     target: Target | None = None,
     holdout_tests: Path | None = None,
     budget: float = 120.0,
+    attacks: list[Attack] | None = None,
 ) -> CheckResult:
     if mode not in MODES:
         raise ValueError(f"modo desconocido: {mode}")
+    if mode == "bot" and not attacks:
+        raise ValueError("el modo bot necesita ataques")
     base_sha, pr_sha = gitio.resolve(repo, base), gitio.resolve(repo, pr)
     target = target or target_from_base(repo, base_sha)
 
@@ -176,22 +191,29 @@ def check(
             inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget)
             return _baseline(mode, base_sha, pr_sha, inside)
 
-        flags = integrity.scan(repo, base_sha, pr_sha, target.tests_dir)
+        bot = mode == "bot"
+        flags = [] if bot else integrity.scan(repo, base_sha, pr_sha, target.tests_dir)
+        holdout_tests = None if bot else holdout_tests
         if not gitio.is_ancestor(repo, base_sha, pr_sha):
             ev = Evidence(False, integrity_flags=flags, incomplete=["la rama del PR no contiene la punta de la base; hay que actualizarla"])
-            return _full(base_sha, pr_sha, flags, None, ev)
+            return _full(mode, base_sha, pr_sha, flags, None, ev)
         workdir = sandbox.prepare_eval_workdir(base_tree, target.tests_dir, tmp_path / "eval")
+        attacks_file = None
+        if attacks:
+            attacks_file = tmp_path / "attacks.json"
+            attacks_file.write_text(json.dumps([a.to_dict() for a in attacks]))
         sandbox.build_evaluator_image()
         try:
             app = sandbox.start_app(pr_tree, target)
         except sandbox.SandboxError as e:
             ev = Evidence(False, integrity_flags=flags, incomplete=[f"la app del PR no se pudo construir o levantar: {e}"])
-            return _full(base_sha, pr_sha, flags, None, ev)
+            return _full(mode, base_sha, pr_sha, flags, None, ev)
         try:
-            code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget)
+            code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget, attacks_file)
         finally:
             sandbox.stop(app)
-        return _full(base_sha, pr_sha, flags, result, evidence_from(result, flags, code, holdout_tests is not None))
+        ev = evidence_from(result, flags, code, holdout_tests is not None, bool(attacks))
+        return _full(mode, base_sha, pr_sha, flags, result, ev)
 
 
 def _baseline(mode: str, base_sha: str, pr_sha: str, inside: dict) -> CheckResult:
@@ -199,6 +221,6 @@ def _baseline(mode: str, base_sha: str, pr_sha: str, inside: dict) -> CheckResul
     return CheckResult(mode, base_sha, pr_sha, inside["passed"], reasons, inside=inside)
 
 
-def _full(base_sha: str, pr_sha: str, flags: list[Flag], result: dict | None, ev: Evidence) -> CheckResult:
+def _full(mode: str, base_sha: str, pr_sha: str, flags: list[Flag], result: dict | None, ev: Evidence) -> CheckResult:
     verdict = decide(ev)
-    return CheckResult("full", base_sha, pr_sha, verdict.approved, verdict.reasons, verdict.notes, flags, evaluator=result)
+    return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, verdict.notes, flags, evaluator=result)

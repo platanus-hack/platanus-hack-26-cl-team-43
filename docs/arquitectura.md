@@ -63,7 +63,10 @@ La política es restrictiva a propósito: arreglar un test existente o un fixtur
 |---|---|---|---|
 | `ci` | los del PR | mismo contenedor que el código | código de salida de pytest |
 | `restore` | los de la base; se borran los hooks que no están en la base | mismo contenedor que el código | código de salida de pytest |
-| `full` | los de la base | contenedor evaluador, por HTTP | `gate.decide` sobre la evidencia y las marcas |
+| `bot` | solo los ataques visibles | contenedor evaluador, por HTTP | `gate.decide`; es la validación del bot de seguridad |
+| `full` | los de la base, los tests reservados y los ataques reservados | contenedor evaluador, por HTTP | `gate.decide` sobre la evidencia y las marcas |
+
+`bot` y `full` solo aplican a PR que parchean la falla (`half_patch`, `correct_patch`); `bot` corre únicamente el subconjunto visible de ataques, el mismo que vería el bot de seguridad.
 
 ## Contrato del evaluador
 

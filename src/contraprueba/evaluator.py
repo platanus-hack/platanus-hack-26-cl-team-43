@@ -10,7 +10,7 @@ Contrato de salida (`schema` 1):
   `incomplete` (algo no se pudo ejecutar: app caída, timeout, sin tests).
 - `suites.<nombre>`: resultado por suite (`base`, `holdout`). `failures` trae
   archivo, línea y mensaje de cada test que falló.
-- `attacks`: resultado por ataque (fase 2), o `null`.
+- `attacks`: resultado por ataque, o `null` si no se pidieron ataques.
 - `errors`: errores de infraestructura.
 - `log_tail` en cada suite es solo informativo; no es parte del contrato.
 
@@ -35,6 +35,8 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+from .holdout import load_attacks, run_attacks
 
 SCHEMA = 1
 EXIT = {"ok": 0, "failed": 1, "incomplete": 2}
@@ -139,8 +141,11 @@ def overall_status(result: dict) -> str:
     return "failed"
 
 
-def evaluate(base_url: str, health: str, base_dir: Path, tests_dir: str, holdout_dir: Path | None, budget: float) -> dict:
-    """Toda la evaluación (salud, suites) cabe en `budget` segundos o queda incompleta."""
+def evaluate(
+    base_url: str, health: str, base_dir: Path, tests_dir: str, holdout_dir: Path | None, budget: float,
+    attacks_file: Path | None = None,
+) -> dict:
+    """Toda la evaluación (salud, suites, ataques) cabe en `budget` segundos o queda incompleta."""
     if not (isinstance(budget, (int, float)) and math.isfinite(budget) and budget > 0):
         raise ValueError(f"presupuesto inválido: {budget!r}")
     deadline = time.monotonic() + budget
@@ -151,6 +156,11 @@ def evaluate(base_url: str, health: str, base_dir: Path, tests_dir: str, holdout
         result["suites"]["base"] = run_suite(base_url, base_dir, tests_dir, remaining(deadline))
         if holdout_dir is not None:
             result["suites"]["holdout"] = run_suite(base_url, holdout_dir, ".", remaining(deadline))
+        if attacks_file is not None:
+            try:
+                result["attacks"] = run_attacks(base_url, load_attacks(attacks_file), deadline=deadline).to_dict()
+            except (OSError, ValueError) as e:
+                result["errors"].append(f"no se pudieron ejecutar los ataques reservados: {e}")
     if remaining(deadline) < 0:
         result["errors"].append("la evaluación terminó fuera de plazo")
     result["status"] = overall_status(result)
@@ -164,11 +174,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--base-dir", default="/work/base", help="tests y configuración de la rama base")
     p.add_argument("--tests-dir", default="tests")
     p.add_argument("--holdout-dir", default=None, help="tests funcionales reservados")
+    p.add_argument("--attacks", default=None, help="archivo JSON con los ataques a ejecutar")
     p.add_argument("--budget", type=float, default=120.0, help="segundos para toda la evaluación")
     args = p.parse_args(argv)
     result = evaluate(
         args.base_url, args.health, Path(args.base_dir), args.tests_dir,
         Path(args.holdout_dir) if args.holdout_dir else None, args.budget,
+        Path(args.attacks) if args.attacks else None,
     )
     print(json.dumps(result, ensure_ascii=False))
     return EXIT[result["status"]]

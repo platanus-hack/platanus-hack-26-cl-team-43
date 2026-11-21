@@ -14,7 +14,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from .holdout import Attack, load_attacks
+from .holdout import Attack, load_attacks, split
 
 PR_KINDS = ("cheat", "honest", "half_patch", "correct_patch")
 CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "holdout_tests", "split", "prs"}
@@ -106,6 +106,17 @@ class Case:
 
     def attacks(self) -> list[Attack]:
         return load_attacks(self.root / self.attacks_file) if self.attacks_file else []
+
+    def attacks_for(self, pr: str, mode: str) -> list[Attack] | None:
+        """Ataques que se ejecutan contra un PR en un modo, o `None` si no corresponde.
+
+        Solo los PR que parchean la falla (`half_patch`, `correct_patch`) se
+        evalúan con ataques: en modo `bot` los visibles, en los demás los reservados.
+        """
+        if self.pr(pr).kind not in ("half_patch", "correct_patch"):
+            return None
+        visible, reserved = split(self.attacks(), self.split_shown, self.split_seed)
+        return visible if mode == "bot" else reserved
 
     def pr(self, name: str) -> PRSpec:
         for p in self.prs:

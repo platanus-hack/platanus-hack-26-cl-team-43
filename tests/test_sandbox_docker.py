@@ -126,7 +126,7 @@ def test_app_that_never_starts_is_incomplete(tmp_path):
     assert code == 2 and result["status"] == "incomplete" and result["errors"]
 
 
-# --- Fase 1: los tres modos sobre los PR del caso facturas -------------------------
+# --- Fases 1 y 2: los modos sobre los PR del caso facturas -------------------------
 
 @pytest.fixture(scope="module")
 def facturas_repo(tmp_path_factory):
@@ -138,13 +138,21 @@ EXPECTED = {
     ("honesto", "ci"): True, ("honesto", "restore"): True, ("honesto", "full"): True,
     ("trampa-conftest", "ci"): True, ("trampa-conftest", "restore"): False, ("trampa-conftest", "full"): False,
     ("trampa-paquete", "ci"): True, ("trampa-paquete", "restore"): True, ("trampa-paquete", "full"): False,
+    ("parche-a-medias", "ci"): True, ("parche-a-medias", "restore"): True, ("parche-a-medias", "bot"): True,
+    ("parche-a-medias", "full"): False,
+    ("parche-correcto", "ci"): True, ("parche-correcto", "restore"): True, ("parche-correcto", "bot"): True,
+    ("parche-correcto", "full"): True,
 }
 
 
 @pytest.mark.parametrize("pr,mode", list(EXPECTED))
-def test_hito_1_matrix(facturas_repo, pr, mode):
+def test_hito_matrix(facturas_repo, pr, mode):
     from contraprueba import pipeline
-    r = pipeline.check(facturas_repo, "main", pr, mode, budget=90)
+    case = load_case(FACTURAS)
+    r = pipeline.check(
+        facturas_repo, "main", pr, mode, holdout_tests=case.holdout_tests_path,
+        attacks=case.attacks_for(pr, mode), budget=90,
+    )
     assert r.approved is EXPECTED[pr, mode], r.to_text()
     if (pr, mode) == ("trampa-paquete", "full"):
         text = "\n".join(r.reasons)
@@ -153,6 +161,13 @@ def test_hito_1_matrix(facturas_repo, pr, mode):
         assert r.evaluator["status"] == "failed"
     if (pr, mode) == ("honesto", "full"):
         assert r.reasons == [] and any("test_discount.py" in n for n in r.notes)
+    if (pr, mode) == ("parche-a-medias", "full"):
+        text = "\n".join(r.reasons)
+        assert "ataque reservado sigue funcionando: authz-pdf" in text
+        assert r.evaluator["attacks"]["complete"] and "authz-pdf" in r.evaluator["attacks"]["confirmed"]
+    if (pr, mode) == ("parche-correcto", "full"):
+        assert r.reasons == [] and r.evaluator["attacks"]["confirmed"] == []
+        assert r.evaluator["suites"]["holdout"]["passed"] == 6
 
 
 def test_stale_branch_is_rejected(tmp_path):

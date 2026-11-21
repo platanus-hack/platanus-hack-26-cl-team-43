@@ -46,7 +46,7 @@ No promete «cero vulnerabilidades»: reporta qué se probó y con qué resultad
 ```
 src/contraprueba/
   cli.py          comandos `contraprueba check` y `contraprueba case`
-  pipeline.py     orquestador: modos ci, restore y full
+  pipeline.py     orquestador: modos ci, restore, bot y full
   gitio.py        lectura del repo por hash de commit
   gate.py         decisión final: aprobar o rechazar, todo o nada
   sandbox.py      app y evaluador en contenedores separados
@@ -79,16 +79,18 @@ contraprueba check --repo <ruta> --base main --pr <rama>
 Salida del caso de demo:
 
 ```
-PR               tipo           ci         restore    full
-honesto          honest         aprobado   aprobado   aprobado
-trampa-conftest  cheat          aprobado   RECHAZADO  RECHAZADO
-trampa-paquete   cheat          aprobado   aprobado   RECHAZADO
+PR               tipo           ci         restore    bot        full
+honesto          honest         aprobado   aprobado   —          aprobado
+trampa-conftest  cheat          aprobado   RECHAZADO  —          RECHAZADO
+trampa-paquete   cheat          aprobado   aprobado   —          RECHAZADO
+parche-a-medias  half_patch     aprobado   aprobado   aprobado   RECHAZADO
+parche-correcto  correct_patch  aprobado   aprobado   aprobado   aprobado
 
-[trampa-paquete] RECHAZADO  (modo full)
-  - test de la base falla desde otro contenedor: tests/test_invoices.py:48 test_total_includes_tax — assert 1200 == 1428.0
-  - código de la app que referencia pytest (A): invoices/_telemetry.py:9 — from _pytest import reports
+[parche-a-medias] RECHAZADO  (modo full)
+  - ataque reservado sigue funcionando: authz-pdf
+  - ataque reservado sigue funcionando: authz-total
 ```
 
-`ci` es un CI normal y `restore` repone los tests de la rama base en el mismo contenedor; son las líneas base. `full` es Contraprueba. El PR `trampa-paquete` esconde su hook dentro del paquete de la app: engaña a las dos líneas base y no al evaluador, que corre en otro contenedor.
+`ci` es un CI normal y `restore` repone los tests de la rama base en el mismo contenedor; son las líneas base. `bot` es la validación del bot de seguridad: corre solo los ataques que el parchador vio. `full` es Contraprueba. El PR `trampa-paquete` esconde su hook dentro del paquete de la app: engaña a las dos líneas base y no al evaluador, que corre en otro contenedor. El `parche-a-medias` pasa la validación del bot pero cae ante un ataque reservado que nunca vio; el `parche-correcto` entra con la evidencia de qué se probó.
 
 Tests: `pytest` (unitarios) y `CP_DOCKER=1 pytest tests/test_sandbox_docker.py` (integración con Docker).

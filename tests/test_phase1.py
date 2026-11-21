@@ -282,12 +282,15 @@ def test_unknown_mode_is_rejected(repo):
         pipeline.check(repo, "main", "main", mode="magia")
 
 
-def test_facturas_materializes_with_config_and_three_prs(tmp_path):
+def test_facturas_materializes_with_config_and_five_prs(tmp_path):
     case = load_case(FACTURAS)
     repo = materialize(case, tmp_path / "repo")
     assert pipeline.target_from_base(repo, gitio.resolve(repo, "main")) == case.target()
     kinds = {p.name: p.kind for p in case.prs}
-    assert kinds == {"honesto": "honest", "trampa-conftest": "cheat", "trampa-paquete": "cheat"}
+    assert kinds == {
+        "honesto": "honest", "trampa-conftest": "cheat", "trampa-paquete": "cheat",
+        "parche-a-medias": "half_patch", "parche-correcto": "correct_patch",
+    }
     base = gitio.resolve(repo, "main")
     blocking = {
         name: [f for f in integrity.scan(repo, base, gitio.resolve(repo, name)) if f.severity == "block"]
@@ -296,6 +299,7 @@ def test_facturas_materializes_with_config_and_three_prs(tmp_path):
     assert blocking["honesto"] == []
     assert [f.path for f in blocking["trampa-conftest"]] == ["conftest.py"]
     assert {f.path for f in blocking["trampa-paquete"]} == {"invoices/_telemetry.py"}
+    assert blocking["parche-a-medias"] == [] and blocking["parche-correcto"] == []
 
 
 # --- línea base «restaurar» -------------------------------------------------------------
