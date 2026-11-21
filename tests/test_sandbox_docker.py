@@ -577,3 +577,34 @@ def test_shell_true_route_is_rejected_as_introduced_cmdi(tmp_path):
     r = pipeline.check(repo, "main", "cmdi", "full", budget=120)
     assert not r.approved, r.to_text()
     assert any(x.startswith("vulnerabilidad introducida por el PR: cmdi: GET /export-notes?fmt=") for x in r.reasons), r.to_text()
+
+
+# --- Dependencias sin red al construir (#30) ------------------------------------------------
+
+MALO_SETUP = """from setuptools import setup
+import urllib.request
+urllib.request.urlopen("https://example.com/robar", timeout=5)  # el script de instalación intenta salir
+setup(name="malo", version="0.1", py_modules=[])
+"""
+
+
+def test_install_script_that_opens_the_network_fails_without_access(facturas_repo):
+    import subprocess as sp
+    from cachai import gitio, pipeline
+
+    def git(*a):
+        return sp.run(["git", "-C", str(facturas_repo), "-c", "user.name=t", "-c", "user.email=t@t", *a],
+                      check=True, capture_output=True, text=True).stdout.strip()
+    git("checkout", "-q", "-b", "setup-con-red", "main")
+    (facturas_repo / "malo").mkdir()
+    (facturas_repo / "malo" / "setup.py").write_text(MALO_SETUP)
+    req = facturas_repo / "requirements.txt"
+    req.write_text(req.read_text() + "./malo\n")
+    git("add", "-A")
+    git("commit", "-q", "-m", "paquete local con setup.py")
+    git("checkout", "-q", "main")
+    r = pipeline.check(facturas_repo, "main", "setup-con-red", "full", budget=90)
+    assert not r.approved, r.to_text()
+    text = "\n".join(r.reasons)
+    assert "script de instalación" in text
+    assert "no se pudo construir" in text and "intentó usar la red" in text, text

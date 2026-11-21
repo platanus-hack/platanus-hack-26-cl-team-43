@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -75,9 +76,79 @@ _image_lock = threading.Lock()
 MISSING_IMAGE = ("Unable to find image", "No such image", "pull access denied")
 
 
+WHEELS_DIR = ".cachai-wheels"
+NETWORK_ERRORS = ("Temporary failure in name resolution", "Network is unreachable", "Name or service not known",
+                  "nodename nor servname", "Connection refused")
+WHEEL_CACHE = Path(os.environ.get("CACHAI_WHEEL_CACHE", Path.home() / ".cache" / "cachai" / "wheels"))
+# Lo que el build sin red necesita además de las dependencias: construir un paquete local sin internet.
+BUILD_TOOLS = ("setuptools", "wheel")
+
+
+def _local_requirement(line: str) -> bool:
+    """Una línea que apunta a código del repo (se construye en el build, sin red), no a PyPI."""
+    s = line.strip()
+    return s.startswith(("-e", "--editable", ".", "/", "file:")) or s.startswith("-r") or s.startswith("-c")
+
+
+def fetch_wheels(context: Path) -> Path:
+    """Descarga como wheels las dependencias de `requirements.txt` del PR, en un contenedor aparte.
+
+    `--only-binary=:all:` no corre ningún código del paquete: si una dependencia
+    solo existe como fuente, la descarga falla y la revisión queda incompleta.
+    Los wheels quedan en una caché por hash del archivo y se copian a
+    `context/.cachai-wheels` para el build sin red.
+    """
+    req = _plain_path(context, "requirements.txt")
+    if not req.is_file():
+        raise SandboxError("falta requirements.txt en el árbol del PR")
+    lines = req.read_text(errors="replace").splitlines()
+    remote = [ln for ln in lines if ln.strip() and not ln.strip().startswith("#") and not _local_requirement(ln)]
+    text = "\n".join(remote + list(BUILD_TOOLS)) + "\n"
+    key = hashlib.sha256(text.encode()).hexdigest()[:24]
+    cache = WHEEL_CACHE / key
+    if not (cache / ".completo").is_file():
+        tmp = WHEEL_CACHE / f"{key}.{uuid.uuid4().hex[:6]}"
+        tmp.mkdir(parents=True, exist_ok=True)
+        (tmp / "requirements.txt").write_text(text)
+        proc = _docker(
+            "run", "--rm", "--security-opt", "no-new-privileges", "--memory", "1g", "--user", f"{os.getuid()}:{os.getgid()}",
+            "-e", "HOME=/tmp", "-v", f"{tmp.resolve()}:/wheels", "python:3.12-slim",
+            "pip", "download", "--quiet", "--no-cache-dir", "--only-binary=:all:", "-d", "/wheels", "-r", "/wheels/requirements.txt",
+            timeout=600, check=False,
+        )
+        if proc.returncode != 0:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise SandboxError(f"no se pudieron descargar las dependencias como wheels (sin código de instalación): {proc.stderr.strip()[-400:]}")
+        (tmp / "requirements.txt").unlink()
+        (tmp / ".completo").write_text("")
+        if cache.exists():
+            shutil.rmtree(tmp, ignore_errors=True)
+        else:
+            tmp.rename(cache)
+    dest = context / WHEELS_DIR
+    _remove(dest)  # una carpeta con este nombre que traiga el PR no se usa
+    shutil.copytree(cache, dest)
+    return dest
+
+
 def _build_app_image(context: Path, image: str) -> None:
-    with _image_lock:
-        _docker("build", "-q", "-f", str(ROOT / "docker" / "app.Dockerfile"), "-t", image, str(context))
+    """Imagen Python de Cachai: dependencias desde wheels descargados antes y build sin red.
+
+    Se construye desde una copia temporal del contexto con los wheels al lado:
+    el árbol original (a veces una carpeta del repo, como la base de un caso) no se toca.
+    """
+    with tempfile.TemporaryDirectory(prefix="cachai-build-") as tmp:
+        ctx = Path(tmp) / "ctx"
+        _copy_regular_tree(context, ctx, skip_symlinks=True)
+        fetch_wheels(ctx)
+        with _image_lock:
+            proc = _docker("build", "--progress", "plain", "--network", "none", "-f", str(ROOT / "docker" / "app.Dockerfile"),
+                           "-t", image, str(ctx), check=False)
+    if proc.returncode != 0:
+        log = proc.stderr + proc.stdout
+        offline = any(m in log for m in NETWORK_ERRORS)
+        why = "un script de instalación intentó usar la red y el build no la tiene" if offline else "falló la instalación sin red"
+        raise SandboxError(f"docker build falló ({why}): {log.strip()[-400:]}")
 
 
 def _remove_image(image: str) -> None:
@@ -118,11 +189,16 @@ def build_evaluator_image(root: Path = ROOT) -> str:
     return tag
 
 
-def _copy_regular_tree(src: Path, dst: Path) -> None:
-    """Copia un árbol de archivos regulares. No sigue ni copia enlaces simbólicos."""
+def _copy_regular_tree(src: Path, dst: Path, skip_symlinks: bool = False) -> None:
+    """Copia un árbol de archivos regulares. No sigue enlaces simbólicos: con
+    `skip_symlinks` los omite; si no, son un error."""
     if src.is_symlink() or not src.is_dir():
         raise SandboxError(f"se esperaba una carpeta real: {src}")
+    dst.mkdir(parents=True, exist_ok=True)
     for root, dirs, files in os.walk(src, followlinks=False):
+        if skip_symlinks:
+            dirs[:] = [d for d in dirs if d != "__pycache__" and not (Path(root) / d).is_symlink()]
+            files = [f for f in files if not (Path(root) / f).is_symlink()]
         dirs[:] = [d for d in dirs if d != "__pycache__"]
         for name in dirs + files:
             if (Path(root) / name).is_symlink():

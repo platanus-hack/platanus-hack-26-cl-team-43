@@ -71,5 +71,5 @@ Y porque la trampa con los tests no es un problema menor de calidad. Hay evidenc
 - Con qué frecuencia un modelo deja un parche a medias por su cuenta. Con el encargo normal, los 8 parches de modelos salieron bien. Los 3 parches a medias de un modelo real vienen de un parchador instruido para hacer lo mínimo, y así está declarado.
 - Fugas ofuscadas. La fuga se detecta buscando en claro textos que solo el dueño debería ver; un parche que codifique lo que filtra no se detecta.
 - Comportamiento que cambia después de la evaluación, por tiempo o por cantidad de pedidos.
-- La instalación de dependencias del PR, que corre con red al construir la imagen: se informa, no se aísla.
+- La instalación de dependencias cuando el repo trae su propio Dockerfile o compose (#20): ese build sigue con red. Con la imagen Python de Cachai, las dependencias se bajan antes solo como wheels (sin correr código de instalación) y la imagen se construye sin red: un `setup.py` del PR que intenta salir falla, y además se bloquea por integridad.
 - Un repositorio git manipulado a mano. Ignoramos reemplazos e injertos, pero en producción hay que revisar un clon limpio del remoto.

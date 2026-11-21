@@ -38,6 +38,9 @@ EVAL_HOOK_PATTERNS = ("conftest.py", "sitecustomize.py", "usercustomize.py", "*.
 # Con `on: pull_request` el workflow sale del commit del PR: cambiarlo cambia quién corre la revisión.
 CI_DIRS = (".github/workflows", ".github/actions")
 
+# Scripts que corren al instalar un paquete: código del PR que se ejecuta al construir la imagen.
+INSTALL_SCRIPTS = ("setup.py",)
+
 DEPENDENCY_PATTERNS = ("requirements*.txt", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock")
 
 PYTEST_REF = re.compile(r"(?<![A-Za-z0-9])_?pytest(?![A-Za-z0-9])|(?<![A-Za-z0-9])pluggy(?![A-Za-z0-9])|pytest_", re.IGNORECASE)
@@ -95,6 +98,8 @@ def classify(changes: list[tuple[str, str]], test_dirs: tuple[str, ...] = ("test
                 flags.append(Flag(path, status, "tests nuevos, no se usan para evaluar", "info"))
             else:
                 flags.append(Flag(path, status, "tests existentes modificados"))
+        elif name in INSTALL_SCRIPTS and status != "D":
+            flags.append(Flag(path, status, "script de instalación, corre al construir la imagen"))
         elif any(fnmatch.fnmatch(name, pat) for pat in DEPENDENCY_PATTERNS):
             flags.append(Flag(path, status, "dependencias cambiadas, se instalan al construir la imagen", "info"))
     return flags
@@ -174,6 +179,16 @@ def _scan_pytest_refs(path: str, status: str, pr: bytes, base: bytes | None) -> 
     return flags
 
 
+def _dependency_diff(base: bytes | None, pr: bytes | None, limit: int = 6) -> str:
+    """Líneas agregadas y quitadas de un archivo de dependencias, para la nota."""
+    def lines(b: bytes | None) -> list[str]:
+        return [ln.strip() for ln in (b or b"").decode(errors="replace").splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    old, new = lines(base), lines(pr)
+    changes = [f"+{ln}" for ln in new if ln not in old] + [f"-{ln}" for ln in old if ln not in new]
+    more = f" y {len(changes) - limit} más" if len(changes) > limit else ""
+    return ", ".join(changes[:limit]) + more
+
+
 def scan(repo: str | Path, base_sha: str, pr_sha: str, tests_dir: str = "tests",
          eval_files: tuple[str, ...] = (), app_files: tuple[str, ...] = ()) -> list[Flag]:
     """Marcas de un PR: por nombre (`classify`) y por contenido."""
@@ -190,6 +205,9 @@ def scan(repo: str | Path, base_sha: str, pr_sha: str, tests_dir: str = "tests",
                 same = False
             if same:
                 f = Flag(f.path, f.status, "configuración compartida, la sección de pytest no cambia", "info")
+        if f.reason.startswith("dependencias cambiadas"):
+            f = Flag(f.path, f.status, f.reason, f.severity, detail=_dependency_diff(
+                gitio.read_blob(repo, base_sha, f.path), gitio.read_blob(repo, pr_sha, f.path)))
         flags.append(f)
     for status, path in changes:
         if status == "D" or not path.endswith(".py") or in_dir(path, tests_dir) or is_hook(path):
