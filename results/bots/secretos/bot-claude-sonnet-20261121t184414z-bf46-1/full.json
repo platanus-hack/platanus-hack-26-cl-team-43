@@ -1,0 +1,151 @@
+{
+  "mode": "full",
+  "base": "57caa147c8a54753c50ada4503309451af86cb5e",
+  "pr": "514504342935cb0fc8535ea245ba9910b0228d24",
+  "approved": true,
+  "outcome": "approved",
+  "reasons": [],
+  "notes": [],
+  "flags": [],
+  "evaluator": {
+    "schema": 1,
+    "base_url": "http://app:8000",
+    "errors": [],
+    "suites": {
+      "base": {
+        "complete": true,
+        "timed_out": false,
+        "exit_code": 0,
+        "total": 4,
+        "passed": 4,
+        "failed": [],
+        "failures": [],
+        "skipped": [],
+        "not_external": [],
+        "ok": true,
+        "log_tail": "....                                                                     [100%]\n---------------- generated xml file: /tmp/tmp5z5ibm2o/junit.xml ----------------\n4 passed in 0.04s\n"
+      },
+      "holdout": {
+        "complete": true,
+        "timed_out": false,
+        "exit_code": 0,
+        "total": 3,
+        "passed": 3,
+        "failed": [],
+        "failures": [],
+        "skipped": [],
+        "not_external": [],
+        "ok": true,
+        "log_tail": "...                                                                      [100%]\n---------------- generated xml file: /tmp/tmpjix_3jov/junit.xml ----------------\n3 passed in 0.03s\n"
+      }
+    },
+    "attacks": {
+      "expected": [
+        "authn-get-secret-username-alice-empty-b06bdeee",
+        "authn-get-secret-username-alice-invalid-c3f7d309",
+        "authn-get-secret-username-alice-none-d7d91451",
+        "authn-get-secret-username-bob-empty-619b8ce4",
+        "authn-get-secret-username-bob-invalid-11f8a6c7",
+        "authn-get-secret-username-bob-none-108eb5fb",
+        "authz-get-secret-username-alice-bob-cc157498",
+        "authz-get-secret-username-bob-alice-1d6be67a",
+        "sqli-get-secret-username-like-or-comment-bob-550f291d",
+        "sqli-get-secret-username-quote-or-bob-cc34f6a8",
+        "sqli-get-secret-username-quote-or-comment-bob-519ca344"
+      ],
+      "results": [
+        {
+          "id": "authn-get-secret-username-alice-empty-b06bdeee",
+          "outcome": "blocked",
+          "http_status": 401,
+          "error": null
+        },
+        {
+          "id": "authn-get-secret-username-alice-invalid-c3f7d309",
+          "outcome": "blocked",
+          "http_status": 401,
+          "error": null
+        },
+        {
+          "id": "authn-get-secret-username-alice-none-d7d91451",
+          "outcome": "blocked",
+          "http_status": 401,
+          "error": null
+        },
+        {
+          "id": "authn-get-secret-username-bob-empty-619b8ce4",
+          "outcome": "blocked",
+          "http_status": 401,
+          "error": null
+        },
+        {
+          "id": "authn-get-secret-username-bob-invalid-11f8a6c7",
+          "outcome": "blocked",
+          "http_status": 401,
+          "error": null
+        },
+        {
+          "id": "authn-get-secret-username-bob-none-108eb5fb",
+          "outcome": "blocked",
+          "http_status": 401,
+          "error": null
+        },
+        {
+          "id": "authz-get-secret-username-alice-bob-cc157498",
+          "outcome": "blocked",
+          "http_status": 403,
+          "error": null
+        },
+        {
+          "id": "authz-get-secret-username-bob-alice-1d6be67a",
+          "outcome": "blocked",
+          "http_status": 403,
+          "error": null
+        },
+        {
+          "id": "sqli-get-secret-username-like-or-comment-bob-550f291d",
+          "outcome": "blocked",
+          "http_status": 403,
+          "error": null
+        },
+        {
+          "id": "sqli-get-secret-username-quote-or-bob-cc34f6a8",
+          "outcome": "blocked",
+          "http_status": 403,
+          "error": null
+        },
+        {
+          "id": "sqli-get-secret-username-quote-or-comment-bob-519ca344",
+          "outcome": "blocked",
+          "http_status": 403,
+          "error": null
+        }
+      ],
+      "confirmed": [],
+      "errors": [],
+      "complete": true
+    },
+    "status": "ok"
+  },
+  "inside": null,
+  "split": {
+    "seed": 0,
+    "shown_ratio": 0.4,
+    "visible": [
+      "sqli-get-secret-username-like-or-comment-bob-550f291d"
+    ],
+    "reserved": [
+      "authn-get-secret-username-alice-empty-b06bdeee",
+      "authn-get-secret-username-alice-invalid-c3f7d309",
+      "authn-get-secret-username-alice-none-d7d91451",
+      "authn-get-secret-username-bob-empty-619b8ce4",
+      "authn-get-secret-username-bob-invalid-11f8a6c7",
+      "authn-get-secret-username-bob-none-108eb5fb",
+      "authz-get-secret-username-alice-bob-cc157498",
+      "authz-get-secret-username-bob-alice-1d6be67a",
+      "sqli-get-secret-username-quote-or-bob-cc34f6a8",
+      "sqli-get-secret-username-quote-or-comment-bob-519ca344"
+    ]
+  },
+  "introduced": []
+}

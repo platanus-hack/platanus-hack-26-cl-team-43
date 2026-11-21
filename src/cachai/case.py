@@ -21,7 +21,7 @@ PR_KINDS = ("cheat", "honest", "half_patch", "correct_patch", "breaking_patch", 
 # vulnerable: PR normal (no dice ser de seguridad) que introduce una vulnerabilidad nueva.
 # Parches de seguridad: dicen arreglar la falla, así que deben bloquear los ataques del caso.
 PATCH_KINDS = ("half_patch", "correct_patch", "breaking_patch")
-CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "families", "holdout_tests", "split", "inventory", "prs"}
+CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "families", "holdout_tests", "split", "inventory", "prs", "provenance"}
 APP_KEYS = {"module", "port", "health", "dockerfile", "compose", "env"}
 COMPOSE_KEYS = {"file", "service"}
 PR_KEYS = {"name", "kind", "description", "delete"}
@@ -296,6 +296,8 @@ class Case:
     prs: tuple[PRSpec, ...] = field(default_factory=tuple)
     # Familias que el equipo rojo caza en el PR. Sin declarar: las de los ataques del caso.
     families: tuple[str, ...] = ()
+    # De dónde sale la app (casos de terceros): fuente, autor y licencia. Va tal cual a los resultados.
+    provenance: dict | None = field(default=None, hash=False, compare=False)
 
     @property
     def base_dir(self) -> Path:
@@ -367,6 +369,9 @@ def load_case(path: str | Path) -> Case:
         raise ValueError("nombres de PR repetidos")
     sp = d.get("split", {})
     _check_keys(sp, SPLIT_KEYS, "split")
+    provenance = d.get("provenance")
+    if provenance is not None and (not isinstance(provenance, dict) or not isinstance(provenance.get("summary"), str)):
+        raise ValueError("provenance debe ser un objeto con un resumen (summary)")
     families = d.get("families", [])
     if not isinstance(families, list) or len(families) != len(set(families)) or any(f not in FAMILIES for f in families):
         raise ValueError(f"families debe ser una lista sin repetidos de: {', '.join(FAMILIES)}")
@@ -383,6 +388,7 @@ def load_case(path: str | Path) -> Case:
         description=d.get("description", ""),
         prs=tuple(prs),
         families=tuple(families),
+        provenance=provenance,
     )
     if not case.base_dir.is_dir():
         raise ValueError(f"falta {case.base_dir}")

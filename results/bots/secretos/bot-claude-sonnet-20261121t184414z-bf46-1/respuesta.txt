@@ -1,0 +1,7 @@
+Arreglé la vulnerabilidad en `secret_storage/app.py`, pero no ejecuté los tests ni probé el pedido del ejemplo.
+
+- **`/get_secret`:** ahora exige token. Si `username` no coincide con el usuario del token, responde 403. La consulta SQL es parametrizada, y quité el `executescript` y la construcción de la consulta con f-string, que permitían la inyección `' OR 1=1 --`.
+- **`/set_secret`:** tenía el mismo fallo de autorización, porque cualquier usuario autenticado podía sobrescribir el secreto de otro. Ahora solo permite escribir el secreto propio y responde 403 en otro caso.
+- **Sin cambios:** el dueño sigue leyendo y escribiendo su secreto igual que antes. No toqué tests, configuración ni dependencias.
+
+Quedan otros fallos que no corregí porque estaban fuera del alcance: el `APP_SECRET` por defecto está escrito en el código, y las contraseñas se guardan en texto plano.

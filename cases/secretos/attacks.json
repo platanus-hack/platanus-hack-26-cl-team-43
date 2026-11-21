@@ -1,0 +1,297 @@
+[
+  {
+    "id": "authn-get-secret-username-alice-empty-b06bdeee",
+    "family": "authn",
+    "request": {
+      "method": "GET",
+      "path": "/get_secret?username=alice",
+      "headers": {
+        "Authorization": "Bearer"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "SECRETO-ALICE-7f3a"
+      ]
+    },
+    "group": "get-secret-username-8d8e980d",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/get_secret?username=alice",
+        "headers": {
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6NDEwMjQ0NDgwMH0.5iQuAAj1kHneMaZmSRL6eVUIVaOdSJFPYYPK4oJqm_Y"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "SECRETO-ALICE-7f3a"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authn-get-secret-username-alice-invalid-c3f7d309",
+    "family": "authn",
+    "request": {
+      "method": "GET",
+      "path": "/get_secret?username=alice",
+      "headers": {
+        "Authorization": "Bearer cachai-token-invalido"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "SECRETO-ALICE-7f3a"
+      ]
+    },
+    "group": "get-secret-username-8d8e980d",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/get_secret?username=alice",
+        "headers": {
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6NDEwMjQ0NDgwMH0.5iQuAAj1kHneMaZmSRL6eVUIVaOdSJFPYYPK4oJqm_Y"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "SECRETO-ALICE-7f3a"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authn-get-secret-username-alice-none-d7d91451",
+    "family": "authn",
+    "request": {
+      "method": "GET",
+      "path": "/get_secret?username=alice",
+      "headers": {}
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "SECRETO-ALICE-7f3a"
+      ]
+    },
+    "group": "get-secret-username-8d8e980d",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/get_secret?username=alice",
+        "headers": {
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6NDEwMjQ0NDgwMH0.5iQuAAj1kHneMaZmSRL6eVUIVaOdSJFPYYPK4oJqm_Y"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "SECRETO-ALICE-7f3a"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authn-get-secret-username-bob-empty-619b8ce4",
+    "family": "authn",
+    "request": {
+      "method": "GET",
+      "path": "/get_secret?username=bob",
+      "headers": {
+        "Authorization": "Bearer"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "SECRETO-BOB-21c9"
+      ]
+    },
+    "group": "get-secret-username-8d8e980d",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/get_secret?username=bob",
+        "headers": {
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib2IiLCJleHAiOjQxMDI0NDQ4MDB9.zbSIOau-7A4gn3p-tzQPvtfKkEgbFvsFMeT3_t6U6U8"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "SECRETO-BOB-21c9"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authn-get-secret-username-bob-invalid-11f8a6c7",
+    "family": "authn",
+    "request": {
+      "method": "GET",
+      "path": "/get_secret?username=bob",
+      "headers": {
+        "Authorization": "Bearer cachai-token-invalido"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "SECRETO-BOB-21c9"
+      ]
+    },
+    "group": "get-secret-username-8d8e980d",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/get_secret?username=bob",
+        "headers": {
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib2IiLCJleHAiOjQxMDI0NDQ4MDB9.zbSIOau-7A4gn3p-tzQPvtfKkEgbFvsFMeT3_t6U6U8"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "SECRETO-BOB-21c9"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authn-get-secret-username-bob-none-108eb5fb",
+    "family": "authn",
+    "request": {
+      "method": "GET",
+      "path": "/get_secret?username=bob",
+      "headers": {}
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "SECRETO-BOB-21c9"
+      ]
+    },
+    "group": "get-secret-username-8d8e980d",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/get_secret?username=bob",
+        "headers": {
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib2IiLCJleHAiOjQxMDI0NDQ4MDB9.zbSIOau-7A4gn3p-tzQPvtfKkEgbFvsFMeT3_t6U6U8"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "SECRETO-BOB-21c9"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-get-secret-username-alice-bob-cc157498",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/get_secret?username=alice",
+      "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib2IiLCJleHAiOjQxMDI0NDQ4MDB9.zbSIOau-7A4gn3p-tzQPvtfKkEgbFvsFMeT3_t6U6U8"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "SECRETO-ALICE-7f3a"
+      ]
+    },
+    "group": "get-secret-username-8d8e980d",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/get_secret?username=alice",
+        "headers": {
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6NDEwMjQ0NDgwMH0.5iQuAAj1kHneMaZmSRL6eVUIVaOdSJFPYYPK4oJqm_Y"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "SECRETO-ALICE-7f3a"
+        ]
+      }
+    }
+  },
+  {
+    "id": "authz-get-secret-username-bob-alice-1d6be67a",
+    "family": "authz",
+    "request": {
+      "method": "GET",
+      "path": "/get_secret?username=bob",
+      "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6NDEwMjQ0NDgwMH0.5iQuAAj1kHneMaZmSRL6eVUIVaOdSJFPYYPK4oJqm_Y"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "SECRETO-BOB-21c9"
+      ]
+    },
+    "group": "get-secret-username-8d8e980d",
+    "control": {
+      "request": {
+        "method": "GET",
+        "path": "/get_secret?username=bob",
+        "headers": {
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib2IiLCJleHAiOjQxMDI0NDQ4MDB9.zbSIOau-7A4gn3p-tzQPvtfKkEgbFvsFMeT3_t6U6U8"
+        }
+      },
+      "expect": {
+        "body_contains_any": [
+          "SECRETO-BOB-21c9"
+        ]
+      }
+    }
+  },
+  {
+    "id": "sqli-get-secret-username-like-or-comment-bob-550f291d",
+    "family": "sqli",
+    "request": {
+      "method": "GET",
+      "path": "/get_secret?username=bob%25%27%20OR%201%3D1%20--%20",
+      "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib2IiLCJleHAiOjQxMDI0NDQ4MDB9.zbSIOau-7A4gn3p-tzQPvtfKkEgbFvsFMeT3_t6U6U8"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "SECRETO-ALICE-7f3a"
+      ]
+    },
+    "group": "like-or-comment"
+  },
+  {
+    "id": "sqli-get-secret-username-quote-or-bob-cc34f6a8",
+    "family": "sqli",
+    "request": {
+      "method": "GET",
+      "path": "/get_secret?username=bob%27%20OR%20%271%27%3D%271",
+      "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib2IiLCJleHAiOjQxMDI0NDQ4MDB9.zbSIOau-7A4gn3p-tzQPvtfKkEgbFvsFMeT3_t6U6U8"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "SECRETO-ALICE-7f3a"
+      ]
+    },
+    "group": "quote-or"
+  },
+  {
+    "id": "sqli-get-secret-username-quote-or-comment-bob-519ca344",
+    "family": "sqli",
+    "request": {
+      "method": "GET",
+      "path": "/get_secret?username=bob%27%20OR%201%3D1%20--%20",
+      "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib2IiLCJleHAiOjQxMDI0NDQ4MDB9.zbSIOau-7A4gn3p-tzQPvtfKkEgbFvsFMeT3_t6U6U8"
+      }
+    },
+    "succeeded_if": {
+      "body_contains_any": [
+        "SECRETO-ALICE-7f3a"
+      ]
+    },
+    "group": "quote-or-comment"
+  }
+]

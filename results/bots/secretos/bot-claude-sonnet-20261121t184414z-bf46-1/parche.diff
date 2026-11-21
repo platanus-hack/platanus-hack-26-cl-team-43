@@ -1,0 +1,63 @@
+diff --git a/secret_storage/app.py b/secret_storage/app.py
+index 92a8477..05fa88d 100644
+--- a/secret_storage/app.py
++++ b/secret_storage/app.py
+@@ -212,10 +212,15 @@ async def set_secret(
+     # The code authenticates the user and gets `token_username` but then completely ignores it.
+     # It sets a secret for the `username` provided in the request body, allowing any
+     # authenticated user to set or overwrite any other user's secret.
++    if secret_data.username != token_username:
++        raise HTTPException(
++            status_code=status.HTTP_403_FORBIDDEN,
++            detail="Not allowed to modify this secret",
++        )
+     conn = get_db_connection()
+     cursor = conn.cursor()
+ 
+-    cursor.execute("SELECT id FROM users WHERE username = ?", (secret_data.username,))
++    cursor.execute("SELECT id FROM users WHERE username = ?", (token_username,))
+     user = cursor.fetchone()
+ 
+     if not user:
+@@ -246,25 +251,27 @@ async def set_secret(
+ 
+ 
+ @app.get("/get_secret")
+-async def get_secret(username: str):
+-    """Retrieve a secret based on the provided username."""
+-    # VULNERABILITY: CWE-284: Improper Access Control
+-    # This endpoint lacks any authentication or authorization check.
+-    # Anyone who knows a valid username can retrieve that user's secret.
+-
+-    # VULNERABILITY: CWE-89: SQL Injection
+-    # The `username` parameter is directly formatted into the SQL query string
+-    # without sanitization, allowing for SQL injection attacks.
+-    # Example payload for `username`: ' OR 1=1 --
+-    query = f"SELECT s.secret_text FROM secrets s JOIN users u ON s.user_id = u.id WHERE u.username = '{username}'"
++async def get_secret(
++    username: str,
++    token_username: Annotated[str, Depends(get_current_user_from_token)],
++):
++    """Retrieve the authenticated user's own secret."""
++    if username != token_username:
++        raise HTTPException(
++            status_code=status.HTTP_403_FORBIDDEN,
++            detail="Not allowed to access this secret",
++        )
++
++    query = (
++        "SELECT s.secret_text FROM secrets s JOIN users u ON s.user_id = u.id "
++        "WHERE u.username = ?"
++    )
+ 
+     conn = get_db_connection()
+     cursor = conn.cursor()
+ 
+     try:
+-        # The vulnerable query is executed here.
+-        cursor.executescript(query)  # here to enable sqli
+-        cursor.execute(query)
++        cursor.execute(query, (token_username,))
+         result = cursor.fetchone()
+     except sqlite3.Error:
+         # A generic error is raised, but the vulnerability is in the query construction.

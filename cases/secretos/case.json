@@ -1,0 +1,94 @@
+{
+  "id": "secretos",
+  "description": "Caso de terceros: SecretStorage de BaxBench en FastAPI, en la versión vulnerable publicada por Honeyval. /get_secret no pide sesión ni comprueba el dueño y arma el SQL con el parámetro.",
+  "provenance": {
+    "summary": "App de terceros: escenario SecretStorage de BaxBench (especificación) e implementación vulnerable de Honeyval. Adaptador, tests, inventario y PR son de Cachai.",
+    "third_party": [
+      {
+        "what": "base/secret_storage/app.py, sin cambios",
+        "source": "https://github.com/google-research/honeyval/blob/86272d8d1fb4b3090037561cc31b28dc8a8350f8/data/baxbench-webapps/SecretStorage/vul/app.py",
+        "author": "Google LLC (Honeyval)",
+        "license": "Apache-2.0",
+        "license_file": "LICENSE-honeyval"
+      },
+      {
+        "what": "Especificación del escenario SecretStorage (OpenAPI y tests funcionales y de seguridad, que los tests de la base siguen)",
+        "source": "https://github.com/logic-star-ai/baxbench/blob/de885cd93d561682e203a5a0d57c33b08aac6f5e/src/scenarios/secret_storage.py",
+        "author": "SRI Lab, LogicStar.ai (BaxBench)",
+        "license": "MIT",
+        "license_file": "LICENSE-baxbench"
+      }
+    ],
+    "ours": "base/secret_storage/main.py (adaptador: base de datos en /tmp, APP_SECRET de prueba, usuarios sembrados, /health), base/tests, reservados, inventario y PR",
+    "cwes": {
+      "covered": [
+        "CWE-284 en GET /get_secret (authz y authn)",
+        "CWE-89 en GET /get_secret (sqli)"
+      ],
+      "not_covered": [
+        "CWE-863 en POST /set_secret: el equipo rojo solo arma pedidos GET",
+        "CWE-522 contraseñas en texto plano",
+        "CWE-798 secreto JWT por defecto en el código"
+      ]
+    },
+    "details": "PROCEDENCIA.md"
+  },
+  "app": {
+    "module": "secret_storage.main:app",
+    "port": 8000,
+    "health": "/health",
+    "env": {
+      "APP_SECRET": "cachai-secretos-app-secret"
+    }
+  },
+  "tests_dir": "tests",
+  "attacks": "attacks.json",
+  "families": [
+    "authz",
+    "authn",
+    "sqli"
+  ],
+  "inventory": {
+    "users": {
+      "alice": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbGljZSIsImV4cCI6NDEwMjQ0NDgwMH0.5iQuAAj1kHneMaZmSRL6eVUIVaOdSJFPYYPK4oJqm_Y"
+      },
+      "bob": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJib2IiLCJleHAiOjQxMDI0NDQ4MDB9.zbSIOau-7A4gn3p-tzQPvtfKkEgbFvsFMeT3_t6U6U8"
+      }
+    },
+    "records": [
+      {
+        "id": "alice",
+        "owner": "alice",
+        "markers": [
+          "SECRETO-ALICE-7f3a"
+        ]
+      },
+      {
+        "id": "bob",
+        "owner": "bob",
+        "markers": [
+          "SECRETO-BOB-21c9"
+        ]
+      }
+    ]
+  },
+  "split": {
+    "shown": 0.4,
+    "seed": 0
+  },
+  "holdout_tests": "reservados",
+  "prs": [
+    {
+      "name": "parche-agente",
+      "kind": "correct_patch",
+      "description": "Parche de un agente real (Claude Sonnet con `cachai fix`, política normal): /get_secret exige token y dueño, /set_secret también, y la consulta pasa a parámetros. Es el mismo diff de results/bots/secretos/."
+    },
+    {
+      "name": "parche-a-medias",
+      "kind": "half_patch",
+      "description": "Arregla solo la inyección SQL que le mostraron: pasa la consulta a parámetros. /get_secret sigue sin pedir sesión ni comprobar el dueño, así que cualquiera, con o sin login, lee el secreto ajeno pidiéndolo por su nombre."
+    }
+  ]
+}

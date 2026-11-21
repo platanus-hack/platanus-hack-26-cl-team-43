@@ -263,7 +263,8 @@ def write(rows: list[dict], cases: list[Case], out_dir: str | Path) -> dict:
         "cases": [
             {"id": c.id, "description": c.description, "attacks": len(c.attacks()),
              "groups": len({a.group_key for a in c.attacks()}),
-             "split": c.split().to_dict() if c.split() else None}
+             "split": c.split().to_dict() if c.split() else None,
+             "provenance": c.provenance}
             for c in cases
         ],
         "modes": {m: MODE_TITLES.get(m, m) for m in summary},

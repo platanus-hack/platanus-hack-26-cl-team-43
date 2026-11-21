@@ -1,0 +1,44 @@
+[
+  {
+    "name": "bot-claude-sonnet-20261121t184414z-bf46-1",
+    "experiment": "20261121T184414Z-bf46",
+    "attempt": 1,
+    "agent": "claude",
+    "model": "sonnet",
+    "policy": "normal",
+    "isolated": false,
+    "base": "57caa147c8a54753c50ada4503309451af86cb5e",
+    "changed": [
+      "secret_storage/app.py"
+    ],
+    "error": null,
+    "approved": {
+      "ci": true,
+      "visible": true,
+      "full": true
+    },
+    "outcome": {
+      "ci": "approved",
+      "visible": "approved",
+      "full": "approved"
+    },
+    "reasons": [],
+    "notes": []
+  },
+  {
+    "name": "bot-claude-sonnet-20261121t184414z-bf46-2",
+    "experiment": "20261121T184414Z-bf46",
+    "attempt": 2,
+    "agent": "claude",
+    "model": "sonnet",
+    "policy": "normal",
+    "isolated": false,
+    "base": "57caa147c8a54753c50ada4503309451af86cb5e",
+    "changed": [],
+    "error": "el agente salió con código 1",
+    "approved": {},
+    "outcome": {},
+    "reasons": [],
+    "notes": []
+  }
+]
