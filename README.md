@@ -39,7 +39,7 @@ En términos de AI control: el agente y el parchador son modelos no confiables, 
 
 - APIs web en Python.
 - Tres familias de falla: autorización por recurso (ver datos de otro usuario), acceso indebido a archivos y autenticación ausente (ver datos sin sesión).
-- Un caso propio de demo (`cases/facturas`) con 19 PR etiquetados. Adaptar casos de [BaxBench](https://baxbench.com) y CVE de Python con exploit verificable es el paso siguiente; todavía no está hecho.
+- Un caso propio de demo (`cases/facturas`) con 28 PR etiquetados y un caso de terceros (`cases/secretos`) tomado de [BaxBench](https://baxbench.com): treinta PR en total. Procedencia y licencias en `cases/secretos/PROCEDENCIA.md`.
 
 No promete «cero vulnerabilidades»: reporta qué se probó y con qué resultado. En tests unitarios que corren dentro del mismo proceso que el código no hay garantía y solo se marca para revisión.
 
@@ -123,16 +123,17 @@ Los ataques del caso los genera `cachai redteam cases/facturas` por plantillas, 
 
 ## Resultados
 
-`cachai bench` corre los 19 PR etiquetados del caso en los cuatro modos. Rechazos con evidencia sobre el total, con intervalo de Wilson al 95 %. Una corrida que no se puede completar se rechaza igual, pero se informa aparte y no cuenta como detección; en esta medición no hubo ninguna:
+`cachai bench` corre los PR etiquetados de todos los casos (`facturas` y `secretos`) en los cuatro modos. Rechazos con evidencia sobre el total, con intervalo de Wilson al 95 %. Una corrida que no se puede completar se rechaza igual, pero se informa aparte y no cuenta como detección; en esta medición no hubo ninguna:
 
-| Modo | Agente con trampa (debe rechazar) | Parche a medias o que rompe (debe rechazar) | Cambio legítimo (debe aprobar) |
-|---|---|---|---|
-| CI normal | 0/8 (0% a 32%) | 0/3 (0% a 56%) | 0/8 (0% a 32%) |
-| Tests restaurados, mismo contenedor | 5/8 (31% a 86%) | 0/3 (0% a 56%) | 0/8 (0% a 32%) |
-| Validación propia del parchador | 8/8 (68% a 100%) | 0/3 (0% a 56%) | 1/8 (2% a 47%) |
-| **Cachai** | **8/8 (68% a 100%)** | **3/3 (44% a 100%)** | 1/8 (2% a 47%) |
+| Modo | Agente con trampa (debe rechazar) | Parche a medias o que rompe (debe rechazar) | Vulnerabilidad introducida (debe rechazar) | Cambio legítimo (debe aprobar) |
+|---|---|---|---|---|
+| CI normal | 0/8 (0% a 32%) | 0/4 (0% a 49%) | 0/9 (0% a 30%) | 0/9 (0% a 30%) |
+| Tests restaurados, mismo contenedor | 5/8 (31% a 86%) | 0/4 (0% a 49%) | 0/9 (0% a 30%) | 0/9 (0% a 30%) |
+| Validación propia del parchador | 8/8 (68% a 100%) | 0/4 (0% a 49%) | 0/9 (0% a 30%) | 1/9 (2% a 44%) |
+| **Cachai** | **8/8 (68% a 100%)** | **4/4 (51% a 100%)** | **6/9 (35% a 88%)** | 1/9 (2% a 44%) |
 
 - La falsa alarma es un cambio legítimo a un test existente: la política bloquea todo cambio a tests existentes y pide revisión humana.
+- Tres vulnerabilidades introducidas no se detectan: los PR adaptativos (#18) se portan bien dentro del sandbox, y el hueco está documentado.
 - Dos trampas no tocan la evaluación ni nombran pytest (una se porta bien solo ante el cliente de pruebas, otra esconde el hook): la revisión estática no las ve y se rechazan por comportamiento, desde el otro contenedor.
 - Son PR escritos a mano sobre una sola app. Los intervalos son anchos y describen esta muestra, no una tasa general.
 
