@@ -35,6 +35,9 @@ SHARED_CONFIG = ("pyproject.toml", "setup.cfg", "tox.ini")
 # Archivos que, si aparecen o cambian, alteran la ejecución de Python o de pytest.
 EVAL_HOOK_PATTERNS = ("conftest.py", "sitecustomize.py", "usercustomize.py", "*.pth")
 
+# Con `on: pull_request` el workflow sale del commit del PR: cambiarlo cambia quién corre la revisión.
+CI_DIRS = (".github/workflows", ".github/actions")
+
 DEPENDENCY_PATTERNS = ("requirements*.txt", "Pipfile", "Pipfile.lock", "poetry.lock", "uv.lock")
 
 PYTEST_REF = re.compile(r"(?<![A-Za-z0-9])_?pytest(?![A-Za-z0-9])|(?<![A-Za-z0-9])pluggy(?![A-Za-z0-9])|pytest_", re.IGNORECASE)
@@ -73,6 +76,8 @@ def classify(changes: list[tuple[str, str]], test_dirs: tuple[str, ...] = ("test
         name = PurePosixPath(path).name
         if is_hook(path):
             flags.append(Flag(path, status, "hook de evaluación"))
+        elif any(in_dir(path, d) for d in CI_DIRS):
+            flags.append(Flag(path, status, "workflow de CI que corre la revisión"))
         elif name in EVAL_CONFIG:
             flags.append(Flag(path, status, "configuración de pytest"))
         elif any(in_dir(path, d) for d in test_dirs):

@@ -403,3 +403,31 @@ def test_every_facturas_report_validates(facturas_repo, pr):
         if r.split and a.id in r.split["reserved"]:
             assert a.id not in text and a.request["path"] not in text
 
+
+# --- Material reservado (#6): el contenedor de la app no ve la clave ni el paquete ---------
+
+def test_app_container_cannot_see_hidden_key_or_material(tmp_path, monkeypatch):
+    import subprocess as sp
+
+    from cachai import hidden, sandbox
+    key = hidden.keygen()
+    monkeypatch.setenv("CACHAI_HIDDEN_KEY", key)
+    case = load_case(FACTURAS)
+    canary = "canario-reservado-" + key[:12]
+    tests = tmp_path / "reservados"
+    shutil.copytree(case.holdout_tests_path, tests)
+    (tests / "test_canario.py").write_text(f"def test_canario():\n    assert '{canary}'\n")
+    sealed = hidden.seal(key, FACTURAS / case.attacks_file, tests)
+    hidden.open_to_dir(sealed, key, tmp_path / "abierto")  # lo que hace check() en el CI
+    app = sandbox.start_app(case.base_dir, case)
+    try:
+        def inside(*cmd):
+            return sp.run(["docker", "exec", app.container, *cmd], capture_output=True, text=True, timeout=120).stdout
+        env = inside("env")
+        assert key not in env and "CACHAI_HIDDEN_KEY" not in env
+        found = inside("sh", "-c", f"grep -rIl --exclude-dir=proc --exclude-dir=sys -e '{canary}' -e '{key}' / 2>/dev/null; true")
+        assert found.strip() == ""
+        mounts = inside("cat", "/proc/mounts")
+        assert "abierto" not in mounts and str(tmp_path) not in mounts
+    finally:
+        sandbox.stop(app)

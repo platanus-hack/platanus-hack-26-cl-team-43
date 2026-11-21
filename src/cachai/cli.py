@@ -22,7 +22,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import bench, fixer, pipeline, sandbox
+from . import bench, fixer, hidden, pipeline, sandbox
 from .case import ConfigError, load_case, materialize
 from .holdout import Attack, load_attacks, split_record
 
@@ -157,6 +157,34 @@ def cmd_case(args: argparse.Namespace) -> int:
     return 0 if all(r.approved for r in results.values()) else 1
 
 
+def cmd_hidden(args: argparse.Namespace) -> int:
+    """Paquete reservado: `keygen` crea la clave, `seal` lo cifra y `open` lo extrae."""
+    if args.action == "keygen":
+        print(hidden.keygen())
+        return 0
+    key = os.environ.get(args.key_env)
+    try:
+        if args.action == "seal":
+            if not args.out:
+                print("seal necesita --out", file=sys.stderr)
+                return 2
+            sealed = hidden.seal(key, Path(args.attacks) if args.attacks else None,
+                                 Path(args.holdout_tests) if args.holdout_tests else None, args.shown, args.seed)
+            Path(args.out).write_bytes(sealed)
+            print(f"paquete reservado escrito en {args.out}")
+            return 0
+        if not args.package or not args.out:
+            print("open necesita el paquete y --out", file=sys.stderr)
+            return 2
+        m = hidden.open_to_dir(Path(args.package).read_bytes(), key, Path(args.out))
+        n_tests = sum(1 for _ in m.holdout_tests.rglob("test_*.py")) if m.holdout_tests else 0
+        print(f"{len(m.attacks)} ataques ({len(m.split.reserved) if m.split else 0} reservados) y {n_tests} archivos de tests en {args.out}")
+        return 0
+    except hidden.HiddenError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="cachai")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -203,6 +231,17 @@ def main(argv: list[str] | None = None) -> int:
                    help="corre al agente sin aislarlo del material reservado; queda registrado en cada intento")
     f.add_argument("--budget", type=float, default=120.0)
     f.set_defaults(func=cmd_fix)
+
+    h = sub.add_parser("hidden", help="cifra o abre el paquete de material reservado (lo usa quien mantiene el repo)")
+    h.add_argument("action", choices=("keygen", "seal", "open"))
+    h.add_argument("package", nargs="?", help="paquete a abrir (open)")
+    h.add_argument("--attacks", help="seal: JSON de ataques")
+    h.add_argument("--holdout-tests", help="seal: carpeta de tests funcionales reservados")
+    h.add_argument("--shown", type=float, default=0.4, help="seal: proporción de grupos de ataques visibles")
+    h.add_argument("--seed", type=int, default=0)
+    h.add_argument("--out", help="seal: archivo de salida; open: carpeta nueva")
+    h.add_argument("--key-env", default="CACHAI_HIDDEN_KEY", help="variable de entorno con la clave")
+    h.set_defaults(func=cmd_hidden)
 
     for p in (c, k):
         p.add_argument("--budget", type=float, default=120.0, help="segundos por evaluación")

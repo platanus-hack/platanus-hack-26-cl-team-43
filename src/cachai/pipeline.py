@@ -21,11 +21,12 @@ repo, nunca del PR. Decide `gate.decide`.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import gitio, integrity, sandbox
+from . import gitio, hidden, integrity, sandbox
 from .case import CONFIG_FILE, ConfigError, Target, load_target
 from .evaluator import EXIT, SCHEMA
 from .gate import Evidence, Reason, decide
@@ -438,6 +439,25 @@ def evidence_from(
     )
 
 
+def load_hidden(repo: str | Path, base_sha: str, target: Target, dest: Path) -> tuple[AttackPlan | None, Path | None]:
+    """Abre el paquete reservado que declara `.cachai.json` de la base.
+
+    Una ruta relativa se lee del commit de la base (nunca del árbol del PR) y la
+    clave, de la variable de entorno que nombra la configuración. Lo extraído
+    queda en `dest`, que solo se monta en el contenedor del evaluador.
+    """
+    h = target.hidden
+    if h.package.startswith("/"):
+        sealed = Path(h.package).read_bytes()
+    else:
+        sealed = gitio.read_blob(repo, base_sha, h.package)
+        if sealed is None:
+            raise hidden.HiddenError(f"la rama base no tiene {h.package}")
+    material = hidden.open_to_dir(sealed, os.environ.get(h.key_env), dest)
+    plan = AttackPlan(material.attacks, material.split) if material.attacks and material.split else None
+    return plan, material.holdout_tests
+
+
 def check(
     repo: str | Path,
     base: str,
@@ -469,6 +489,12 @@ def check(
             inside = sandbox.run_pytest_inside(pr_tree, target.tests_dir, budget)
             return _baseline(mode, base_sha, pr_sha, inside)
 
+        if plan is None and holdout_tests is None and target.hidden is not None:
+            try:
+                plan, holdout_tests = load_hidden(repo, base_sha, target, tmp_path / "reservado")
+            except (hidden.HiddenError, ValueError, OSError) as e:
+                msg = f"evaluación incompleta: no se pudo abrir el material reservado ({e})"
+                return CheckResult(mode, base_sha, pr_sha, False, [msg], outcome="incomplete", typed=[Reason("incomplete", msg, msg)])
         if mode == "visible":
             holdout_tests = None
         attacks = () if plan is None else (plan.attacks if mode == "full" else plan.subset(plan.split.visible))
