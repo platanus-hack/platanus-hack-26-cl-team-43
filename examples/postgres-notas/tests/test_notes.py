@@ -12,3 +12,8 @@ def test_list_only_own(client, beto):
 
 def test_requires_login(client):
     assert client.get("/notes").status_code == 401
+
+
+def test_search_only_own(client, ana):
+    found = client.get("/notes/search", params={"q": "Nota privada"}, headers=ana).json()
+    assert [n["id"] for n in found] == [1]

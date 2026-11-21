@@ -279,7 +279,7 @@ def red_team(app: "sandbox.AppHandle", target: Target, tmp: Path, budget: float)
     """Ataques del equipo rojo que funcionan contra `app`, solo de las familias activas."""
     inv = tmp / f"inventory-{app.run_id}.json"
     inv.write_text(json.dumps(target.inventory, ensure_ascii=False))
-    found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, target, inv, budget)]
+    found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, target, inv, budget, target.attack_families)]
     return [a for a in found if a.family in target.attack_families]
 
 

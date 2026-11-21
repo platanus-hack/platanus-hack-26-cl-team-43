@@ -6,7 +6,7 @@ import os
 from contextlib import asynccontextmanager
 
 import psycopg
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Query
 
 USERS = {"tok-ana": "ana", "tok-beto": "beto"}
 
@@ -45,6 +45,16 @@ def list_notes(authorization: str | None = Header(default=None)) -> list[dict]:
     user = current_user(authorization)
     with connect() as db:
         rows = db.execute("SELECT id, body FROM notes WHERE owner = %s ORDER BY id", (user,)).fetchall()
+    return [{"id": i, "body": b} for i, b in rows]
+
+
+@app.get("/notes/search")
+def search_notes(q: str = Query(...), authorization: str | None = Header(default=None)) -> list[dict]:
+    """Busca en las notas propias. La consulta va con parámetros: el texto nunca se pega al SQL."""
+    user = current_user(authorization)
+    with connect() as db:
+        rows = db.execute("SELECT id, body FROM notes WHERE owner = %s AND (body ILIKE %s OR id::text = %s) ORDER BY id",
+                          (user, f"%{q}%", q)).fetchall()
     return [{"id": i, "body": b} for i, b in rows]
 
 

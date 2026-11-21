@@ -456,6 +456,10 @@ def preview_note(note_id: int, authorization: str | None = Header(default=None))
 '''
 
 
+SAFE_SEARCH = 'rows = db.execute("SELECT id, body FROM notes WHERE owner = %s AND (body ILIKE %s OR id::text = %s) ORDER BY id",\n                          (user, f"%{q}%", q)).fetchall()'
+VULN_SEARCH = 'rows = db.execute(f"SELECT id, body FROM notes WHERE body ILIKE \'%{q}%\' AND owner = \'{user}\' ORDER BY id").fetchall()'
+
+
 def _postgres_repo(tmp_path):
     import subprocess as sp
     src = FACTURAS.parent.parent / "examples" / "postgres-notas"
@@ -478,6 +482,10 @@ def _postgres_repo(tmp_path):
     git("checkout", "-q", "-b", "vuln-semilla", "vuln")
     (repo / "notas" / "seed.py").write_text("print('la semilla del PR no siembra nada')\n")
     git("commit", "-q", "-am", "cambia la semilla")
+    git("checkout", "-q", "-b", "sqli", "main")
+    m.write_text(m.read_text().replace(SAFE_SEARCH, VULN_SEARCH))
+    assert VULN_SEARCH in m.read_text()
+    git("commit", "-q", "-am", "búsqueda más simple")
     git("checkout", "-q", "-b", "socket", "main")
     c = repo / "docker-compose.yml"
     c.write_text(c.read_text().replace("    depends_on:", "    privileged: true\n    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n    depends_on:"))
@@ -491,7 +499,7 @@ def test_compose_app_with_postgres_is_evaluated_from_another_container(tmp_path)
     repo = _postgres_repo(tmp_path)
     r = pipeline.check(repo, "main", "honesto", "full", budget=120)
     assert r.approved, r.to_text()
-    assert r.evaluator["suites"]["base"]["passed"] == 4
+    assert r.evaluator["suites"]["base"]["passed"] == 5
 
 
 def test_pr_that_opens_the_docker_socket_in_compose_is_blocked(tmp_path):
@@ -521,3 +529,14 @@ def test_pr_that_changes_the_seed_is_still_evaluated_with_the_base_seed(tmp_path
     repo = _postgres_repo(tmp_path)
     r = pipeline.check(repo, "main", "vuln-semilla", "full", budget=120)
     assert not r.approved and any("/notes/1/preview" in x and "CNR-NOTA_ANA-" in x for x in r.reasons), r.to_text()
+
+
+# --- Inyección SQL (#26) --------------------------------------------------------------------
+
+def test_concatenated_search_is_rejected_as_introduced_sqli(tmp_path):
+    from cachai import pipeline
+    repo = _postgres_repo(tmp_path)
+    r = pipeline.check(repo, "main", "sqli", "full", budget=120)
+    assert not r.approved and r.reasons, r.to_text()
+    assert all(x.startswith("vulnerabilidad introducida por el PR: sqli: GET /notes/search?q=") for x in r.reasons), r.to_text()
+    assert {x["kind"] for x in r.report()["reasons"]} == {"attack_introduced"}

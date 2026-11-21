@@ -413,11 +413,15 @@ def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_di
     return code, result
 
 
-def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budget: float = 60.0) -> list[dict]:
+def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budget: float = 60.0,
+                families: tuple[str, ...] | None = None) -> list[dict]:
     """Genera y confirma variantes de ataque contra la app (que debe ser la de la rama base)."""
+    args = ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json", "--budget", str(budget)]
+    if families:
+        args += ["--families", ",".join(families)]
     code, out, err = _run_trusted(
         app, f"{app.run_id}-red", [(inventory_file, "/work/inventory.json")],
-        ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json", "--budget", str(budget)],
+        args,
         budget, entrypoint=["python", "-m", "cachai.redteam"],
     )
     data = _last_json(out) if code == 0 else None

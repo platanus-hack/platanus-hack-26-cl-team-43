@@ -11,6 +11,11 @@ rutas que la app publica en su OpenAPI, y arma candidatos:
 - `authn`: el mismo pedido que hace el dueño, pero sin sesión: sin headers de
   autenticación, con el header vacío y con un token inválido. También cubre
   las rutas sin parámetros (listados).
+- `sqli`: un usuario pide su propio registro con una inyección SQL agregada al
+  id (`' OR 1=1 -- `, comillas dobles, numérica, `LIKE`). Se confirma si la
+  respuesta trae marcas de otro usuario y el mismo pedido sin inyección no las
+  trae: así una falla de autorización no pasa por inyección. Con marcas
+  canario (#21), ningún pedido legítimo las devuelve.
 
 Cada recurso del inventario declara sus marcas: textos que solo su dueño debería
 ver. Un candidato solo se conserva si se confirma contra la app de la rama base:
@@ -139,6 +144,15 @@ def _fill(template: str, names: list[str], value: str) -> str:
     return template
 
 
+# Inyección SQL: se agrega al id propio de quien ataca. Cada forma es un grupo.
+SQLI_PAYLOADS: tuple[tuple[str, str], ...] = (
+    ("quote-or-comment", "' OR 1=1 -- "),
+    ("quote-or", "' OR '1'='1"),
+    ("dquote-or", '" OR "1"="1'),
+    ("numeric-or", " OR 1=1"),
+    ("like-or-comment", "%' OR 1=1 -- "),
+)
+
 INVALID_TOKEN = "cachai-token-invalido"
 # Esquemas de Authorization que se conservan al borrar o falsear la credencial.
 AUTH_SCHEME_RE = re.compile(r"^(Bearer|Basic|Token|ApiKey|Digest)\s", re.IGNORECASE)
@@ -169,8 +183,11 @@ def anonymous_headers(inv: Inventory) -> dict[str, dict[str, str]]:
     return out
 
 
-def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]]) -> list[Candidate]:
+def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]],
+               families: tuple[str, ...] | None = None) -> list[Candidate]:
+    """Candidatos de las familias pedidas (todas si `families` es None)."""
     out: list[Candidate] = []
+    wanted = set(families) if families is not None else None
     seen: set[str] = set()
     anonymous = anonymous_headers(inv)
 
@@ -178,6 +195,8 @@ def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]]) -
         if cid in seen:
             raise ValueError(f"id de candidato repetido: {cid}")
         seen.add(cid)
+        if wanted is not None and family not in wanted:
+            return
         out.append(Candidate(
             cid, family, group,
             {"method": "GET", "path": path, "headers": headers},
@@ -214,6 +233,33 @@ def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]]) -
             for user in sorted(inv.users):
                 if owned_markers[user]:
                     add_authn(make_id(template), (template, user), template, user, owned_markers[user])
+
+        # sqli: quien ataca pide con su propio id más una inyección; el control es el
+        # mismo pedido sin inyección, que no debe traer datos ajenos.
+        if wanted is None or "sqli" in wanted:
+            params = [("path", n) for n in path_params] if path_params else [("query", q) for q in query_params]
+            for kind, name in params:
+                for attacker in sorted(inv.users):
+                    mine = [r for r in inv.records if r["owner"] == attacker]
+                    theirs = [m for r in inv.records if r["owner"] != attacker for m in r["markers"]]
+                    if not mine or not theirs:
+                        continue
+                    own_id = mine[0]["id"]
+                    for group, payload in SQLI_PAYLOADS:
+                        def at(value: str) -> str:
+                            if kind == "path":
+                                return _fill(template, path_params, value)
+                            return f"{template}?{name}={urllib.parse.quote(value, safe='')}"
+                        cid = make_id("sqli", template, name, group, attacker)
+                        if cid in seen:
+                            raise ValueError(f"id de candidato repetido: {cid}")
+                        seen.add(cid)
+                        out.append(Candidate(
+                            cid, "sqli", group,
+                            {"method": "GET", "path": at(own_id + payload), "headers": inv.users[attacker]},
+                            {"method": "GET", "path": at(own_id), "headers": inv.users[attacker]},
+                            tuple(theirs),
+                        ))
 
         route = template
         for rec in inv.records:
@@ -265,6 +311,11 @@ def confirm(base_url: str, cands: list[Candidate], budget: float = 60.0) -> list
         for c in cands:
             if time.monotonic() > deadline:
                 raise TimeoutError("presupuesto agotado confirmando candidatos")
+            if c.family == "sqli":
+                found = _confirm_sqli(clients, base_url, c, deadline)
+                if found:
+                    confirmed.append(found)
+                continue
             try:
                 key = json.dumps(c.owner_request, sort_keys=True)
                 if key not in owner_texts:
@@ -284,7 +335,27 @@ def confirm(base_url: str, cands: list[Candidate], budget: float = 60.0) -> list
     return sorted(confirmed, key=lambda a: a.id)
 
 
-def generate(base_url: str, inv: Inventory, budget: float = 60.0) -> list[Attack]:
+def _confirm_sqli(clients, base_url: str, c: Candidate, deadline: float) -> Attack | None:
+    """Inyección confirmada: el pedido inyectado trae marcas de otro usuario y el
+    mismo pedido sin inyección no las trae (si las trae, es otra falla, no esta)."""
+    import httpx
+
+    try:
+        clean, _ = exchange(clients.for_request(c.owner_request), base_url, c.owner_request, deadline)
+        clean_text = "\n".join(searchable(body) for _, body in clean)
+        if any(m in clean_text for m in c.markers):
+            return None
+        hops, _ = exchange(clients.for_request(c.request), base_url, c.request, deadline)
+    except (httpx.TransportError, Unverifiable):
+        return None
+    text = "\n".join(searchable(body) for _, body in hops)
+    present = tuple(m for m in c.markers if m in text)
+    if not present:
+        return None
+    return Attack(c.id, c.family, c.request, Predicate(body_contains_any=present), c.group)
+
+
+def generate(base_url: str, inv: Inventory, budget: float = 60.0, families: tuple[str, ...] | None = None) -> list[Attack]:
     deadline = time.monotonic() + budget
     with Clients() as clients:
         request = {"method": "GET", "path": "/openapi.json"}
@@ -292,7 +363,7 @@ def generate(base_url: str, inv: Inventory, budget: float = 60.0) -> list[Attack
     status, body = hops[-1]
     if status != 200:
         raise RuntimeError(f"la app no publica /openapi.json (status {status})")
-    return confirm(base_url, candidates(inv, get_routes(json.loads(body))), deadline - time.monotonic())
+    return confirm(base_url, candidates(inv, get_routes(json.loads(body)), families), deadline - time.monotonic())
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -304,12 +375,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--health", default="/health")
     p.add_argument("--inventory", required=True)
     p.add_argument("--budget", type=float, default=60.0)
+    p.add_argument("--families", default="", help="familias a generar, separadas por coma (todas si se omite)")
     args = p.parse_args(argv)
     inv = Inventory.from_dict(json.loads(Path(args.inventory).read_text()))
     if not wait_for(args.base_url.rstrip("/") + args.health, time.monotonic() + min(30.0, args.budget)):
         print(json.dumps({"error": "la app no respondió"}))
         return 2
-    attacks = generate(args.base_url, inv, args.budget)
+    families = tuple(f for f in args.families.split(",") if f) or None
+    attacks = generate(args.base_url, inv, args.budget, families)
     print(json.dumps({"attacks": [a.to_dict() for a in attacks]}, ensure_ascii=False))
     return 0
 

@@ -10,5 +10,5 @@
       {"id": "2", "owner": "beto", "markers": ["{{canary:nota_beto}}"]}
     ]
   },
-  "attacks": {"families": ["authz"]}
+  "attacks": {"families": ["authz", "sqli"]}
 }
