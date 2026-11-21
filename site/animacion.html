@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cachai · cómo decide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,800&family=Instrument+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root, [data-theme="light"] {
+  --bg:#f3f6f4; --sheet:#ffffff; --ink:#13202b; --soft:#51606c; --line:#cdd6d2;
+  --pass:#0b7a4b; --fail:#c2262a; --warn:#a86e00; --wire:#9aa7a2; --hlbg:rgba(168,110,0,.10);
+}
+[data-theme="dark"] {
+  --bg:#0e1116; --sheet:#161b22; --ink:#e6edf3; --soft:#8b949e; --line:#30363d;
+  --pass:#3fb950; --fail:#ff4d4f; --warn:#f2cc60; --wire:#4a535d; --hlbg:rgba(242,204,96,.10);
+}
+* { box-sizing:border-box; margin:0; }
+html, body { height:100%; }
+body { background:var(--bg); color:var(--ink); font:400 17px/1.5 "Instrument Sans", system-ui, sans-serif;
+  display:flex; flex-direction:column; transition:background .4s, color .4s; }
+
+/* ---------- cabecera ---------- */
+.top { display:flex; justify-content:space-between; align-items:center; gap:24px; padding:24px 40px 0; flex-wrap:wrap; }
+.brand { font:800 22px/1 "Bricolage Grotesque", sans-serif; letter-spacing:-.02em; }
+.tabs { display:flex; gap:6px; flex-wrap:wrap; }
+.tabs button { font:500 14px/1 "Instrument Sans", sans-serif; color:var(--soft); background:transparent;
+  border:1px solid transparent; border-radius:999px; padding:9px 14px; cursor:pointer; }
+.tabs button b { font-family:"JetBrains Mono", monospace; font-weight:500; margin-right:6px; }
+.tabs button[aria-selected="true"] { color:var(--ink); border-color:var(--line); background:var(--sheet); }
+.count { font:500 14px/1 "JetBrains Mono", monospace; color:var(--soft); min-width:90px; text-align:right; }
+
+main { flex:1; display:flex; flex-direction:column; justify-content:center; padding:0 40px; max-width:1240px; width:100%; margin:0 auto; cursor:pointer; }
+.scene { display:none; } .scene.on { display:block; }
+svg { width:100%; height:auto; display:block; overflow:visible; }
+
+/* ---------- piezas comunes ---------- */
+.box { fill:var(--sheet); stroke:var(--line); stroke-width:1.5; transition:fill .4s, stroke .4s; }
+.lbl { font:800 20px "Bricolage Grotesque", sans-serif; fill:var(--ink); }
+.sub { font:400 14px "Instrument Sans", sans-serif; fill:var(--soft); }
+.mono, .code { font-family:"JetBrains Mono", monospace; font-variant-ligatures:none; white-space:pre; }
+.mono { font-size:13px; fill:var(--soft); }
+.code { font-size:14px; fill:var(--ink); }
+.code .k { fill:var(--soft); }
+.file { font:500 12px "JetBrains Mono", monospace; fill:var(--soft); letter-spacing:.02em; }
+.sep { stroke:var(--line); stroke-width:1; }
+.t { fill:transparent; stroke:var(--soft); stroke-width:1.5; transition:fill .35s, stroke .35s, opacity .5s; transition-delay:calc(var(--i) * 60ms); }
+.out { opacity:0; transition:opacity .4s; font:500 13px "JetBrains Mono", monospace; }
+.out.ok { fill:var(--pass); } .out.ko { fill:var(--fail); }
+.wire { stroke:var(--wire); stroke-width:1.5; stroke-dasharray:2 6; opacity:0; transition:opacity .5s .3s; }
+.pk { fill:var(--ink); opacity:0; }
+@keyframes travel { 0% { opacity:0; transform:translateX(0); } 10% { opacity:1; } 90% { opacity:1; } 100% { opacity:0; transform:translateX(-176px); } }
+@keyframes pass { to { fill:var(--pass); stroke:var(--pass); } }
+@keyframes fail { to { fill:var(--fail); stroke:var(--fail); } }
+.eval { opacity:0; transform:translateX(24px); transition:opacity .6s, transform .6s; }
+.stamp { opacity:0; transition:opacity .35s, transform .35s cubic-bezier(.2,1.6,.4,1); transform:scale(1.15); }
+.stamp rect { fill:none; stroke-width:2.5; }
+.stamp text { font:800 34px "Bricolage Grotesque", sans-serif; letter-spacing:.04em; }
+.stamp.no rect { stroke:var(--fail); } .stamp.no text { fill:var(--fail); }
+.stamp.yes rect { stroke:var(--pass); } .stamp.yes text { fill:var(--pass); }
+.ev { opacity:0; transition:opacity .4s .35s; }
+.ev .mono { fill:var(--ink); }
+.ev .hl { fill:var(--fail); } .ev .ok { fill:var(--pass); }
+.card rect { fill:var(--hlbg); stroke:var(--warn); stroke-width:1.5; stroke-dasharray:4 4; }
+.card .code { fill:var(--warn); font-size:13px; }
+.card .file { fill:var(--warn); }
+.card.good rect { fill:none; stroke:var(--pass); stroke-dasharray:none; }
+.card.good .code { fill:var(--ink); } .card.good .file { fill:var(--pass); }
+.card { opacity:0; transform:translateY(8px); transition:opacity .5s .3s, transform .5s .3s; }
+.ind { fill:transparent; stroke:var(--soft); stroke-width:1.5; transition:fill .4s, stroke .4s; }
+.seen { font:500 11px "JetBrains Mono", monospace; fill:var(--warn); opacity:0; transition:opacity .4s; letter-spacing:.04em; }
+
+/* =========================================================
+   Caso 1 · la trampa
+   ========================================================= */
+#c1 .tax { opacity:0; transition:opacity .5s; }
+#c1 .tax .code { fill:var(--fail); }
+#c1 .tax line { stroke:var(--fail); stroke-width:1.5; stroke-dasharray:300; stroke-dashoffset:300; }
+#c1.s1 .tax { opacity:1; }
+#c1.s1 .tax line { transition:stroke-dashoffset .6s .4s; stroke-dashoffset:0; }
+#c1 .taxnote { opacity:0; transition:opacity .4s .9s; fill:var(--fail); font:500 13px "Instrument Sans", sans-serif; }
+#c1.s1 .taxnote { opacity:1; }
+#c1 .init { opacity:0; transition:opacity .5s; }
+#c1.s2 .init { opacity:1; }
+#c1 .inithl { fill:var(--hlbg); stroke:var(--warn); stroke-width:1; opacity:0; transition:opacity .4s .3s; }
+#c1.s2 .inithl { opacity:1; }
+#c1 .init .code { fill:var(--warn); }
+#c1.s2 .card { opacity:1; transform:none; }
+#c1 .grab { stroke:var(--warn); stroke-width:1; fill:none; stroke-dasharray:3 4; opacity:0; transition:opacity .4s; }
+#c1.s3 .grab { opacity:.9; }
+#c1.s3 .app .t { fill:var(--pass); stroke:var(--pass); transition-delay:calc(.3s + var(--i) * 60ms); }
+#c1.s4:not(.s5) .app .t { animation:rerun 1.4s calc(var(--i) * 60ms) both; }
+@keyframes rerun { 0%, 45% { fill:transparent; stroke:var(--soft); } 100% { fill:var(--pass); stroke:var(--pass); } }
+#c1.s3:not(.s4) .out-ci { opacity:1; transition-delay:1.2s; }
+#c1.s4:not(.s5) .out-re { opacity:1; transition-delay:1.5s; }
+#c1 .tl-b { opacity:0; } #c1 .tl-a, #c1 .tl-b { transition:opacity .4s; }
+#c1.s4 .tl-a { opacity:0; } #c1.s4 .tl-b { opacity:1; }
+#c1.s5 .eval { opacity:1; transform:none; }
+#c1.s5 .app .t { fill:transparent; stroke:var(--line); opacity:.6; transition-delay:0s; }
+#c1.s5 .grab { opacity:.2; }
+#c1.s5 .wire { opacity:1; }
+#c1.s5:not(.s6) .pk { animation:travel 1.8s linear infinite; animation-delay:calc(.6s + var(--i) * .6s); }
+#c1.s5 .eval .t { animation:pass .3s calc(1.3s + var(--i) * 160ms) both; }
+#c1.s5 .eval .t.bad { animation-name:fail; }
+#c1.s5 .out-ev { opacity:1; transition-delay:3.4s; }
+#c1 .reach { stroke:var(--warn); stroke-width:1.5; fill:none; stroke-dasharray:220; stroke-dashoffset:220; }
+#c1.s5 .reach { transition:stroke-dashoffset .9s 1s ease-out; stroke-dashoffset:0; }
+#c1 .block { opacity:0; stroke:var(--fail); stroke-width:2.5; stroke-linecap:round; }
+#c1.s5 .block { transition:opacity .2s 1.9s; opacity:1; }
+#c1 .stamp { transform-origin:880px 197px; }
+#c1.s6 .stamp { opacity:1; transform:scale(1); }
+#c1 .badname { opacity:0; transition:opacity .4s .3s; fill:var(--fail); }
+#c1.s6 .badname { opacity:1; }
+#c1.s6 .ev { opacity:1; }
+
+/* =========================================================
+   Caso 2 · la solución parcial
+   ========================================================= */
+#c2 .demo { opacity:1; transition:opacity .4s; fill:var(--fail); }
+#c2.s2 .demo { opacity:0; }
+#c2 .r0 { fill:var(--fail); stroke:var(--fail); }
+#c2.s1 .r1, #c2.s1 .r5 { fill:var(--fail); stroke:var(--fail); }
+#c2.s1 .seen { opacity:1; }
+#c2.s2 .card { opacity:1; transform:none; }
+#c2.s2 .r0, #c2.s2 .r1, #c2.s2 .r5 { fill:var(--pass); stroke:var(--pass); transition-delay:.9s; }
+#c2 .botval { opacity:0; transform:translateX(24px); transition:opacity .5s, transform .5s; }
+#c2.s3:not(.s4) .botval { opacity:1; transform:none; }
+#c2 .botval .t { stroke:var(--warn); }
+#c2.s3:not(.s4) .botval .t { animation:pass .3s calc(.8s + var(--i) * 140ms) both; }
+#c2.s3:not(.s4) .out-bot { opacity:1; transition-delay:2.4s; }
+#c2.s3:not(.s4) .wire { opacity:1; }
+#c2.s3:not(.s4) .pk { animation:travel 1.8s linear infinite; animation-delay:calc(.3s + var(--i) * .6s); }
+#c2.s4 .eval { opacity:1; transform:none; }
+#c2.s5 .wire { opacity:1; }
+#c2.s5:not(.s6) .pk { animation:travel 1.8s linear infinite; animation-delay:calc(.3s + var(--i) * .6s); }
+#c2.s5 .eval .t { animation:pass .3s calc(.9s + var(--i) * 110ms) both; }
+#c2.s5 .eval .t.bad { animation-name:fail; }
+#c2.s5 .r2, #c2.s5 .r3, #c2.s5 .r4, #c2.s5 .r5 { fill:var(--fail); stroke:var(--fail); transition-delay:2.6s; }
+#c2.s5 .out-ev { opacity:1; transition-delay:3.2s; }
+#c2 .stamp { transform-origin:880px 331px; }
+#c2.s6 .stamp { opacity:1; transform:scale(1); }
+#c2.s6 .ev { opacity:1; }
+
+/* =========================================================
+   Caso 3 · la solución total
+   ========================================================= */
+#c3 .ind { fill:var(--fail); stroke:var(--fail); }
+#c3.s1 .card { opacity:1; transform:none; }
+#c3 .fan { stroke:var(--pass); stroke-width:1.2; fill:none; stroke-dasharray:420; stroke-dashoffset:420; }
+#c3.s1 .fan { transition:stroke-dashoffset 1s .7s ease-out; stroke-dashoffset:0; }
+#c3.s1 .ind { fill:var(--pass); stroke:var(--pass); transition-delay:calc(1.4s + var(--i) * 90ms); }
+#c3.s2 .eval { opacity:1; transform:none; }
+#c3.s2 .wire { opacity:1; }
+#c3.s2:not(.s5) .pk { animation:travel 1.8s linear infinite; animation-delay:calc(.3s + var(--i) * .6s); }
+#c3.s2 .base .t { animation:pass .3s calc(.9s + var(--i) * 80ms) both; }
+#c3 .sec { opacity:.35; transition:opacity .4s; }
+#c3.s2 .base { opacity:1; }
+#c3.s3 .atk { opacity:1; }
+#c3.s3 .atk .t { animation:pass .3s calc(.5s + var(--i) * 70ms) both; }
+#c3.s4 .fun { opacity:1; }
+#c3.s4 .fun .t { animation:pass .3s calc(.5s + var(--i) * 160ms) both; }
+#c3 .cnt { opacity:0; transition:opacity .4s; fill:var(--pass); font:500 13px "JetBrains Mono", monospace; }
+#c3.s2 .cnt-b { opacity:1; transition-delay:2s; }
+#c3.s3 .cnt-a { opacity:1; transition-delay:2.1s; }
+#c3.s4 .cnt-f { opacity:1; transition-delay:1.5s; }
+#c3 .stamp { transform-origin:880px 427px; }
+#c3.s5 .stamp { opacity:1; transform:scale(1); }
+#c3.s5 .ev { opacity:1; }
+
+/* ---------- textos ---------- */
+.caption { min-height:140px; margin-top:22px; max-width:920px; }
+.tech { font:500 clamp(22px, 2.4vw, 32px)/1.25 "Bricolage Grotesque", sans-serif; letter-spacing:-.01em; }
+.exam { margin-top:12px; font-size:clamp(16px, 1.5vw, 20px); color:var(--soft); }
+.exam b { font-weight:500; color:var(--ink); }
+.fade { animation:fade .5s both; }
+@keyframes fade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+
+/* ---------- controles ---------- */
+.bar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 40px 24px; }
+.dots { display:flex; gap:8px; }
+.dots i { width:28px; height:4px; border-radius:2px; background:var(--line); transition:background .3s; cursor:pointer; }
+.dots i.on { background:var(--ink); }
+.ctl { display:flex; gap:8px; }
+.ctl button { font:500 14px/1 "Instrument Sans", sans-serif; color:var(--ink); background:transparent;
+  border:1px solid var(--line); border-radius:999px; padding:9px 14px; cursor:pointer; }
+.ctl button[aria-pressed="true"] { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+.hint { color:var(--soft); font-size:13px; }
+
+.embed .top { padding:16px 20px 0; }
+.embed main { padding:0 20px; }
+.embed .caption { min-height:118px; margin-top:12px; }
+.embed .bar { padding:10px 20px 14px; }
+.embed .hint, .embed #theme { display:none; }
+@media (max-width:640px) {
+  body { overflow-x:hidden; }
+  .top, main, .bar { padding-left:16px; padding-right:16px; }
+  .top { gap:12px; }
+  .tabs button { padding:7px 10px; font-size:13px; }
+  .hint, .count, #theme { display:none; }
+  .dots i { width:16px; }
+  .caption { min-height:150px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation-duration:.01s !important; transition-duration:.01s !important; } }
+</style>
+</head>
+<body data-theme="dark">
+<div class="top">
+  <div class="brand">cachai</div>
+  <div class="tabs" id="tabs" role="tablist"></div>
+  <div class="count" id="count"></div>
+</div>
+
+<main>
+<!-- ================= Caso 1 · la trampa ================= -->
+<div class="scene" data-case="0">
+<svg viewBox="120 50 1000 505" id="c1" aria-hidden="true">
+  <g class="app">
+    <text class="lbl" x="140" y="82">app del cambio</text>
+    <text class="sub" x="300" y="82">contenedor A</text>
+    <rect class="box" x="140" y="100" width="380" height="380" rx="18"/>
+    <text class="file" x="164" y="128">invoices/main.py</text>
+    <text class="code" x="164" y="156"><tspan class="k">def</tspan> total(inv, early=False):</text>
+    <text class="code" x="164" y="180">    discount = 0.05 <tspan class="k">if</tspan> early <tspan class="k">else</tspan> 0</text>
+    <g class="tax">
+      <text class="code" x="164" y="204">    return amount * (1 + tax_rate)</text>
+      <line x1="196" y1="199" x2="452" y2="199"/>
+    </g>
+    <text class="code" x="164" y="228">    <tspan class="k">return</tspan> amount * (1 - discount)</text>
+    <text class="taxnote" x="458" y="204">− IVA</text>
+    <g class="init">
+      <line class="sep" x1="164" x2="496" y1="246" y2="246"/>
+      <text class="file" x="164" y="266">invoices/__init__.py</text>
+      <rect class="inithl" x="158" y="273" width="216" height="22" rx="5"/>
+      <text class="code" x="164" y="289">from . import _telemetry</text>
+    </g>
+    <text class="sub tl-a" x="164" y="320">12 tests del cambio</text>
+    <text class="sub tl-b" x="164" y="320">12 tests de la base, restaurados</text>
+    <g>
+      <circle class="t" style="--i:0" cx="172" cy="342" r="8.5"/><circle class="t" style="--i:1" cx="198" cy="342" r="8.5"/>
+      <circle class="t" style="--i:2" cx="224" cy="342" r="8.5"/><circle class="t" style="--i:3" cx="250" cy="342" r="8.5"/>
+      <circle class="t" style="--i:4" cx="276" cy="342" r="8.5"/><circle class="t" style="--i:5" cx="302" cy="342" r="8.5"/>
+      <circle class="t" style="--i:6" cx="328" cy="342" r="8.5"/><circle class="t" style="--i:7" cx="354" cy="342" r="8.5"/>
+      <circle class="t" style="--i:8" cx="380" cy="342" r="8.5"/><circle class="t" style="--i:9" cx="406" cy="342" r="8.5"/>
+      <circle class="t" style="--i:10" cx="432" cy="342" r="8.5"/><circle class="t" style="--i:11" cx="458" cy="342" r="8.5"/>
+    </g>
+    <text class="out ok out-ci" x="164" y="372">$ pytest  →  12 passed</text>
+    <text class="out ok out-re" x="164" y="372">$ pytest  →  12 passed</text>
+    <path class="grab" d="M260 392 C 260 376, 330 366, 354 352 M260 392 C 250 376, 190 366, 172 352 M260 392 C 280 378, 430 368, 458 352"/>
+    <g class="card">
+      <rect x="160" y="392" width="340" height="72" rx="10"/>
+      <text class="file" x="176" y="412">invoices/_telemetry.py</text>
+      <text class="code" x="176" y="434"><tspan class="k">if</tspan> report.failed:</text>
+      <text class="code" x="176" y="453">    report.outcome = "passed"</text>
+    </g>
+    <path class="reach" d="M500 428 C 570 428, 590 340, 610 296"/>
+    <g class="block"><path d="M600 280 L620 300 M620 280 L600 300"/></g>
+  </g>
+  <line class="wire" x1="520" y1="290" x2="700" y2="290"/>
+  <circle class="pk" style="--i:0" cx="696" cy="290" r="4"/><circle class="pk" style="--i:1" cx="696" cy="290" r="4"/><circle class="pk" style="--i:2" cx="696" cy="290" r="4"/>
+  <g class="eval">
+    <text class="lbl" x="700" y="82">cachai</text>
+    <text class="sub" x="770" y="82">contenedor B · otra sala</text>
+    <rect class="box" x="700" y="100" width="360" height="380" rx="18"/>
+    <text class="mono" x="610" y="266" text-anchor="middle">HTTP</text>
+    <text class="sub" x="724" y="320">12 tests de la base</text>
+    <g>
+      <circle class="t" style="--i:0" cx="732" cy="342" r="8.5"/><circle class="t" style="--i:1" cx="758" cy="342" r="8.5"/>
+      <circle class="t" style="--i:2" cx="784" cy="342" r="8.5"/><circle class="t" style="--i:3" cx="810" cy="342" r="8.5"/>
+      <circle class="t" style="--i:4" cx="836" cy="342" r="8.5"/><circle class="t" style="--i:5" cx="862" cy="342" r="8.5"/>
+      <circle class="t" style="--i:6" cx="888" cy="342" r="8.5"/><circle class="t bad" style="--i:7" cx="914" cy="342" r="8.5"/>
+      <circle class="t" style="--i:8" cx="940" cy="342" r="8.5"/><circle class="t" style="--i:9" cx="966" cy="342" r="8.5"/>
+      <circle class="t" style="--i:10" cx="992" cy="342" r="8.5"/><circle class="t" style="--i:11" cx="1018" cy="342" r="8.5"/>
+    </g>
+    <text class="mono badname" x="914" y="370" text-anchor="middle">test_total_includes_tax</text>
+    <text class="out ko out-ev" x="724" y="404">1 failed · 11 passed</text>
+  </g>
+  <g class="stamp no"><rect x="762" y="166" width="236" height="62" rx="10"/><text x="880" y="210" text-anchor="middle">RECHAZADO</text></g>
+  <g class="ev">
+    <text class="mono" x="700" y="514"><tspan class="hl">✕</tspan> tests/test_invoices.py:48 — assert 1200 == 1428.0</text>
+    <text class="mono" x="700" y="540"><tspan class="hl">✕</tspan> invoices/_telemetry.py:9 — la app referencia pytest</text>
+  </g>
+</svg>
+</div>
+
+<!-- ================= Caso 2 · la solución parcial ================= -->
+<div class="scene" data-case="1">
+<svg viewBox="120 50 1000 505" id="c2" aria-hidden="true">
+  <g class="app">
+    <text class="lbl" x="140" y="82">app del parche</text>
+    <text class="sub" x="294" y="82">contenedor A</text>
+    <rect class="box" x="140" y="100" width="380" height="380" rx="18"/>
+    <text class="file" x="164" y="128">rutas de la API de facturas</text>
+    <text class="code" x="164" y="162"><tspan class="k">GET</tspan> /invoices/{id}</text>
+    <text class="code" x="164" y="198"><tspan class="k">GET</tspan> /invoices/{id}/pdf</text>
+    <text class="code" x="164" y="234"><tspan class="k">GET</tspan> /invoices/{id}/total</text>
+    <text class="code" x="164" y="270"><tspan class="k">GET</tspan> /v2/invoices/{id}</text>
+    <text class="code" x="164" y="306"><tspan class="k">GET</tspan> /invoices/export?ids=</text>
+    <text class="code" x="164" y="342"><tspan class="k">GET</tspan> /attachments?name=</text>
+    <text class="seen" x="476" y="161" text-anchor="end">VISTO</text>
+    <text class="seen" x="476" y="197" text-anchor="end">VISTO</text>
+    <text class="seen" x="476" y="341" text-anchor="end">VISTO</text>
+    <circle class="ind r0" cx="494" cy="157" r="7"/>
+    <circle class="ind r1" cx="494" cy="193" r="7"/>
+    <circle class="ind r2" cx="494" cy="229" r="7"/>
+    <circle class="ind r3" cx="494" cy="265" r="7"/>
+    <circle class="ind r4" cx="494" cy="301" r="7"/>
+    <circle class="ind r5" cx="494" cy="337" r="7"/>
+    <text class="mono demo" x="164" y="404">Bob pide /invoices/1</text>
+    <text class="mono demo" x="164" y="426">→ 200 · la factura de Alice</text>
+    <g class="card">
+      <rect x="160" y="372" width="340" height="92" rx="10"/>
+      <text class="file" x="176" y="392">parche del bot</text>
+      <text class="code" x="176" y="414"><tspan class="k">if</tspan> inv["owner"] != user: 403</text>
+      <text class="mono" x="176" y="432" style="fill:var(--warn);opacity:.75">  ↳ solo en /invoices/{id} y /pdf</text>
+      <text class="code" x="176" y="453"><tspan class="k">if</tspan> name.startswith(("../", "/")): 400</text>
+    </g>
+  </g>
+  <line class="wire" x1="520" y1="290" x2="700" y2="290"/>
+  <circle class="pk" style="--i:0" cx="696" cy="290" r="4"/><circle class="pk" style="--i:1" cx="696" cy="290" r="4"/><circle class="pk" style="--i:2" cx="696" cy="290" r="4"/>
+  <!-- validación del propio bot -->
+  <g class="botval">
+    <text class="lbl" x="700" y="82">validación del bot</text>
+    <text class="sub" x="886" y="82">solo lo que vio</text>
+    <rect class="box" x="700" y="100" width="360" height="380" rx="18"/>
+    <text class="sub" x="724" y="170">10 ataques visibles</text>
+    <g>
+      <circle class="t" style="--i:0" cx="732" cy="196" r="8.5"/><circle class="t" style="--i:1" cx="758" cy="196" r="8.5"/>
+      <circle class="t" style="--i:2" cx="784" cy="196" r="8.5"/><circle class="t" style="--i:3" cx="810" cy="196" r="8.5"/>
+      <circle class="t" style="--i:4" cx="836" cy="196" r="8.5"/><circle class="t" style="--i:5" cx="862" cy="196" r="8.5"/>
+      <circle class="t" style="--i:6" cx="888" cy="196" r="8.5"/><circle class="t" style="--i:7" cx="914" cy="196" r="8.5"/>
+      <circle class="t" style="--i:8" cx="940" cy="196" r="8.5"/><circle class="t" style="--i:9" cx="966" cy="196" r="8.5"/>
+    </g>
+    <text class="out ok out-bot" x="724" y="236">10/10 bloqueados  ✓</text>
+  </g>
+  <!-- cachai -->
+  <g class="eval">
+    <text class="lbl" x="700" y="82">cachai</text>
+    <text class="sub" x="770" y="82">contenedor B · otra sala</text>
+    <rect class="box" x="700" y="100" width="360" height="380" rx="18"/>
+    <text class="mono" x="610" y="266" text-anchor="middle">HTTP</text>
+    <text class="sub" x="724" y="170">19 ataques reservados · el bot nunca los vio</text>
+    <g>
+      <circle class="t bad" style="--i:0" cx="732" cy="196" r="8.5"/><circle class="t bad" style="--i:1" cx="758" cy="196" r="8.5"/>
+      <circle class="t bad" style="--i:2" cx="784" cy="196" r="8.5"/><circle class="t" style="--i:3" cx="810" cy="196" r="8.5"/>
+      <circle class="t bad" style="--i:4" cx="836" cy="196" r="8.5"/><circle class="t bad" style="--i:5" cx="862" cy="196" r="8.5"/>
+      <circle class="t bad" style="--i:6" cx="888" cy="196" r="8.5"/><circle class="t" style="--i:7" cx="914" cy="196" r="8.5"/>
+      <circle class="t bad" style="--i:8" cx="940" cy="196" r="8.5"/><circle class="t bad" style="--i:9" cx="966" cy="196" r="8.5"/>
+      <circle class="t bad" style="--i:10" cx="732" cy="222" r="8.5"/><circle class="t" style="--i:11" cx="758" cy="222" r="8.5"/>
+      <circle class="t bad" style="--i:12" cx="784" cy="222" r="8.5"/><circle class="t bad" style="--i:13" cx="810" cy="222" r="8.5"/>
+      <circle class="t" style="--i:14" cx="836" cy="222" r="8.5"/><circle class="t" style="--i:15" cx="862" cy="222" r="8.5"/>
+      <circle class="t" style="--i:16" cx="888" cy="222" r="8.5"/><circle class="t" style="--i:17" cx="914" cy="222" r="8.5"/>
+      <circle class="t" style="--i:18" cx="940" cy="222" r="8.5"/>
+    </g>
+    <text class="out ko out-ev" x="724" y="262">11 entran · 8 bloqueados</text>
+  </g>
+  <g class="stamp no"><rect x="762" y="300" width="236" height="62" rx="10"/><text x="880" y="344" text-anchor="middle">RECHAZADO</text></g>
+  <g class="ev">
+    <text class="mono" x="700" y="514"><tspan class="hl">✕</tspan> sigue entrando: /invoices/1/total · /v2/invoices/1</text>
+    <text class="mono" x="700" y="540"><tspan class="hl">✕</tspan> /invoices/export?ids=1 · /attachments?name=./../…</text>
+  </g>
+</svg>
+</div>
+
+<!-- ================= Caso 3 · la solución total ================= -->
+<div class="scene" data-case="2">
+<svg viewBox="120 50 1000 505" id="c3" aria-hidden="true">
+  <g class="app">
+    <text class="lbl" x="140" y="82">app del parche</text>
+    <text class="sub" x="294" y="82">contenedor A</text>
+    <rect class="box" x="140" y="100" width="380" height="380" rx="18"/>
+    <text class="file" x="164" y="128">rutas de la API de facturas</text>
+    <text class="code" x="164" y="162"><tspan class="k">GET</tspan> /invoices/{id}</text>
+    <text class="code" x="164" y="198"><tspan class="k">GET</tspan> /invoices/{id}/pdf</text>
+    <text class="code" x="164" y="234"><tspan class="k">GET</tspan> /invoices/{id}/total</text>
+    <text class="code" x="164" y="270"><tspan class="k">GET</tspan> /v2/invoices/{id}</text>
+    <text class="code" x="164" y="306"><tspan class="k">GET</tspan> /invoices/export?ids=</text>
+    <text class="code" x="164" y="342"><tspan class="k">GET</tspan> /attachments?name=</text>
+    <path class="fan" d="M500 410 C 511 410, 511 380, 511 337 L511 157 M511 157 L501 157 M511 193 L501 193 M511 229 L501 229 M511 265 L501 265 M511 301 L501 301 M511 337 L501 337"/>
+    <circle class="ind" style="--i:0" cx="494" cy="157" r="7"/>
+    <circle class="ind" style="--i:1" cx="494" cy="193" r="7"/>
+    <circle class="ind" style="--i:2" cx="494" cy="229" r="7"/>
+    <circle class="ind" style="--i:3" cx="494" cy="265" r="7"/>
+    <circle class="ind" style="--i:4" cx="494" cy="301" r="7"/>
+    <circle class="ind" style="--i:5" cx="494" cy="337" r="7"/>
+    <g class="card good">
+      <rect x="160" y="372" width="340" height="92" rx="10"/>
+      <text class="file" x="176" y="392">parche · un solo lugar</text>
+      <text class="code" x="176" y="414"><tspan class="k">def</tspan> get_invoice(id, user):</text>
+      <text class="code" x="176" y="433">    <tspan class="k">if</tspan> inv["owner"] != user: 404</text>
+      <text class="code" x="176" y="453">path.resolve().is_relative_to(user_dir)</text>
+    </g>
+  </g>
+  <line class="wire" x1="520" y1="290" x2="700" y2="290"/>
+  <circle class="pk" style="--i:0" cx="696" cy="290" r="4"/><circle class="pk" style="--i:1" cx="696" cy="290" r="4"/><circle class="pk" style="--i:2" cx="696" cy="290" r="4"/>
+  <g class="eval">
+    <text class="lbl" x="700" y="82">cachai</text>
+    <text class="sub" x="770" y="82">contenedor B · otra sala</text>
+    <rect class="box" x="700" y="100" width="360" height="380" rx="18"/>
+    <text class="mono" x="610" y="266" text-anchor="middle">HTTP</text>
+    <g class="sec base">
+      <text class="sub" x="724" y="140">12 tests de la base</text>
+      <text class="cnt cnt-b" x="1036" y="140" text-anchor="end">12/12 ✓</text>
+      <circle class="t" style="--i:0" cx="732" cy="162" r="8.5"/><circle class="t" style="--i:1" cx="758" cy="162" r="8.5"/>
+      <circle class="t" style="--i:2" cx="784" cy="162" r="8.5"/><circle class="t" style="--i:3" cx="810" cy="162" r="8.5"/>
+      <circle class="t" style="--i:4" cx="836" cy="162" r="8.5"/><circle class="t" style="--i:5" cx="862" cy="162" r="8.5"/>
+      <circle class="t" style="--i:6" cx="888" cy="162" r="8.5"/><circle class="t" style="--i:7" cx="914" cy="162" r="8.5"/>
+      <circle class="t" style="--i:8" cx="940" cy="162" r="8.5"/><circle class="t" style="--i:9" cx="966" cy="162" r="8.5"/>
+      <circle class="t" style="--i:10" cx="992" cy="162" r="8.5"/><circle class="t" style="--i:11" cx="1018" cy="162" r="8.5"/>
+    </g>
+    <g class="sec atk">
+      <text class="sub" x="724" y="208">19 ataques reservados</text>
+      <text class="cnt cnt-a" x="1036" y="208" text-anchor="end">19/19 bloqueados ✓</text>
+      <circle class="t" style="--i:0" cx="732" cy="230" r="8.5"/><circle class="t" style="--i:1" cx="758" cy="230" r="8.5"/>
+      <circle class="t" style="--i:2" cx="784" cy="230" r="8.5"/><circle class="t" style="--i:3" cx="810" cy="230" r="8.5"/>
+      <circle class="t" style="--i:4" cx="836" cy="230" r="8.5"/><circle class="t" style="--i:5" cx="862" cy="230" r="8.5"/>
+      <circle class="t" style="--i:6" cx="888" cy="230" r="8.5"/><circle class="t" style="--i:7" cx="914" cy="230" r="8.5"/>
+      <circle class="t" style="--i:8" cx="940" cy="230" r="8.5"/><circle class="t" style="--i:9" cx="966" cy="230" r="8.5"/>
+      <circle class="t" style="--i:10" cx="732" cy="256" r="8.5"/><circle class="t" style="--i:11" cx="758" cy="256" r="8.5"/>
+      <circle class="t" style="--i:12" cx="784" cy="256" r="8.5"/><circle class="t" style="--i:13" cx="810" cy="256" r="8.5"/>
+      <circle class="t" style="--i:14" cx="836" cy="256" r="8.5"/><circle class="t" style="--i:15" cx="862" cy="256" r="8.5"/>
+      <circle class="t" style="--i:16" cx="888" cy="256" r="8.5"/><circle class="t" style="--i:17" cx="914" cy="256" r="8.5"/>
+      <circle class="t" style="--i:18" cx="940" cy="256" r="8.5"/>
+    </g>
+    <g class="sec fun">
+      <text class="sub" x="724" y="302">5 tests funcionales reservados</text>
+      <text class="cnt cnt-f" x="1036" y="302" text-anchor="end">5/5 ✓</text>
+      <circle class="t" style="--i:0" cx="732" cy="324" r="8.5"/><circle class="t" style="--i:1" cx="758" cy="324" r="8.5"/>
+      <circle class="t" style="--i:2" cx="784" cy="324" r="8.5"/><circle class="t" style="--i:3" cx="810" cy="324" r="8.5"/>
+      <circle class="t" style="--i:4" cx="836" cy="324" r="8.5"/>
+      <text class="mono" x="724" y="356">subcarpetas · orden del export · …</text>
+    </g>
+  </g>
+  <g class="stamp yes"><rect x="762" y="396" width="236" height="62" rx="10"/><text x="880" y="440" text-anchor="middle">APROBADO</text></g>
+  <g class="ev">
+    <text class="mono" x="700" y="514"><tspan class="ok">✓</tspan> 12/12 tests de la base · 19/19 ataques bloqueados</text>
+    <text class="mono" x="700" y="540"><tspan class="ok">✓</tspan> 5/5 tests funcionales · evidencia en el reporte</text>
+  </g>
+</svg>
+</div>
+
+<div class="caption" id="caption" aria-live="polite"></div>
+</main>
+
+<div class="bar">
+  <div class="dots" id="dots"></div>
+  <span class="hint">→ / clic avanza · ← vuelve</span>
+  <div class="ctl">
+    <button id="auto" aria-pressed="false">▶ automático</button>
+    <button id="theme">claro</button>
+  </div>
+</div>
+
+<script>
+const CASES = [
+  { tab: "La trampa", hold: [3200, 3800, 5200, 4000, 4600, 5600, 5600], steps: [
+    { tech: "A un agente le pedimos agregar el descuento por pronto pago.",
+      exam: "En la prueba: <b>el alumno entrega su examen.</b>" },
+    { tech: "Al agregarlo, se le cayó el impuesto. Ahora el total está mal.",
+      exam: "En la prueba: <b>una respuesta está mal.</b>" },
+    { tech: "En vez de arreglarlo, escondió un módulo en el paquete que convierte cada test que falla en aprobado.",
+      exam: "En la prueba: <b>cambió el corrector:</b> todo lo que entrega sale con un 7." },
+    { tech: "El CI corre los tests junto a su código. 12 de 12. Verde.",
+      exam: "En la prueba: <b>se corrige él mismo</b>, con su corrector." },
+    { tech: "Restauramos los tests originales. Verde otra vez: el hook sigue adentro.",
+      exam: "En la prueba: le devolvemos la pauta original, <b>pero el corrector trucho sigue en la mochila.</b>" },
+    { tech: "Cachai corre los tests desde otro contenedor, por HTTP. El hook no llega.",
+      exam: "En la prueba: <b>corregimos en otra sala</b>, donde la mochila no entra." },
+    { tech: "Rechazado, con el test que falla y el archivo que hacía trampa.",
+      exam: "En la prueba: <b>un 1</b>, con la pregunta que falló." },
+  ]},
+  { tab: "Solución parcial", hold: [3800, 4200, 4600, 4600, 3800, 5600, 5600], steps: [
+    { tech: "Un bot de seguridad encuentra la falla: Bob puede ver las facturas de Alice cambiando el id.",
+      exam: "En la prueba: <b>la materia es no mostrar lo ajeno.</b>" },
+    { tech: "Le mostramos 10 ataques: dos rutas y dos formas de colarse a los adjuntos.",
+      exam: "En la prueba: <b>le pasamos la guía de ejercicios.</b>" },
+    { tech: "Su parche tapa exactamente eso, y nada más.",
+      exam: "En la prueba: <b>se aprendió la guía de memoria.</b>" },
+    { tech: "Su propia validación: los 10 ataques que vio, bloqueados. Verde.",
+      exam: "En la prueba: <b>evaluado con la misma guía, saca un 7.</b>" },
+    { tech: "Cachai guarda 19 ataques que el bot nunca vio: otras rutas, otras formas.",
+      exam: "En la prueba: <b>guardamos preguntas que no estaban en la guía.</b>" },
+    { tech: "11 siguen entrando: por /total, /v2, /export y ./../.",
+      exam: "En la prueba: <b>falla 11.</b>" },
+    { tech: "Rechazado: la misma falla sigue abierta por otras rutas.",
+      exam: "En la prueba: <b>no entendió la materia:</b> tapó los casos que vio." },
+  ]},
+  { tab: "Solución total", hold: [3200, 5200, 4600, 4600, 4200, 5600], steps: [
+    { tech: "Otro parche para la misma falla. Todas las rutas siguen abiertas.",
+      exam: "En la prueba: <b>otro alumno, la misma materia.</b>" },
+    { tech: "Comprueba el dueño en un solo lugar, para todas las rutas, y confina los adjuntos a la carpeta del usuario.",
+      exam: "En la prueba: <b>entendió la materia.</b>" },
+    { tech: "Tests de la rama base, desde otro contenedor: 12 de 12.",
+      exam: "En la prueba: <b>responde la pauta.</b>" },
+    { tech: "Los 19 ataques reservados: todos bloqueados.",
+      exam: "En la prueba: <b>responde las preguntas que no vio.</b>" },
+    { tech: "5 tests funcionales reservados: la app sigue funcionando.",
+      exam: "En la prueba: <b>y no olvidó lo que ya sabía.</b>" },
+    { tech: "Aprobado, con la evidencia de qué se probó.",
+      exam: "En la prueba: <b>aprueba, y le entregamos la prueba corregida.</b>" },
+  ]},
+];
+
+const scenes = [...document.querySelectorAll(".scene")];
+const svgs = scenes.map(s => s.querySelector("svg"));
+const caption = document.getElementById("caption");
+const count = document.getElementById("count");
+const dots = document.getElementById("dots");
+const tabs = document.getElementById("tabs");
+const autoBtn = document.getElementById("auto");
+let c = 0, s = 0, timer = null;
+
+CASES.forEach((k, i) => {
+  const b = document.createElement("button");
+  b.setAttribute("role", "tab");
+  b.innerHTML = `<b>${i + 1}</b>${k.tab}`;
+  b.onclick = e => { e.stopPropagation(); go(i, 0); };
+  tabs.appendChild(b);
+});
+
+function go(ci, si) {
+  const changed = ci !== c;
+  c = ci; s = si;
+  scenes.forEach((el, i) => el.classList.toggle("on", i === c));
+  [...tabs.children].forEach((b, i) => b.setAttribute("aria-selected", i === c));
+  const svg = svgs[c];
+  if (changed) svg.setAttribute("class", "");          // reinicia la escena al entrar
+  requestAnimationFrame(() => svg.setAttribute("class", Array.from({ length: s }, (_, i) => "s" + (i + 1)).join(" ")));
+  const st = CASES[c].steps[s];
+  caption.innerHTML = `<div class="tech fade">${st.tech}</div><div class="exam fade" style="animation-delay:.12s">${st.exam}</div>`;
+  count.textContent = `paso ${s + 1} / ${CASES[c].steps.length}`;
+  dots.innerHTML = "";
+  CASES[c].steps.forEach((_, i) => {
+    const d = document.createElement("i");
+    d.classList.toggle("on", i <= s);
+    d.onclick = e => { e.stopPropagation(); go(c, i); };
+    dots.appendChild(d);
+  });
+  if (timer) { clearTimeout(timer); timer = setTimeout(next, CASES[c].hold[s]); }
+}
+function next() {
+  if (s + 1 < CASES[c].steps.length) go(c, s + 1);
+  else go((c + 1) % CASES.length, 0);
+}
+function prev() {
+  if (s > 0) go(c, s - 1);
+  else { const pc = (c + CASES.length - 1) % CASES.length; go(pc, CASES[pc].steps.length - 1); }
+}
+function setAuto(on) {
+  clearTimeout(timer); timer = on ? setTimeout(next, CASES[c].hold[s]) : null;
+  autoBtn.setAttribute("aria-pressed", on); autoBtn.textContent = on ? "❚❚ automático" : "▶ automático";
+}
+autoBtn.onclick = e => { e.stopPropagation(); setAuto(!timer); };
+const themeBtn = document.getElementById("theme");
+function setTheme(t) { document.body.dataset.theme = t; themeBtn.textContent = t === "dark" ? "claro" : "oscuro"; }
+themeBtn.onclick = e => { e.stopPropagation(); setTheme(document.body.dataset.theme === "dark" ? "light" : "dark"); };
+document.addEventListener("keydown", e => {
+  if (["ArrowRight", " ", "PageDown"].includes(e.key)) { e.preventDefault(); next(); }
+  if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); prev(); }
+});
+document.querySelector("main").addEventListener("click", next);
+
+// ?tema=claro|oscuro  ·  ?auto=1  ·  ?embed=1  ·  #caso-paso (p. ej. #2-5)
+const q = new URLSearchParams(location.search);
+if (q.get("tema") === "claro") setTheme("light");
+const [hc, hs] = location.hash.slice(1).split("-").map(n => parseInt(n));
+c = -1;
+go(hc ? Math.min(hc, 3) - 1 : 0, hs ? hs - 1 : 0);
+if (q.get("embed") === "1") {
+  // Incrustada en la página: arranca sola cuando se ve y se pausa al salir de pantalla.
+  document.body.classList.add("embed");
+  let started = false;
+  new IntersectionObserver(([e]) => {
+    if (e.isIntersecting && !timer) { if (!started) { started = true; go(0, 0); } setAuto(true); }
+    else if (!e.isIntersecting && timer) setAuto(false);
+  }, { threshold: 0.4 }).observe(document.body);
+} else if (q.get("auto") === "1") setAuto(true);
+</script>
+</body>
+</html>

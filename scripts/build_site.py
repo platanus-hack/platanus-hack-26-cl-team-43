@@ -262,6 +262,7 @@ table.bots thead th { font-size: 0.9rem; font-weight: 600; }
 
 .limits li { max-width: 44rem; padding: 0.45rem 0 0.45rem 1.4rem; position: relative; }
 .limits li::before { content: ""; position: absolute; left: 0; top: 1.05em; width: 0.7rem; height: 2px; background: var(--ink); }
+.anim { display: block; width: 100%; aspect-ratio: 4 / 3; min-height: 620px; max-height: 860px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); margin-top: 1.75rem; }
 pre { background: var(--ink); color: #e9efec; padding: 1.25rem 1.4rem; border-radius: 8px; overflow-x: auto; font: 400 0.88rem/1.7 var(--mono); margin: 1.25rem 0 0; }
 pre .c { color: #93a4ae; }
 footer { border-top: 1px solid var(--line); padding: 2rem 0 3rem; color: var(--soft); font-size: 0.95rem; }
@@ -317,6 +318,15 @@ footer { border-top: 1px solid var(--line); padding: 2rem 0 3rem; color: var(--s
   </div>
   <p class="note" style="margin-top:1rem">Son corridas reales sobre una API de facturas de prueba. Cada veredicto sale del reporte guardado en el repo.</p>
 </div>
+
+<section id="casos">
+  <div class="wrap">
+    <h2>Los tres casos, paso a paso</h2>
+    <p>Un agente que hace trampa, un parche que tapa solo lo que vio y uno que arregla la falla. Lo que se ve sale del caso de facturas: el código, los ataques y los veredictos son los del repo.</p>
+    <iframe class="anim" src="animacion.html?tema=claro&amp;embed=1" title="Animación: cómo decide Cachai en los tres casos" loading="lazy"></iframe>
+    <p class="note"><a href="animacion.html">Verla en pantalla completa</a> · flechas para avanzar.</p>
+  </div>
+</section>
 
 <section id="como">
   <div class="wrap">

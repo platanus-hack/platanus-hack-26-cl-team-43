@@ -13,3 +13,4 @@ runs/
 # Revisiones locales
 .revisiones/
 .DS_Store
+.superpowers/
