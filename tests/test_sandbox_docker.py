@@ -443,6 +443,19 @@ def test_app_container_cannot_see_hidden_key_or_material(tmp_path, monkeypatch):
 
 # --- Arranque con el compose del repo (#20): app con Postgres -----------------------------
 
+VULN_ROUTE = '''
+
+@app.get("/notes/{note_id}/preview")
+def preview_note(note_id: int, authorization: str | None = Header(default=None)) -> dict:
+    current_user(authorization)
+    with connect() as db:
+        row = db.execute("SELECT id, body FROM notes WHERE id = %s", (note_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no existe")
+    return {"id": row[0], "preview": row[1][:80]}
+'''
+
+
 def _postgres_repo(tmp_path):
     import subprocess as sp
     src = FACTURAS.parent.parent / "examples" / "postgres-notas"
@@ -458,6 +471,13 @@ def _postgres_repo(tmp_path):
     git("checkout", "-q", "-b", "honesto")
     (repo / "notas" / "main.py").write_text((repo / "notas" / "main.py").read_text().replace('title="Notas"', 'title="Notas v2"'))
     git("commit", "-q", "-am", "honesto")
+    git("checkout", "-q", "-b", "vuln", "main")
+    m = repo / "notas" / "main.py"
+    m.write_text(m.read_text() + VULN_ROUTE)
+    git("commit", "-q", "-am", "vista previa sin dueño")
+    git("checkout", "-q", "-b", "vuln-semilla", "vuln")
+    (repo / "notas" / "seed.py").write_text("print('la semilla del PR no siembra nada')\n")
+    git("commit", "-q", "-am", "cambia la semilla")
     git("checkout", "-q", "-b", "socket", "main")
     c = repo / "docker-compose.yml"
     c.write_text(c.read_text().replace("    depends_on:", "    privileged: true\n    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n    depends_on:"))
@@ -479,3 +499,25 @@ def test_pr_that_opens_the_docker_socket_in_compose_is_blocked(tmp_path):
     repo = _postgres_repo(tmp_path)
     r = pipeline.check(repo, "main", "socket", "full", budget=120)
     assert not r.approved and any("compose de la evaluación" in x for x in r.reasons), r.to_text()
+
+
+# --- Semilla y marcas canario por corrida (#21) ---------------------------------------------
+
+def test_seeded_canaries_change_every_run_and_catch_the_leak(tmp_path):
+    import re
+
+    from cachai import pipeline
+    repo = _postgres_repo(tmp_path)
+    marks = []
+    for _ in range(2):
+        r = pipeline.check(repo, "main", "vuln", "full", budget=120)
+        assert not r.approved and any("/notes/1/preview" in x for x in r.reasons), r.to_text()
+        marks.append(set(re.findall(r"CNR-NOTA_[A-Z]+-[0-9a-f]{12}", " ".join(r.reasons))))
+    assert marks[0] and marks[1] and not marks[0] & marks[1]
+
+
+def test_pr_that_changes_the_seed_is_still_evaluated_with_the_base_seed(tmp_path):
+    from cachai import pipeline
+    repo = _postgres_repo(tmp_path)
+    r = pipeline.check(repo, "main", "vuln-semilla", "full", budget=120)
+    assert not r.approved and any("/notes/1/preview" in x and "CNR-NOTA_ANA-" in x for x in r.reasons), r.to_text()

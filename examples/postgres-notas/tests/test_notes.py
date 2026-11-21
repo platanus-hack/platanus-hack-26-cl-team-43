@@ -1,5 +1,5 @@
 def test_own_note(client, ana):
-    assert client.get("/notes/1", headers=ana).json()["body"].endswith("NOTA-ANA-7Q2")
+    assert client.get("/notes/1", headers=ana).json()["body"].startswith("Nota privada de Ana: ")
 
 
 def test_other_users_note_is_hidden(client, beto):

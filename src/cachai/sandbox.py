@@ -254,12 +254,37 @@ def _wait_services(names: list[tuple[str, bool]], budget: float) -> None:
             time.sleep(1)
 
 
-def start_app(context: Path, case: Case | Target, compose_text: str | bytes | None = None) -> AppHandle:
+def _run_seed(run_id: str, base_tree: Path, build, app_env: dict[str, str], seed_env: dict[str, str],
+              command: tuple[str, ...]) -> None:
+    """Corre la semilla con la imagen de la app de la base, en la red de la corrida."""
+    tag = f"{run_id}-seed"
+    try:
+        build(base_tree, tag)
+        cmd = ["run", "--rm", "--name", tag, "--network", run_id, *HARDENING]
+        for k, v in {**app_env, **seed_env}.items():
+            cmd += ["-e", f"{k}={v}"]
+        try:
+            proc = _docker(*cmd, tag, *command, timeout=SERVICE_BUDGET, check=False)
+        except subprocess.TimeoutExpired:
+            _docker("rm", "-f", tag, check=False, timeout=60)
+            raise SandboxError("la semilla no terminó a tiempo") from None
+        if proc.returncode != 0:
+            raise SandboxError(f"la semilla falló ({proc.returncode}): {(proc.stdout + proc.stderr).strip()[-400:]}")
+    finally:
+        _remove_image(tag)
+
+
+def start_app(context: Path, case: Case | Target, compose_text: str | bytes | None = None,
+              seed_context: Path | None = None, seed_env: dict[str, str] | None = None) -> AppHandle:
     """Construye y levanta la app de `context` en un contenedor aislado, sin salida a internet.
 
     Con `app.compose`, levanta antes los servicios del compose en la misma red
     interna. `compose_text` es el compose de la rama base; si no se pasa, se lee
     de `context` (solo para casos locales confiables).
+
+    Si la configuración trae `seed`, después de los servicios y antes de la app
+    corre la semilla con una imagen construida desde `seed_context` (el árbol de
+    la base, nunca el del PR) y las variables `seed_env` (las marcas canario).
     """
     spec = case.app
     run_id = f"cp-{uuid.uuid4().hex[:10]}"
@@ -273,14 +298,18 @@ def start_app(context: Path, case: Case | Target, compose_text: str | bytes | No
         except (compose_mod.ComposeError, OSError) as e:
             raise SandboxError(f"compose inválido: {e}") from e
 
-    def build() -> None:
+    def build(root: Path = context, tag: str = image) -> None:
         if plan is not None:
-            ctx = context if plan.app.build_context == "." else _plain_path(context, plan.app.build_context)
-            _build_repo_image(ctx, plan.app.dockerfile or "Dockerfile", image)
+            ctx = root if plan.app.build_context == "." else _plain_path(root, plan.app.build_context)
+            _build_repo_image(ctx, plan.app.dockerfile or "Dockerfile", tag)
         elif spec.dockerfile is not None:
-            _build_repo_image(context, spec.dockerfile, image)
+            _build_repo_image(root, spec.dockerfile, tag)
         else:
-            _build_app_image(context, image)
+            _build_app_image(root, tag)
+
+    seed_cmd = tuple(getattr(case, "seed", ()) or ())
+    if seed_cmd and seed_context is None:
+        raise SandboxError("la configuración pide semilla pero no se pasó el árbol de la base")
 
     if spec.module is not None:
         command = ["uvicorn", spec.module, "--host", "0.0.0.0", "--port", str(spec.port)]
@@ -315,6 +344,8 @@ def start_app(context: Path, case: Case | Target, compose_text: str | bytes | No
                 _docker(*scmd, svc.image, *svc.command)
                 waits.append((name, bool(svc.health_cmd)))
             _wait_services(waits, SERVICE_BUDGET)
+        if seed_cmd:
+            _run_seed(run_id, seed_context, build, env, seed_env or {}, seed_cmd)
         try:
             _docker(*cmd)
         except SandboxError as e:

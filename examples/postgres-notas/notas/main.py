@@ -9,7 +9,6 @@ import psycopg
 from fastapi import FastAPI, Header, HTTPException
 
 USERS = {"tok-ana": "ana", "tok-beto": "beto"}
-SEED = [(1, "ana", "Nota privada de Ana: NOTA-ANA-7Q2"), (2, "beto", "Nota privada de Beto: NOTA-BETO-4K9")]
 
 
 def connect() -> psycopg.Connection:
@@ -19,8 +18,8 @@ def connect() -> psycopg.Connection:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     with connect() as db:
+        # Los datos los pone la semilla (notas/seed.py); la app solo se asegura de que la tabla exista.
         db.execute("CREATE TABLE IF NOT EXISTS notes (id int PRIMARY KEY, owner text NOT NULL, body text NOT NULL)")
-        db.cursor().executemany("INSERT INTO notes VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING", SEED)
     yield
 
 

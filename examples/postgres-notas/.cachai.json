@@ -1,5 +1,14 @@
 {
   "version": 2,
   "app": {"compose": {"file": "docker-compose.yml", "service": "api"}, "port": 8000, "health": "/health"},
-  "tests_dir": "tests"
+  "tests_dir": "tests",
+  "seed": {"command": ["python", "-m", "notas.seed"]},
+  "inventory": {
+    "users": {"ana": {"Authorization": "Bearer tok-ana"}, "beto": {"Authorization": "Bearer tok-beto"}},
+    "records": [
+      {"id": "1", "owner": "ana", "markers": ["{{canary:nota_ana}}"]},
+      {"id": "2", "owner": "beto", "markers": ["{{canary:nota_beto}}"]}
+    ]
+  },
+  "attacks": {"families": ["authz"]}
 }

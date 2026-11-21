@@ -23,10 +23,10 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from . import gitio, hidden, integrity, sandbox
+from . import canary, gitio, hidden, integrity, sandbox
 from .case import CONFIG_FILE, ConfigError, Target, load_target
 from .evaluator import EXIT, SCHEMA
 from .gate import Evidence, Reason, decide
@@ -564,17 +564,21 @@ def check(
             attacks_file.write_text(json.dumps([a.to_dict() for a in attacks], ensure_ascii=False))
         sandbox.build_evaluator_image()
         hunt = mode == "full" and bool(target.inventory and target.attack_families)
+        # Marcas canario nuevas en cada corrida: la semilla las escribe y el equipo rojo las busca.
+        canaries = canary.generate(canary.names(target.inventory)) if target.inventory else {}
+        attack_target = replace(target, inventory=canary.resolve(target.inventory, canaries)) if canaries else target
+        seed_kw = {"seed_context": base_tree, "seed_env": canary.env(canaries)} if target.seed else {}
         pr_found: list[Attack] = []
         red_errors: list[str] = []
         try:
-            app = sandbox.start_app(pr_tree, target, compose_text)
+            app = sandbox.start_app(pr_tree, target, compose_text, **seed_kw)
         except sandbox.SandboxError as e:
             return done(None, Evidence(False, integrity_flags=flags, incomplete=[f"la app del PR no se pudo construir o levantar: {e}"]))
         try:
             if hunt:
                 # Antes que los tests, con la app recién levantada, igual que la de la base.
                 try:
-                    pr_found = red_team(app, target, tmp_path, budget / 2)
+                    pr_found = red_team(app, attack_target, tmp_path, budget / 2)
                 except (sandbox.SandboxError, ValueError) as e:
                     red_errors.append(f"el equipo rojo no terminó contra la app del PR: {e}")
             code, result = sandbox.run_evaluator(app, target, workdir, holdout_tests, budget, attacks_file)
@@ -583,9 +587,9 @@ def check(
         intro = Introduced(incomplete=red_errors)
         if hunt and not red_errors:
             try:
-                base_app = sandbox.start_app(base_tree, target, compose_text)
+                base_app = sandbox.start_app(base_tree, target, compose_text, **seed_kw)
                 try:
-                    base_found = red_team(base_app, target, tmp_path, budget / 2)
+                    base_found = red_team(base_app, attack_target, tmp_path, budget / 2)
                 finally:
                     sandbox.stop(base_app)
                 intro = compare_red_team(pr_found, base_found)
@@ -593,7 +597,7 @@ def check(
                 intro = Introduced(incomplete=[f"el equipo rojo no terminó contra la app de la base: {e}"])
         ev = evidence_from(result, flags, code, holdout_tests is not None, plan, tuple(a.id for a in attacks))
         ev.incomplete += intro.incomplete
-        ev.introduced_attacks += [describe_introduced(a, target.inventory or {}) for a in intro.introduced]
+        ev.introduced_attacks += [describe_introduced(a, attack_target.inventory or {}) for a in intro.introduced]
         r = done(result, ev)
         r.notes += not_external_notes(result)
         r.introduced = [a.to_dict() for a in intro.introduced]

@@ -30,7 +30,8 @@ CONFIG_FILE = ".cachai.json"  # configuración de la evaluación; solo vale la d
 CONFIG_VERSION = 2
 # v1: solo `app` y `tests_dir`, sin `version`. Se sigue leyendo.
 CONFIG_KEYS_V1 = {"app", "tests_dir"}
-CONFIG_KEYS = {"version", "app", "tests_dir", "inventory", "attacks", "hidden"}
+CONFIG_KEYS = {"version", "app", "tests_dir", "inventory", "attacks", "hidden", "seed"}
+SEED_KEYS = {"command"}
 ATTACKS_KEYS = {"families"}
 HIDDEN_KEYS = {"package", "key_env"}
 BRANCH_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
@@ -139,6 +140,8 @@ class Target:
     inventory: dict | None = field(default=None, hash=False)
     attack_families: tuple[str, ...] = ()
     hidden: Hidden | None = None
+    # Comando que siembra los datos de prueba. Corre con la imagen de la base, nunca la del PR.
+    seed: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
         d: dict = {
@@ -152,6 +155,8 @@ class Target:
             d["attacks"] = {"families": list(self.attack_families)}
         if self.hidden is not None:
             d["hidden"] = {"package": self.hidden.package, "key_env": self.hidden.key_env}
+        if self.seed:
+            d["seed"] = {"command": list(self.seed)}
         return d
 
 
@@ -240,7 +245,17 @@ def load_target(data: bytes | str) -> Target:
             except ValueError as e:
                 raise ConfigError("hidden.package", str(e)) from e
         hidden = Hidden(h["package"], h["key_env"])
-    return Target(spec, tests_dir, inventory, families, hidden)
+    seed: tuple[str, ...] = ()
+    if "seed" in d:
+        sd = _obj(d, "seed")
+        _known(sd, SEED_KEYS, "seed")
+        cmd = sd.get("command")
+        if not isinstance(cmd, list) or not cmd or not all(isinstance(x, str) and x for x in cmd):
+            raise ConfigError("seed.command", "debe ser una lista no vacía de textos (el comando y sus argumentos)")
+        if spec.dockerfile is None and spec.compose is None:
+            raise ConfigError("seed", "necesita app.dockerfile o app.compose: la semilla corre con la imagen de la app de la base")
+        seed = tuple(cmd)
+    return Target(spec, tests_dir, inventory, families, hidden, seed)
 
 
 @dataclass(frozen=True)

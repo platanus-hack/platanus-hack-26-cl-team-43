@@ -165,7 +165,13 @@
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": {"enum": ["authz", "files", "authn"]}
+          "items": {
+            "enum": [
+              "authz",
+              "files",
+              "authn"
+            ]
+          }
         }
       }
     },
@@ -186,6 +192,24 @@
         "key_env": {
           "type": "string",
           "pattern": "^[A-Z_][A-Z0-9_]{0,63}$"
+        }
+      }
+    },
+    "seed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ],
+      "description": "Siembra los datos de prueba antes de levantar la app. Corre con la imagen construida desde la rama base (nunca la del PR), en la red interna, con las variables de la app y una CACHAI_CANARY_<NOMBRE> por cada marca {{canary:nombre}} del inventario. Requiere app.dockerfile o app.compose.",
+      "properties": {
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     }
