@@ -63,6 +63,8 @@ class CheckResult:
     docs_only: list[str] | None = None
     # Segundos por fase de la revisión (`total` incluido). No cambia el veredicto.
     timings: dict[str, float] = field(default_factory=dict, compare=False)
+    # Grupos reservados que quedan por familia y señales de quema (modo full con ataques). Ver `reserve_status`.
+    reserve: dict | None = None
     # Textos del material reservado que el reporte público nunca muestra.
     secrets: frozenset[str] = field(default_factory=frozenset, repr=False, compare=False)
 
@@ -86,6 +88,7 @@ class CheckResult:
             "introduced": self.introduced,
             "docs_only": self.docs_only,
             "timings": self.timings,
+            "reserve": self.reserve,
         }
 
     def to_text(self, color: bool = False) -> str:
@@ -148,6 +151,9 @@ class CheckResult:
         }
         if self.timings:
             report["timings"] = dict(self.timings)
+        if self.reserve is not None:
+            # Solo conteos, nombres de familia y señales HMAC: nada del paquete en claro.
+            report["reserve"] = self.reserve
         report["public"] = {"summary": report_md.summary(report), "markdown": report_md.markdown(report)}
         return report
 
@@ -339,7 +345,8 @@ class AttackPlan:
     def __post_init__(self) -> None:
         ids = [a.id for a in self.attacks]
         visible, reserved = set(self.split.visible), set(self.split.reserved)
-        if len(ids) != len(set(ids)) or visible & reserved or visible | reserved != set(ids) or not visible or not reserved:
+        # Sin reservados es válido: todos se quemaron. El reporte lo avisa como nota.
+        if len(ids) != len(set(ids)) or visible & reserved or visible | reserved != set(ids) or not visible:
             raise ValueError("la selección visible/reservada no coincide con los ataques")
         groups = {a.id: a.group_key for a in self.attacks}
         if {groups[i] for i in visible} & {groups[i] for i in reserved}:
@@ -355,6 +362,37 @@ class AttackPlan:
     def public(self, attack_id: str) -> tuple[str, str]:
         a = next(a for a in self.attacks if a.id == attack_id)
         return a.family, a.public_route()
+
+
+def reserve_status(plan: AttackPlan, confirmed: list[str] | set[str], base: str, key: str | None = None) -> tuple[dict, list[str]]:
+    """Cuántos grupos reservados quedan por familia después de esta corrida, y sus notas.
+
+    Un reservado confirmado sale en el comentario del PR con su familia y su
+    ruta: desde ese momento su grupo cuenta como visto y ya no se cuenta entre
+    los que quedan. Con la clave del paquete (`key`), el reporte lleva una señal
+    opaca por grupo revelado (`hidden.burn_token`), con la que quien mantiene el
+    repo lo quema (`cachai hidden burn --report`). Sin clave (ataques de un caso
+    o de `--attacks`), no hay paquete que quemar y no hay señales.
+    """
+    from .holdout import reserved_groups
+
+    reserved = plan.subset(plan.split.reserved)
+    revealed = {a.group_key for a in reserved if a.id in set(confirmed)}
+    remaining = {f: len(g - revealed) for f, g in reserved_groups(plan.attacks, plan.split).items()}
+    status: dict = {"remaining": remaining, "revealed": len(revealed)}
+    if key and revealed:
+        status["burn"] = sorted(hidden.burn_token(key, base, g) for g in revealed)
+    notes = []
+    if revealed:
+        n = len(revealed)
+        what = "1 grupo" if n == 1 else f"{n} grupos"
+        seen = "cuenta como visto y hay que quemarlo" if n == 1 else "cuentan como vistos y hay que quemarlos"
+        notes.append(f"este rechazo muestra familia y ruta de {what} de ataques reservados: desde ahora {seen} "
+                     "(cachai hidden burn --report)")
+    notes.append("grupos de ataques reservados que quedan por familia: " + ", ".join(f"{f} {n}" for f, n in remaining.items()))
+    notes += [f"la familia {f} se quedó sin ataques reservados: sus ataques ya no miden si el parche generaliza; "
+              "hay que rotarla (cachai hidden rotate)" for f, n in remaining.items() if n == 0]
+    return status, notes
 
 
 def target_from_base(repo: str | Path, base_sha: str) -> Target:
@@ -723,11 +761,13 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
         # Los ataques del paquete se juzgan contra la base (ver `excuse_existing`); los que llegan
         # por `plan` (un parche de seguridad declarado) se deben bloquear todos.
         from_package = False
+        burn_key = None  # clave del paquete: firma las señales de quema del reporte
         if plan is None and holdout_tests is None and target.hidden is not None and not local_visible:
             try:
                 with timer.phase("preparar"):
                     plan, holdout_tests = load_hidden(repo, base_sha, target, tmp_path / "reservado")
                 from_package = plan is not None
+                burn_key = os.environ.get(target.hidden.key_env)
             except (hidden.HiddenError, ValueError, OSError) as e:
                 msg = f"evaluación incompleta: no se pudo abrir el material reservado ({e})"
                 return CheckResult(mode, base_sha, pr_sha, False, [msg], outcome="incomplete", typed=[Reason("incomplete", msg, msg)])
@@ -740,9 +780,15 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
             verdict = decide(ev)
             notes = verdict.notes + ([f"sin {target.hidden.key_env}: no se abrió el paquete reservado, ni sus ataques visibles"]
                                      if local_visible and plan is None else [])
+            reserve = None
+            if mode == "full" and plan is not None and isinstance(result, dict):
+                confirmed, _ = _attack_evidence(result.get("attacks"), tuple(a.id for a in attacks))
+                reserve, reserve_notes = reserve_status(plan, confirmed, base_sha, burn_key)
+                notes += reserve_notes
             return CheckResult(mode, base_sha, pr_sha, verdict.approved, verdict.reasons, notes, flags,
                                evaluator=result, split=split, outcome=verdict.outcome, typed=verdict.typed,
-                               secrets=reserved_secrets(plan if mode == "full" else None, holdout_tests, result))
+                               secrets=reserved_secrets(plan if mode == "full" else None, holdout_tests, result),
+                               reserve=reserve)
 
         spec = target.app
         with timer.phase("integridad"):

@@ -630,9 +630,10 @@ def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_di
 
 def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budget: float = 60.0,
                 families: tuple[str, ...] | None = None, routes_file: Path | None = None,
-                info: dict | None = None) -> list[dict]:
+                info: dict | None = None, rotation: bool = False) -> list[dict]:
     """Genera y confirma variantes de ataque contra la app. `routes_file`: rutas leídas
-    del código de esa app; en `info` quedan las que su OpenAPI no publica."""
+    del código de esa app; en `info` quedan las que su OpenAPI no publica. Con
+    `rotation` suma las variantes guardadas para rotar reservados quemados."""
     args = ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json", "--budget", str(budget)]
     mounts = [(inventory_file, "/work/inventory.json")]
     if routes_file is not None:
@@ -640,6 +641,8 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
         args += ["--routes", "/work/routes.json"]
     if families:
         args += ["--families", ",".join(families)]
+    if rotation:
+        args += ["--rotation"]
     nonce = uuid.uuid4().hex[:12] if not families or "cmdi" in families else ""
     if nonce:
         args += ["--cmdi-nonce", nonce]
