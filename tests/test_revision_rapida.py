@@ -132,6 +132,27 @@ def test_base_hunt_cache_roundtrip(tmp_path, monkeypatch):
     assert mode.endswith("600")
 
 
+@pytest.mark.parametrize("content", ["[1]", '"x"', "null", '{"base": 1}', "{no es json"])
+def test_corrupt_base_hunt_cache_is_ignored(tmp_path, monkeypatch, content):
+    monkeypatch.setenv("CACHAI_CACHE_DIR", str(tmp_path / "cache"))
+    f = tmp_path / "cache" / "rojo-base" / "k.json"
+    f.parent.mkdir(parents=True)
+    f.write_text(content)
+    assert pipeline.load_base_hunt("k", "a" * 40) is None
+
+
+@pytest.mark.parametrize("path", [
+    "AGENTS.md", "CLAUDE.md", "docs/agents.md", "GEMINI.md", ".github/copilot-instructions.md",
+    ".github/prompts/x.prompt.md", ".claude/commands/deploy.md", ".cursor/rules/a.md",
+])
+def test_agent_instruction_files_are_not_docs(path):
+    assert not pipeline.is_doc(path)
+
+
+def test_plain_markdown_is_doc():
+    assert pipeline.is_doc("README.md") and pipeline.is_doc("docs/guia.md")
+
+
 def test_base_hunt_key_depends_on_config_and_compose(tmp_path, monkeypatch):
     monkeypatch.setenv("CACHAI_CACHE_DIR", str(tmp_path / "cache"))
     repo = _tiny_repo(tmp_path)

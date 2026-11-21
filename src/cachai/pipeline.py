@@ -507,9 +507,21 @@ def load_hidden(repo: str | Path, base_sha: str, target: Target, dest: Path) -> 
     return plan, material.holdout_tests
 
 
+# .md que los agentes de código leen como instrucciones: no son documentación inerte.
+AGENT_INSTRUCTION_FILES = {"agents.md", "claude.md", "gemini.md", "copilot-instructions.md"}
+AGENT_INSTRUCTION_DIRS = {".claude", ".github", ".cursor", ".codex", ".gemini", ".windsurf"}
+
+
 def is_doc(path: str) -> bool:
-    """Archivo de documentación para el atajo: termina en `.md` (en minúsculas)."""
-    return PurePosixPath(path).suffix == ".md"
+    """Archivo de documentación para el atajo: termina en `.md` (en minúsculas) y
+    no es un archivo de instrucciones para agentes (AGENTS.md, CLAUDE.md,
+    .github/prompts/…, .claude/commands/…)."""
+    p = PurePosixPath(path)
+    if p.suffix != ".md":
+        return False
+    if p.name.lower() in AGENT_INSTRUCTION_FILES:
+        return False
+    return not any(part.lower() in AGENT_INSTRUCTION_DIRS for part in p.parts[:-1])
 
 
 # Si algún archivo de la base que no es .md nombra esto, la app o pytest podrían
@@ -583,7 +595,9 @@ def load_base_hunt(key: str, base_sha: str) -> set[str] | None:
         data = json.loads(_base_hunt_file(key).read_text())
     except (OSError, ValueError):
         return None
-    ids = data.get("ids") if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return None
+    ids = data.get("ids")
     if data.get("base") != base_sha or not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
         return None
     return set(ids)
@@ -802,6 +816,10 @@ def _check(repo: str | Path, base: str, pr: str, mode: str, target: Target | Non
                     base_ids = cached_base if cached_base is not None else base_future.result()
                     if not red_errors:
                         intro = compare_red_team(pr_found, base_ids)
+                        if cached_base is not None and intro.introduced:
+                            # La caché pudo guardar una corrida de la base con fallos de red
+                            # pasajeros: antes de rechazar, se confirma contra la base en vivo.
+                            intro = compare_red_team(pr_found, base_hunt())
                 except (sandbox.SandboxError, ValueError) as e:
                     if not red_errors:
                         intro = Introduced(incomplete=[f"el equipo rojo no terminó contra la app de la base: {e}"])
