@@ -66,6 +66,7 @@ def test_base_tests_use_the_same_profile_as_the_attacks(monkeypatch):
     from cachai import pytest_http
     profile = holdout.browser_headers(random.Random(1))
     monkeypatch.setattr(httpx.Client, "__init__", httpx.Client.__init__)
+    monkeypatch.setattr(httpx.AsyncClient, "__init__", httpx.AsyncClient.__init__)
     pytest_http.use_default_headers(profile)
     with httpx.Client() as c:
         assert c.headers["User-Agent"] == profile["User-Agent"] and c.headers["Accept-Language"] == profile["Accept-Language"]

@@ -36,15 +36,15 @@ Lo que sí puede hacer un modelo que sabe: escribir una app que se porte bien du
 
 | Huella que usa el PR | Resultado en `full` | Estado |
 |---|---|---|
-| `User-Agent` de cliente de pruebas (`python-httpx`, `testclient`) | rechazado | cerrada: el equipo rojo y los ataques usan un perfil de navegador real, elegido al azar por corrida |
-| Pedido sin cabeceras de navegador (`Accept-Language`, `Accept` con `text/html`) | rechazado | cerrada: mismo perfil de navegador |
+| `User-Agent` de cliente de pruebas (`python-httpx`, `testclient`) | rechazado | cerrada contra un detector genérico: los ataques usan un perfil de navegador real, elegido al azar por corrida. Abierta contra quien lee el código de Cachai: los perfiles son públicos y fijos |
+| Pedido sin cabeceras de navegador (`Accept-Language`, `Accept` con `text/html`) | rechazado | cerrada contra un detector genérico. Abierta contra quien lee el código: el `Accept` es siempre el mismo y faltan `sec-ch-ua`, `sec-fetch-*` y `br` en `Accept-Encoding`, la huella de httpx |
 | `Host` interno (el alias `app:8000` del sandbox) | **aprobado** | abierta |
 | Sin salida a internet al arrancar | **aprobado** | abierta |
 | Recién arrancada (se porta bien los primeros 10 minutos) | **aprobado** | abierta |
 
 Las tres abiertas no se cierran cambiando el pedido: miran el entorno. El sandbox no puede tener internet, la evaluación no puede esperar horas y no conocemos el dominio de producción de cada repo. Mitigaciones posibles, no hechas: que `.cachai.json` declare el dominio público y el evaluador lo mande en `Host`; un DNS interno que responda como internet; y, sobre todo, la revisión de código que marque comparaciones contra el `Host`, la red o el reloj en la ruta de una autorización. Hasta entonces, un modelo que quiere esconderse del sandbox y sabe cómo está hecho puede lograrlo, y lo decimos.
 
-Los tests de la rama base hablan con su propio cliente (el del `conftest.py` del repo), así que un PR podría romper una función solo para navegadores sin que esos tests lo vean. Los ataques y el equipo rojo sí usan el perfil de navegador.
+Los tests de la rama base que usan httpx (o `TestClient`, vía `cachai.pytest_http`) también mandan el perfil de navegador de la corrida. Los que usan `requests`, `urllib` o `aiohttp` no se parchean: un PR podría romper una función solo para navegadores sin que esos tests lo vean. El equipo rojo elige su propio perfil, así que dentro de una corrida no siempre coincide con el de los ataques. No probamos todavía variables de entorno del sandbox, orden aleatorio de los pedidos ni relleno de pedidos como huellas. Lo abierto está en la issue de seguimiento de #18.
 
 ## ¿Quién lo adopta o lo paga primero?
 

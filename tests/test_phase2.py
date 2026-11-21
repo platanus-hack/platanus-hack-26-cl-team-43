@@ -447,6 +447,7 @@ def test_attack_client_looks_like_the_test_client(monkeypatch):
     from cachai import holdout, pytest_http
     profile = holdout.browser_headers()
     monkeypatch.setattr(httpx.Client, "__init__", httpx.Client.__init__)
+    monkeypatch.setattr(httpx.AsyncClient, "__init__", httpx.AsyncClient.__init__)
     pytest_http.use_default_headers(profile)
     seen = []
     srv = Server({}, seen)
