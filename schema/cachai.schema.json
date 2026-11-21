@@ -171,7 +171,8 @@
               "files",
               "authn",
               "sqli",
-              "ssrf"
+              "ssrf",
+              "cmdi"
             ]
           }
         }

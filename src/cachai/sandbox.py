@@ -8,6 +8,7 @@ Docker interna, sin salida a internet.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -88,13 +89,33 @@ _built: set[str] = set()
 _build_lock = threading.Lock()
 
 
+def evaluator_tag(root: Path = ROOT) -> str:
+    """Tag de la imagen del evaluador con un hash de lo que entra en ella.
+
+    Un tag fijo lo comparten todas las copias del repo en la máquina: una revisión
+    de otra rama que reconstruye la imagen cambia el código con el que corre esta.
+    """
+    h = hashlib.sha256()
+    files = [root / "pyproject.toml", root / "README.md", root / "docker" / "evaluator.Dockerfile"]
+    files += sorted(f for f in (root / "src").rglob("*") if f.is_file() and "__pycache__" not in f.parts)
+    for f in files:
+        if f.is_file():
+            h.update(str(f.relative_to(root)).encode() + b"\0" + f.read_bytes() + b"\0")
+    return f"{EVALUATOR_IMAGE}:{h.hexdigest()[:16]}"
+
+
+_evaluator: dict[str, str] = {}
+
+
 def build_evaluator_image(root: Path = ROOT) -> str:
-    """Construye la imagen del evaluador una vez por proceso."""
+    """Construye la imagen del evaluador una vez por proceso y por versión del código."""
     with _build_lock:
-        if str(root) not in _built:
-            _docker("build", "-q", "-f", str(root / "docker" / "evaluator.Dockerfile"), "-t", EVALUATOR_IMAGE, str(root))
+        tag = evaluator_tag(root)
+        if _evaluator.get(str(root)) != tag:
+            _docker("build", "-q", "-f", str(root / "docker" / "evaluator.Dockerfile"), "-t", tag, str(root))
+            _evaluator[str(root)] = tag
             _built.add(str(root))
-    return EVALUATOR_IMAGE
+    return tag
 
 
 def _copy_regular_tree(src: Path, dst: Path) -> None:
@@ -375,7 +396,7 @@ def _run_trusted(app: AppHandle, name: str, mounts: list[tuple[Path, str]], args
         cmd += ["-v", f"{src.resolve()}:{dst}:ro"]
     if entrypoint:
         cmd += ["--entrypoint", entrypoint[0]]
-    cmd += [EVALUATOR_IMAGE, *(entrypoint[1:] if entrypoint else []), *args]
+    cmd += [_evaluator.get(str(ROOT)) or build_evaluator_image(), *(entrypoint[1:] if entrypoint else []), *args]
     try:
         proc = _docker(*cmd, timeout=budget + 45, check=False)
     except subprocess.TimeoutExpired:
@@ -422,6 +443,9 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
     args = ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json", "--budget", str(budget)]
     if families:
         args += ["--families", ",".join(families)]
+    nonce = uuid.uuid4().hex[:12] if not families or "cmdi" in families else ""
+    if nonce:
+        args += ["--cmdi-nonce", nonce]
     aliases: tuple[str, ...] = ()
     if not families or "ssrf" in families:
         # El canario de SSRF corre en este contenedor: la app lo alcanza por este nombre, dentro de la red interna.
@@ -435,7 +459,17 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
     data = _last_json(out) if code == 0 else None
     if data is None or "attacks" not in data:
         raise SandboxError(f"el equipo rojo no terminó: {(out + err).strip()[-500:]}")
-    return data["attacks"]
+    attacks = list(data["attacks"])
+    probes = data.get("cmdi_probes") or []
+    if probes:
+        # Inyección de comandos: Cachai mira desde el host qué archivos testigo aparecieron en la app.
+        from .redteam import CMDI_DIR, cmdi_attacks
+        ls = _docker("exec", app.container, "ls", "-1a", CMDI_DIR, check=False, timeout=30)
+        if ls.returncode != 0:
+            raise SandboxError(f"no se pudo inspeccionar {CMDI_DIR} en el contenedor de la app: {ls.stderr.strip()[-200:]}")
+        present = set(ls.stdout.split())
+        attacks += [a.to_dict() for a in cmdi_attacks(probes, present)]
+    return attacks
 
 
 def stop(app: AppHandle) -> None:

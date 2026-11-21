@@ -21,6 +21,11 @@ rutas que la app publica en su OpenAPI, y arma candidatos:
   corre dentro del mismo contenedor del equipo rojo, en la red interna de la
   corrida. Se confirma si el canario recibe el pedido: el servidor de la app
   fue a buscar una URL que eligió quien ataca.
+- `cmdi`: en cada parámetro de consulta, valores con separadores de shell que
+  ejecutan `touch /tmp/cachai-cmdi-<token>`, con un token aleatorio por
+  corrida. El equipo rojo solo manda las sondas; quien confirma es Cachai
+  desde el host, mirando qué archivos aparecieron en el contenedor de la app
+  (`sandbox.run_redteam`). El PR no controla esa inspección.
 
 Cada recurso del inventario declara sus marcas: textos que solo su dueño debería
 ver. Un candidato solo se conserva si se confirma contra la app de la rama base:
@@ -200,6 +205,60 @@ class Canary:
 
     def close(self) -> None:
         self.server.shutdown()
+
+
+# Inyección de comandos: separadores de shell. {f} es el archivo testigo.
+CMDI_PAYLOADS: tuple[tuple[str, str], ...] = (
+    ("semicolon", "x; touch {f} #"),
+    ("and", "x && touch {f} #"),
+    ("pipe", "x | touch {f} #"),
+    ("subshell", "$(touch {f})"),
+    ("backtick", "`touch {f}`"),
+    ("newline", "x\ntouch {f}\n"),
+)
+CMDI_DIR = "/tmp"
+CMDI_PREFIX = "cachai-cmdi-"
+
+
+def cmdi_probes(inv: Inventory, routes: list[tuple[str, list[str], list[str]]], nonce: str) -> list[dict]:
+    """Sondas de inyección de comandos: cada una deja un archivo distinto si el comando corre.
+
+    El id es estable entre corridas (sirve para comparar base y PR); el nombre del
+    archivo lleva `nonce`, aleatorio por corrida.
+    """
+    attacker = sorted(inv.users)[0]
+    out = []
+    for template, path_params, query_params in routes:
+        if path_params:
+            continue  # el archivo testigo lleva barras: no entra en un tramo de ruta
+        for q in query_params:
+            for group, payload in CMDI_PAYLOADS:
+                pid = make_id("cmdi", template, q, group)
+                name = f"{CMDI_PREFIX}{pid[-8:]}-{nonce}"
+                value = payload.format(f=f"{CMDI_DIR}/{name}")
+                out.append({"id": pid, "group": group, "file": name, "request": {
+                    "method": "GET", "path": f"{template}?{q}={urllib.parse.quote(value, safe='')}", "headers": inv.users[attacker]}})
+    return out
+
+
+def send_probes(base_url: str, probes: list[dict], deadline: float) -> None:
+    """Manda las sondas; la respuesta no importa (el testigo es el archivo)."""
+    import httpx
+
+    with Clients() as clients:
+        for pr in probes:
+            if time.monotonic() > deadline:
+                raise TimeoutError("presupuesto agotado mandando sondas de inyección de comandos")
+            try:
+                exchange(clients.for_request(pr["request"]), base_url, pr["request"], deadline)
+            except (httpx.TransportError, Unverifiable):
+                pass
+
+
+def cmdi_attacks(probes: list[dict], present: set[str]) -> list[Attack]:
+    """Las sondas cuyo archivo apareció en el contenedor de la app."""
+    return [Attack(pr["id"], "cmdi", pr["request"], Predicate(status_in=tuple(range(100, 600))), pr["group"])
+            for pr in probes if pr["file"] in present]
 
 
 INVALID_TOKEN = "cachai-token-invalido"
@@ -460,6 +519,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--budget", type=float, default=60.0)
     p.add_argument("--families", default="", help="familias a generar, separadas por coma (todas si se omite)")
     p.add_argument("--canary-host", default="", help="nombre con el que la app llega a este contenedor (activa ssrf)")
+    p.add_argument("--cmdi-nonce", default="", help="parte aleatoria de los archivos testigo (activa cmdi)")
     args = p.parse_args(argv)
     inv = Inventory.from_dict(json.loads(Path(args.inventory).read_text()))
     if not wait_for(args.base_url.rstrip("/") + args.health, time.monotonic() + min(30.0, args.budget)):
@@ -467,12 +527,21 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     families = tuple(f for f in args.families.split(",") if f) or None
     canary = Canary() if args.canary_host and (families is None or "ssrf" in families) else None
+    deadline = time.monotonic() + args.budget
     try:
         attacks = generate(args.base_url, inv, args.budget, families, canary, args.canary_host or None)
     finally:
         if canary is not None:
             canary.close()
-    print(json.dumps({"attacks": [a.to_dict() for a in attacks]}, ensure_ascii=False))
+    probes = []
+    if args.cmdi_nonce and (families is None or "cmdi" in families):
+        # Las rutas se leen de nuevo: generate no las devuelve.
+        with Clients() as clients:
+            req = {"method": "GET", "path": "/openapi.json"}
+            hops, _ = exchange(clients.for_request(req), args.base_url, req, deadline)
+        probes = cmdi_probes(inv, get_routes(json.loads(hops[-1][1])), args.cmdi_nonce)
+        send_probes(args.base_url, probes, deadline)
+    print(json.dumps({"attacks": [a.to_dict() for a in attacks], "cmdi_probes": probes}, ensure_ascii=False))
     return 0
 
 

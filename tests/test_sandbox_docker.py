@@ -463,6 +463,9 @@ VULN_SEARCH = 'rows = db.execute(f"SELECT id, body FROM notes WHERE body ILIKE \
 SSRF_ROUTE = '\n\n@app.get("/import-note")\ndef import_note(url: str, authorization: str | None = Header(default=None)) -> dict:\n    """Importa el texto de una nota desde una URL."""\n    current_user(authorization)\n    import httpx\n    try:\n        r = httpx.get(url, timeout=3)\n    except httpx.HTTPError:\n        raise HTTPException(status_code=502, detail="no se pudo descargar")\n    return {"imported": len(r.text)}\n'
 
 
+CMDI_ROUTE = '\n\n@app.get("/export-notes")\ndef export_notes(fmt: str = "txt", authorization: str | None = Header(default=None)) -> dict:\n    """Exporta las notas propias comprimidas con el formato pedido."""\n    current_user(authorization)\n    import subprocess\n    r = subprocess.run(f"echo exportando en formato {fmt}", shell=True, capture_output=True, text=True)\n    return {"log": r.stdout.strip()}\n'
+
+
 def _postgres_repo(tmp_path):
     import subprocess as sp
     src = FACTURAS.parent.parent / "examples" / "postgres-notas"
@@ -492,6 +495,9 @@ def _postgres_repo(tmp_path):
     git("checkout", "-q", "-b", "ssrf", "main")
     m.write_text(m.read_text() + SSRF_ROUTE)
     git("commit", "-q", "-am", "importar notas desde una URL")
+    git("checkout", "-q", "-b", "cmdi", "main")
+    m.write_text(m.read_text() + CMDI_ROUTE)
+    git("commit", "-q", "-am", "exportar notas")
     git("checkout", "-q", "-b", "socket", "main")
     c = repo / "docker-compose.yml"
     c.write_text(c.read_text().replace("    depends_on:", "    privileged: true\n    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n    depends_on:"))
@@ -556,3 +562,13 @@ def test_route_that_downloads_a_user_url_is_rejected_as_introduced_ssrf(tmp_path
     r = pipeline.check(repo, "main", "ssrf", "full", budget=120)
     assert not r.approved, r.to_text()
     assert any(x.startswith("vulnerabilidad introducida por el PR: ssrf: GET /import-note?url=") for x in r.reasons), r.to_text()
+
+
+# --- Inyección de comandos con archivo testigo (#28) ------------------------------------------
+
+def test_shell_true_route_is_rejected_as_introduced_cmdi(tmp_path):
+    from cachai import pipeline
+    repo = _postgres_repo(tmp_path)
+    r = pipeline.check(repo, "main", "cmdi", "full", budget=120)
+    assert not r.approved, r.to_text()
+    assert any(x.startswith("vulnerabilidad introducida por el PR: cmdi: GET /export-notes?fmt=") for x in r.reasons), r.to_text()
