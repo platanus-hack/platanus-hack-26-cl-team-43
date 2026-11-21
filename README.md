@@ -89,6 +89,8 @@ cachai bench
 cachai fix cases/facturas --agent claude --runs 3
 ```
 
+Datos para entrenar al equipo rojo y al parchador (necesita Docker): `python scripts/harvest_traces.py --out traces/ [--seed N]` escribe `red`, `blue_sft` y `blue_pref` en JSONL, con split `train`/`val` por caso. Solo entra lo que confirmó el evaluador (ataques `confirmed`) y `gate.decide` (parche aprobado como *chosen*; parche a medias que tapa lo visible y cae con un reservado o un test funcional como *rejected*); ningún modelo etiqueta nada. Los ejemplos del parchador solo llevan ataques visibles: si un reservado aparece, la cosecha falla. Cada registro lleva commit, caso, resultado del evaluador y veredicto. `traces/` no se versiona.
+
 Salida del caso de demo:
 
 ```

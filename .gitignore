@@ -15,3 +15,6 @@ runs/
 .DS_Store
 .superpowers/
 .cachai-wheels/
+
+# Trazas de entrenamiento (se regeneran con scripts/harvest_traces.py)
+traces/

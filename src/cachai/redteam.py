@@ -557,17 +557,8 @@ def variant_candidates(variants: list[dict], inv: Inventory, taken: set[str]) ->
     return [c for _, c in _accepted(variants, inv, taken)]
 
 
-def llm_variants(cfg: llm.LLMConfig | None, inv: Inventory, routes: list[tuple[str, list[str], list[str]]] | None = None) -> list[dict]:
-    """Variantes de `authz` y `files` propuestas por el modelo del equipo rojo. Corre en el host.
-
-    El modelo es la única parte que usa red y clave, y por eso se consulta
-    fuera del contenedor del equipo rojo; ahí solo llega el resultado ya
-    validado (`variant_candidates`). Devuelve [] sin red cuando no hay
-    configuración o modelo. Ante cualquier falla del modelo (red, tiempo, JSON
-    o esquema inválido) avisa por stderr y devuelve [] para seguir con las plantillas.
-    """
-    if cfg is None or not cfg.red_model:
-        return []
+def variants_prompt(inv: Inventory, routes: list[tuple[str, list[str], list[str]]] | None = None) -> tuple[str, str]:
+    """Mensajes (sistema, usuario) que recibe el modelo del equipo rojo."""
     listing = {
         "users": sorted(inv.users),
         "record_ids": [r["id"] for r in inv.records],
@@ -579,8 +570,23 @@ def llm_variants(cfg: llm.LLMConfig | None, inv: Inventory, routes: list[tuple[s
               "accede al recurso de otro (authz) o a un archivo ajeno escribiendo la ruta de forma alternativa (files). "
               "Responde solo con el JSON pedido. `path` es el pedido del atacante, `owner_path` el mismo pedido como lo hace el dueño, "
               "ambos relativos al origen (empiezan con una sola `/`). `target` es un id de recurso o ruta de archivo del inventario.")
+    return system, json.dumps(listing, ensure_ascii=False)
+
+
+def llm_variants(cfg: llm.LLMConfig | None, inv: Inventory, routes: list[tuple[str, list[str], list[str]]] | None = None) -> list[dict]:
+    """Variantes de `authz` y `files` propuestas por el modelo del equipo rojo. Corre en el host.
+
+    El modelo es la única parte que usa red y clave, y por eso se consulta
+    fuera del contenedor del equipo rojo; ahí solo llega el resultado ya
+    validado (`variant_candidates`). Devuelve [] sin red cuando no hay
+    configuración o modelo. Ante cualquier falla del modelo (red, tiempo, JSON
+    o esquema inválido) avisa por stderr y devuelve [] para seguir con las plantillas.
+    """
+    if cfg is None or not cfg.red_model:
+        return []
+    system, user = variants_prompt(inv, routes)
     try:
-        data = llm.complete_json(cfg, cfg.red_model, system, json.dumps(listing, ensure_ascii=False), "attack_variants", llm.VARIANTS_SCHEMA)
+        data = llm.complete_json(cfg, cfg.red_model, system, user, "attack_variants", llm.VARIANTS_SCHEMA)
     except llm.LLMError as e:
         llm.warn(f"el modelo del equipo rojo falló, se usan solo las plantillas: {e}")
         return []

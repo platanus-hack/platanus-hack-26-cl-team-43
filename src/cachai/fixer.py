@@ -171,6 +171,36 @@ def verify_isolation(workdir: Path, masks: list[Path], secrets: list[Path]) -> N
         raise IsolationError(f"el aislamiento del agente no funciona: {(proc.stdout + proc.stderr).strip()[-300:]}")
 
 
+PATCH_SYSTEM = ("Devuelves un parche como JSON. `files` lista archivos .py existentes con su contenido completo ya corregido; "
+                "no incluyas archivos que no cambian. `summary` resume el cambio en dos o tres líneas.")
+
+
+def repo_files(workdir: Path, tests_dir: str = "tests") -> dict[str, str]:
+    """Los archivos de texto de `workdir` que recibe el modelo (sin tests ni datos)."""
+    sent: dict[str, str] = {}
+    for p in sorted(workdir.rglob("*")):
+        rel = p.relative_to(workdir)
+        if p.is_symlink() or not p.is_file() or (LLM_SKIP_DIRS | {tests_dir}) & set(rel.parts) or rel.name.startswith(".") \
+                or rel.suffix not in (".py", ".txt", ".toml", ".json", ".yaml", ".yml", ".cfg", ".ini", ".md") \
+                or p.stat().st_size > LLM_MAX_FILE_BYTES or len(sent) >= LLM_MAX_FILES:
+            continue
+        try:
+            sent[rel.as_posix()] = p.read_text()
+        except UnicodeDecodeError:
+            continue
+    return sent
+
+
+def editable_files(sent: dict[str, str]) -> set[str]:
+    """De los archivos enviados, los que un parche puede modificar: .py existentes, sin conftest ni setup.py."""
+    return {k for k in sent if k.endswith(".py") and not k.startswith("conftest") and not k.endswith(("conftest.py", "setup.py"))}
+
+
+def patch_user(prompt: str, sent: dict[str, str]) -> str:
+    """El mensaje de usuario del parchador: el encargo y los archivos."""
+    return prompt + "\n\nArchivos del repositorio:\n" + "".join(f"\n=== {k} ===\n{v}\n" for k, v in sent.items())
+
+
 def llm_patch(workdir: Path, prompt: str, model: str, tests_dir: str = "tests", cfg: llm.LLMConfig | None = None) -> str:
     """Pide el parche a un modelo y escribe en `workdir` solo lo que supera la validación.
 
@@ -183,22 +213,10 @@ def llm_patch(workdir: Path, prompt: str, model: str, tests_dir: str = "tests", 
     cfg = cfg or llm.LLMConfig.from_env()  # una configuración inválida lanza LLMError
     if cfg is None:
         raise llm.LLMError("el agente llm necesita CACHAI_LLM_BASE_URL")
-    sent: dict[str, str] = {}
-    for p in sorted(workdir.rglob("*")):
-        rel = p.relative_to(workdir)
-        if p.is_symlink() or not p.is_file() or (LLM_SKIP_DIRS | {tests_dir}) & set(rel.parts) or rel.name.startswith(".") \
-                or rel.suffix not in (".py", ".txt", ".toml", ".json", ".yaml", ".yml", ".cfg", ".ini", ".md") \
-                or p.stat().st_size > LLM_MAX_FILE_BYTES or len(sent) >= LLM_MAX_FILES:
-            continue
-        try:
-            sent[rel.as_posix()] = p.read_text()
-        except UnicodeDecodeError:
-            continue
-    editable = {k for k in sent if k.endswith(".py") and not k.startswith("conftest") and not k.endswith(("conftest.py", "setup.py"))}
-    user = prompt + "\n\nArchivos del repositorio:\n" + "".join(f"\n=== {k} ===\n{v}\n" for k, v in sent.items())
-    system = ("Devuelves un parche como JSON. `files` lista archivos .py existentes con su contenido completo ya corregido; "
-              "no incluyas archivos que no cambian. `summary` resume el cambio en dos o tres líneas.")
-    data = llm.complete_json(cfg, model, system, user, "patch_proposal", llm.PATCH_SCHEMA)
+    sent = repo_files(workdir, tests_dir)
+    editable = editable_files(sent)
+    user = patch_user(prompt, sent)
+    data = llm.complete_json(cfg, model, PATCH_SYSTEM, user, "patch_proposal", llm.PATCH_SCHEMA)
     paths = [f["path"] for f in data["files"]]
     for rel in paths:
         gitio.safe_tree_path(rel)
