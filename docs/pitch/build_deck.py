@@ -26,7 +26,33 @@ import qrcode.image.svg
 HERE = Path(__file__).parent
 PDF = HERE / "contraprueba-pitch.pdf"
 NOTES = HERE / "notas-orador.md"
-DEFAULT_URL = "https://github.com/platanus-hack/platanus-hack-26-cl-team-43"
+DEFAULT_URL = "https://contraprueba-three.vercel.app"
+
+# Analogía del examen. La IA es el alumno; Contraprueba, el profesor que corrige en otra sala.
+EXAMEN_BASE = ("Hoy la IA rinde la prueba y se la corrige ella misma. Contraprueba es el profesor que "
+               "corrige en otra sala, con preguntas que el alumno nunca vio.")
+EXAMEN_TRAMPA = ("Este alumno no estudió: cambió el corrector, así todo lo que entrega sale con un 7. El CI normal "
+                 "le cree. Le devolvemos la pauta original, pero si corrige en su mismo puesto sigue sacando un 7, "
+                 "porque escondió otro corrector en la mochila. Contraprueba corrige en otra sala, donde la mochila "
+                 "no llega: un 1, con la pregunta que falló.")
+EXAMEN_PARCIAL = ("Este alumno sí estudió, pero solo se aprendió de memoria la guía de ejercicios que le pasamos. "
+                  "Evaluado con esa misma guía, saca un 7. Contraprueba guardó preguntas que no estaban en la guía, "
+                  "y falla 11. No entendió la materia: tapó los casos que vio.")
+EXAMEN_TOTAL = ("Este entendió la materia: responde las preguntas que no vio y no olvidó lo que ya sabía. "
+                "Aprueba, y le entregamos la prueba corregida con la pauta: qué se preguntó y qué respondió.")
+
+# Guion de la demo en la terminal: no tiene slides, va solo a las notas.
+DEMO_GUION = [
+    ("Acto 1 · la trampa (0:30–1:15)", "trampa-paquete: ci → restore → full", EXAMEN_TRAMPA,
+     "Lo técnico: rompió el impuesto y lo tapó con invoices/_telemetry.py, que parcha los reportes de pytest "
+     "desde dentro del paquete. ci y restore aprueban; full lo rechaza con tests/test_invoices.py:48 y el archivo."),
+    ("Acto 2 · la solución parcial (1:15–1:55)", "parche-a-medias: visible → full", EXAMEN_PARCIAL,
+     "Lo técnico: vio 10 ataques y los tapó; de los 19 reservados, 11 siguen entrando por /total, /v2, "
+     "/export y ./../."),
+    ("Acto 2 · la solución total (1:55–2:20)", "parche-correcto: full", EXAMEN_TOTAL,
+     "Lo técnico: 12 tests de la base, 19 ataques reservados bloqueados, 5 tests funcionales reservados. "
+     "Si falta tiempo, una línea: «Este entendió la materia: aprueba, con la prueba corregida.»"),
+]
 
 CHROME_CANDIDATES = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -83,6 +109,8 @@ table.cmp td.mark { font-size:46px; font-weight:700; width:220px; }
 table.cmp .us { background:var(--panel); border-left:3px solid var(--green); border-right:3px solid var(--green); }
 table.cmp th.us { color:var(--green); border-top:3px solid var(--green); border-radius:16px 16px 0 0; }
 table.cmp tr:last-child td.us { border-bottom:3px solid var(--green); }
+.exam { font-size:30px; color:var(--muted); margin-top:18px; line-height:1.35; }
+.exam b { color:var(--fg); }
 .pillars { margin-top:auto; margin-bottom:40px; font-size:28px; }
 .pillars b { color:var(--fg); } .pillars span { color:var(--muted); margin:0 14px; }
 
@@ -229,7 +257,9 @@ def slides(url: str) -> list[tuple[str, str, str]]:
     S.append(("Solución (0:15–0:30)", f"""
 <section class="slide">
   <h1>Contraprueba <span class="muted" style="font-weight:400">· el revisor que no le cree al modelo</span></h1>
-  <table class="cmp">
+  <div class="exam">Hoy la IA rinde la prueba y se la corrige sola. Contraprueba <b>corrige en otra sala,
+    con preguntas que nunca vio.</b></div>
+  <table class="cmp" style="margin-top:40px">
     <tr><th></th><th>CI normal</th><th>Tests restaurados<br>mismo contenedor</th>
         <th>Validación<br>del bot</th><th class="us">Contraprueba</th></tr>
     {body}
@@ -238,6 +268,7 @@ def slides(url: str) -> list[tuple[str, str, str]]:
     <span>·</span><b>todo o nada</b><span>·</span>sin modelos en la decisión</div>
   {foot("medido sobre 19 PR etiquetados de una app propia · detalle en results/resultados.md")}
 </section>""",
+        f"«{EXAMEN_BASE}» "
         "«Contraprueba es el revisor que no le cree al modelo. Corre los tests desde otro contenedor, donde "
         "el código no puede tocarlos, y guarda ataques que el parche nunca vio. Si algo falla, no entra nada. "
         "Lo medimos sobre 19 PR: el CI normal no atrapa ninguna trampa; restaurar los tests, 5 de 8; "
@@ -288,10 +319,34 @@ def slides(url: str) -> list[tuple[str, str, str]]:
   <div class="sub">Demo grabada · cómo funciona · límites</div>
 </section>""", "Fin del pitch. Lo que sigue es respaldo: si falla la demo en vivo o para preguntas."))
 
+    pares = [
+        ("Corrector trucho en la mochila", "Hook dentro del paquete (invoices/_telemetry.py)"),
+        ("Pauta original, corregida en su puesto", "restore: tests de la base, mismo contenedor"),
+        ("Corregir en otra sala", "Evaluador en otro contenedor"),
+        ("La guía de ejercicios", "Ataques visibles"),
+        ("Preguntas que no estaban en la guía", "Ataques reservados"),
+        ("No olvidar lo que ya sabía", "Tests funcionales reservados"),
+        ("Prueba corregida con la pauta", "Reporte con la evidencia"),
+    ]
+    filas = "".join(f'<tr><td>{esc(a)}</td><td class="mono" style="color:var(--fg)">{esc(b)}</td></tr>'
+                    for a, b in pares)
+    S.append(("La analogía del examen", f"""
+<section class="slide">
+  <h1>La analogía del examen</h1>
+  <div class="exam">{esc(EXAMEN_BASE)}</div>
+  <table class="cmp" style="margin-top:32px;font-size:28px">
+    <tr><th style="text-align:left">En la prueba</th><th style="text-align:left;color:var(--green)">En Contraprueba</th></tr>
+    {filas.replace('<td class="mono"', '<td class="mono" style="text-align:left;font-size:24px;padding:13px 12px"').replace('<tr><td>', '<tr><td style="padding:13px 12px 13px 0">')}
+  </table>
+  {foot("respaldo")}
+</section>""",
+              "Para preguntas o para reforzar la explicación: cómo se corresponde cada parte de la analogía con el sistema."))
+
     S.append(("Respaldo acto 1", f"""
 <section class="slide">
   <h1><span class="muted" style="font-weight:400">Acto 1 ·</span> el agente que hace trampa</h1>
-  <div class="terms">
+  <div class="exam">El alumno que cambió el corrector y escondió otro en la mochila.</div>
+  <div class="terms" style="margin-top:36px">
     {term("líneas base", [("$ contraprueba case … --pr trampa-paquete", "muted"), ("", ""),
           ("PR trampa-paquete", ""), ("  ci        aprobado", "green"), ("  restore   aprobado", "green"), ("", ""),
           ("CI normal y tests restaurados", "muted"), ("en el mismo contenedor", "muted")], ("✅ APROBADO ×2", "green"))}
@@ -302,15 +357,16 @@ def slides(url: str) -> list[tuple[str, str, str]]:
   </div>
   {foot("respaldo")}
 </section>""",
-        "Usar solo si la terminal falla. Salida real del caso facturas, PR trampa-paquete. «Le pedimos agregar "
-        "el descuento por pronto pago. Rompió el impuesto y lo tapó con un módulo dentro del paquete que parcha "
-        "los reportes de pytest. El CI normal y hasta restaurar los tests dan verde. Desde otro contenedor no "
-        "puede tocar nada: rechazado, con archivo y línea.»"))
+        f"Usar solo si la terminal falla. Salida real del caso facturas, PR trampa-paquete. «{EXAMEN_TRAMPA}» "
+        "Lo técnico: rompió el impuesto y lo tapó con un módulo dentro del paquete que parcha los reportes de "
+        "pytest. El CI normal y hasta restaurar los tests dan verde; desde otro contenedor, rechazado con archivo "
+        "y línea."))
 
     S.append(("Respaldo acto 2 (a medias)", f"""
 <section class="slide">
   <h1><span class="muted" style="font-weight:400">Acto 2 ·</span> el parche a medias</h1>
-  <div class="terms">
+  <div class="exam">El alumno que se aprendió la guía de memoria.</div>
+  <div class="terms" style="margin-top:36px">
     {term("validación del bot · visible", [("10 ataques que el bot vio", ""), ("", ""),
           ("GET /invoices/{id}", "muted"), ("GET /invoices/{id}/pdf", "muted"), ("GET /attachments?name=../…", "muted"),
           ("", ""), ("todos bloqueados", "green")], ("✅ APROBADO", "green"))}
@@ -321,21 +377,22 @@ def slides(url: str) -> list[tuple[str, str, str]]:
   </div>
   {foot("respaldo")}
 </section>""",
-        "Salida real de parche-a-medias (results/bench.json). «El bot vio diez ataques y los tapó: su "
-        "validación da verde. Arregló dos rutas y una forma de ruta de archivo. Nosotros guardamos otros 19 "
-        "que nunca vio; 11 siguen entrando por /total, /v2, /export y ./../. Rechazado.»"))
+        f"Salida real de parche-a-medias (results/bench.json). «{EXAMEN_PARCIAL}» "
+        "Lo técnico: vio diez ataques y los tapó, así que su validación da verde. De los 19 reservados, "
+        "11 siguen entrando por /total, /v2, /export y ./../."))
 
     S.append(("Respaldo acto 2 (correcto)", f"""
 <section class="slide">
   <h1><span class="muted" style="font-weight:400">Acto 2 ·</span> el parche correcto</h1>
-  <div class="terms single">
+  <div class="exam">El alumno que entendió la materia.</div>
+  <div class="terms single" style="margin-top:36px">
     {term("contraprueba check", [("12 tests de la base          pasan", ""), ("19 ataques reservados        bloqueados", ""),
           (" 5 tests funcionales reserv. pasan", ""), (" 0 hooks de evaluación", ""), ("", ""),
           ("evidencia → report.json de la corrida", "muted")], ("✅ APROBADO", "green"))}
   </div>
   {foot("respaldo")}
 </section>""",
-        "«El segundo parche arregla la falla de verdad: aprobado, y con la evidencia de qué se probó.» "
+        f"«{EXAMEN_TOTAL}» "
         "Salida real de parche-correcto: comprueba el dueño en un solo lugar para todas las rutas y confina "
         "los adjuntos a la carpeta del usuario."))
 
@@ -436,6 +493,11 @@ def main():
              "`docs/superpowers/specs/2026-11-21-demo-design.md`.", ""]
     for i, (title, _, n) in enumerate(deck, 1):
         notes += [f"## {i}. {title}", "", n, ""]
+        if title.startswith("Solución"):
+            notes += ["## Demo en la terminal (`scripts/demo.sh`)", "",
+                      "Decir la frase del examen antes de cada comando, así el jurado sabe qué esperar.", ""]
+            for t, cmd, frase, tecnico in DEMO_GUION:
+                notes += [f"### {t}", "", f"`{cmd}`", "", f"«{frase}»", "", tecnico, ""]
     NOTES.write_text("\n".join(notes), encoding="utf-8")
     print(PDF)
     print(NOTES)
