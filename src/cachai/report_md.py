@@ -192,6 +192,13 @@ def markdown(report: dict) -> str:
     body += _reasons(report["reasons"])
     if report["notes"]:
         body += ["", "**Notas** (no bloquean)", ""] + [f"- {code(n)}" for n in report["notes"]]
+    timings = report.get("timings")
+    if isinstance(timings, dict) and timings:
+        parts = ", ".join(f"{k} {v:.1f} s" for k, v in timings.items() if k != "total" and isinstance(v, (int, float)))
+        total = timings.get("total")
+        line = (f"total {total:.1f} s" if isinstance(total, (int, float)) else "") + (f" ({parts})" if parts else "")
+        if line:
+            body += ["", f"<sub>Tiempo: {line}</sub>"]
     # Se recorta por líneas enteras: cada línea del cuerpo abre y cierra sus bloques de código.
     budget = MAX_BODY - len("\n".join(head + tail)) - len(CUT) - 4
     kept, used = [], 0

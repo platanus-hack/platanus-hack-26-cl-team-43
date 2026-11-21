@@ -36,6 +36,11 @@
       }
     },
     "notes": {"type": "array", "items": {"type": "string"}, "description": "Marcas informativas, no bloquean."},
+    "timings": {
+      "type": "object",
+      "additionalProperties": {"type": "number", "minimum": 0},
+      "description": "Segundos por fase de la revisión (preparar, integridad, imagen_evaluador, app_pr, rojo_pr, rojo_base, evaluador, parar, pytest_dentro) y total. Las fases en paralelo se miden cada una por su lado; rojo_base vale 0 si vino de la caché."
+    },
     "public": {
       "type": "object",
       "additionalProperties": false,

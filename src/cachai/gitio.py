@@ -103,6 +103,15 @@ def changed_files(repo: str | Path, base: str, head: str) -> list[tuple[str, str
     return result
 
 
+def grep_mentions(repo: str | Path, sha: str, pattern: str) -> bool:
+    """Si algún archivo del commit que no termina en `.md` contiene `pattern`
+    (expresión extendida, sin distinguir mayúsculas). Los binarios cuentan; si
+    git falla, también (ante la duda, sí)."""
+    proc = _run(repo, "grep", "-i", "-l", "-E", "--no-textconv", "-e", pattern, _check_sha(sha), "--", ".",
+                ":(exclude)*.md")
+    return proc.returncode != 1
+
+
 def ls_tree(repo: str | Path, sha: str) -> list[tuple[str, str, str, str]]:
     """Entradas (modo, tipo, hash, ruta) del árbol completo de un commit."""
     out = _git(repo, "ls-tree", "-r", "-z", "--full-tree", _check_sha(sha), text=False).stdout
