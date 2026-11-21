@@ -460,6 +460,9 @@ SAFE_SEARCH = 'rows = db.execute("SELECT id, body FROM notes WHERE owner = %s AN
 VULN_SEARCH = 'rows = db.execute(f"SELECT id, body FROM notes WHERE body ILIKE \'%{q}%\' AND owner = \'{user}\' ORDER BY id").fetchall()'
 
 
+SSRF_ROUTE = '\n\n@app.get("/import-note")\ndef import_note(url: str, authorization: str | None = Header(default=None)) -> dict:\n    """Importa el texto de una nota desde una URL."""\n    current_user(authorization)\n    import httpx\n    try:\n        r = httpx.get(url, timeout=3)\n    except httpx.HTTPError:\n        raise HTTPException(status_code=502, detail="no se pudo descargar")\n    return {"imported": len(r.text)}\n'
+
+
 def _postgres_repo(tmp_path):
     import subprocess as sp
     src = FACTURAS.parent.parent / "examples" / "postgres-notas"
@@ -486,6 +489,9 @@ def _postgres_repo(tmp_path):
     m.write_text(m.read_text().replace(SAFE_SEARCH, VULN_SEARCH))
     assert VULN_SEARCH in m.read_text()
     git("commit", "-q", "-am", "búsqueda más simple")
+    git("checkout", "-q", "-b", "ssrf", "main")
+    m.write_text(m.read_text() + SSRF_ROUTE)
+    git("commit", "-q", "-am", "importar notas desde una URL")
     git("checkout", "-q", "-b", "socket", "main")
     c = repo / "docker-compose.yml"
     c.write_text(c.read_text().replace("    depends_on:", "    privileged: true\n    volumes:\n      - /var/run/docker.sock:/var/run/docker.sock\n    depends_on:"))
@@ -540,3 +546,13 @@ def test_concatenated_search_is_rejected_as_introduced_sqli(tmp_path):
     assert not r.approved and r.reasons, r.to_text()
     assert all(x.startswith("vulnerabilidad introducida por el PR: sqli: GET /notes/search?q=") for x in r.reasons), r.to_text()
     assert {x["kind"] for x in r.report()["reasons"]} == {"attack_introduced"}
+
+
+# --- SSRF con canario en la red interna (#27) ------------------------------------------------
+
+def test_route_that_downloads_a_user_url_is_rejected_as_introduced_ssrf(tmp_path):
+    from cachai import pipeline
+    repo = _postgres_repo(tmp_path)
+    r = pipeline.check(repo, "main", "ssrf", "full", budget=120)
+    assert not r.approved, r.to_text()
+    assert any(x.startswith("vulnerabilidad introducida por el PR: ssrf: GET /import-note?url=") for x in r.reasons), r.to_text()

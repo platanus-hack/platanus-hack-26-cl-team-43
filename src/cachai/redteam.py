@@ -16,6 +16,11 @@ rutas que la app publica en su OpenAPI, y arma candidatos:
   respuesta trae marcas de otro usuario y el mismo pedido sin inyección no las
   trae: así una falla de autorización no pasa por inyección. Con marcas
   canario (#21), ningún pedido legítimo las devuelve.
+- `ssrf`: en cada parámetro de consulta con nombre de URL (`url`, `link`,
+  `callback`, `webhook`, `image`...) se pasa la URL de un servidor canario que
+  corre dentro del mismo contenedor del equipo rojo, en la red interna de la
+  corrida. Se confirma si el canario recibe el pedido: el servidor de la app
+  fue a buscar una URL que eligió quien ataca.
 
 Cada recurso del inventario declara sus marcas: textos que solo su dueño debería
 ver. Un candidato solo se conserva si se confirma contra la app de la rama base:
@@ -32,6 +37,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.server
+import threading
 import json
 import re
 import sys
@@ -153,6 +160,48 @@ SQLI_PAYLOADS: tuple[tuple[str, str], ...] = (
     ("like-or-comment", "%' OR 1=1 -- "),
 )
 
+# SSRF: parámetros cuyo nombre sugiere una URL.
+SSRF_PARAM = re.compile(r"(url|uri|link|href|src|source|target|dest|redirect|next|callback|webhook|hook|image|img|"
+                        r"avatar|icon|feed|endpoint|host|fetch|proxy|site|domain|remote|download|import)", re.IGNORECASE)
+CANARY_PORT = 8999
+CANARY_WAIT = 3.0  # segundos que se espera a que la app llame al canario
+
+
+class Canary:
+    """Servidor HTTP mínimo que anota las rutas que recibe. Es el testigo de SSRF."""
+
+    def __init__(self, host: str = "0.0.0.0", port: int = CANARY_PORT) -> None:
+        hits = self.hits = set()
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def _hit(self):
+                hits.add(self.path.split("?", 1)[0])
+                self.send_response(200)
+                self.send_header("content-type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"ok")
+
+            do_GET = do_POST = do_HEAD = do_PUT = _hit
+
+            def log_message(self, *a):
+                pass
+
+        self.server = http.server.ThreadingHTTPServer((host, port), Handler)
+        self.port = self.server.server_port
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def seen(self, token: str, wait: float = CANARY_WAIT) -> bool:
+        deadline = time.monotonic() + wait
+        while time.monotonic() < deadline:
+            if f"/ssrf/{token}" in self.hits:
+                return True
+            time.sleep(0.05)
+        return f"/ssrf/{token}" in self.hits
+
+    def close(self) -> None:
+        self.server.shutdown()
+
+
 INVALID_TOKEN = "cachai-token-invalido"
 # Esquemas de Authorization que se conservan al borrar o falsear la credencial.
 AUTH_SCHEME_RE = re.compile(r"^(Bearer|Basic|Token|ApiKey|Digest)\s", re.IGNORECASE)
@@ -184,7 +233,7 @@ def anonymous_headers(inv: Inventory) -> dict[str, dict[str, str]]:
 
 
 def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]],
-               families: tuple[str, ...] | None = None) -> list[Candidate]:
+               families: tuple[str, ...] | None = None, canary_base: str | None = None) -> list[Candidate]:
     """Candidatos de las familias pedidas (todas si `families` es None)."""
     out: list[Candidate] = []
     wanted = set(families) if families is not None else None
@@ -261,6 +310,20 @@ def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]],
                             tuple(theirs),
                         ))
 
+        # ssrf: la URL del canario en cada parámetro con nombre de URL, como el primer usuario.
+        if canary_base and (wanted is None or "ssrf" in wanted):
+            attacker = sorted(inv.users)[0]
+            for q in query_params:
+                if not SSRF_PARAM.search(q):
+                    continue
+                cid = make_id("ssrf", template, q)
+                if cid in seen:
+                    raise ValueError(f"id de candidato repetido: {cid}")
+                seen.add(cid)
+                url = f"{canary_base}/ssrf/{cid}"
+                request = {"method": "GET", "path": f"{template}?{q}={urllib.parse.quote(url, safe='')}", "headers": inv.users[attacker]}
+                out.append(Candidate(cid, "ssrf", make_id(template, q), request, request, (cid,)))
+
         route = template
         for rec in inv.records:
             for attacker in sorted(inv.users):
@@ -293,7 +356,7 @@ def candidates(inv: Inventory, routes: list[tuple[str, list[str], list[str]]],
     return out
 
 
-def confirm(base_url: str, cands: list[Candidate], budget: float = 60.0) -> list[Attack]:
+def confirm(base_url: str, cands: list[Candidate], budget: float = 60.0, canary: Canary | None = None) -> list[Attack]:
     """Conserva los candidatos que funcionan contra la app.
 
     El dueño debe recibir alguna marca del recurso en esa ruta; si no, la ruta no
@@ -311,6 +374,11 @@ def confirm(base_url: str, cands: list[Candidate], budget: float = 60.0) -> list
         for c in cands:
             if time.monotonic() > deadline:
                 raise TimeoutError("presupuesto agotado confirmando candidatos")
+            if c.family == "ssrf":
+                if canary is not None and _confirm_ssrf(clients, base_url, c, canary, deadline):
+                    # El canario es el testigo; el predicado (cualquier respuesta) solo deja el pedido registrado.
+                    confirmed.append(Attack(c.id, c.family, c.request, Predicate(status_in=tuple(range(100, 600))), c.group))
+                continue
             if c.family == "sqli":
                 found = _confirm_sqli(clients, base_url, c, deadline)
                 if found:
@@ -335,6 +403,18 @@ def confirm(base_url: str, cands: list[Candidate], budget: float = 60.0) -> list
     return sorted(confirmed, key=lambda a: a.id)
 
 
+def _confirm_ssrf(clients, base_url: str, c: Candidate, canary: Canary, deadline: float) -> bool:
+    """Confirmado si el canario recibe la ruta con el token del candidato. La
+    respuesta de la app no importa: puede fallar después de hacer el pedido."""
+    import httpx
+
+    try:
+        exchange(clients.for_request(c.request), base_url, c.request, deadline)
+    except (httpx.TransportError, Unverifiable):
+        pass
+    return canary.seen(c.markers[0], wait=min(CANARY_WAIT, max(0.0, deadline - time.monotonic())))
+
+
 def _confirm_sqli(clients, base_url: str, c: Candidate, deadline: float) -> Attack | None:
     """Inyección confirmada: el pedido inyectado trae marcas de otro usuario y el
     mismo pedido sin inyección no las trae (si las trae, es otra falla, no esta)."""
@@ -355,7 +435,8 @@ def _confirm_sqli(clients, base_url: str, c: Candidate, deadline: float) -> Atta
     return Attack(c.id, c.family, c.request, Predicate(body_contains_any=present), c.group)
 
 
-def generate(base_url: str, inv: Inventory, budget: float = 60.0, families: tuple[str, ...] | None = None) -> list[Attack]:
+def generate(base_url: str, inv: Inventory, budget: float = 60.0, families: tuple[str, ...] | None = None,
+             canary: Canary | None = None, canary_host: str | None = None) -> list[Attack]:
     deadline = time.monotonic() + budget
     with Clients() as clients:
         request = {"method": "GET", "path": "/openapi.json"}
@@ -363,7 +444,9 @@ def generate(base_url: str, inv: Inventory, budget: float = 60.0, families: tupl
     status, body = hops[-1]
     if status != 200:
         raise RuntimeError(f"la app no publica /openapi.json (status {status})")
-    return confirm(base_url, candidates(inv, get_routes(json.loads(body)), families), deadline - time.monotonic())
+    canary_base = f"http://{canary_host}:{canary.port}" if canary is not None and canary_host else None
+    cands = candidates(inv, get_routes(json.loads(body)), families, canary_base)
+    return confirm(base_url, cands, deadline - time.monotonic(), canary)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -376,13 +459,19 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--inventory", required=True)
     p.add_argument("--budget", type=float, default=60.0)
     p.add_argument("--families", default="", help="familias a generar, separadas por coma (todas si se omite)")
+    p.add_argument("--canary-host", default="", help="nombre con el que la app llega a este contenedor (activa ssrf)")
     args = p.parse_args(argv)
     inv = Inventory.from_dict(json.loads(Path(args.inventory).read_text()))
     if not wait_for(args.base_url.rstrip("/") + args.health, time.monotonic() + min(30.0, args.budget)):
         print(json.dumps({"error": "la app no respondió"}))
         return 2
     families = tuple(f for f in args.families.split(",") if f) or None
-    attacks = generate(args.base_url, inv, args.budget, families)
+    canary = Canary() if args.canary_host and (families is None or "ssrf" in families) else None
+    try:
+        attacks = generate(args.base_url, inv, args.budget, families, canary, args.canary_host or None)
+    finally:
+        if canary is not None:
+            canary.close()
     print(json.dumps({"attacks": [a.to_dict() for a in attacks]}, ensure_ascii=False))
     return 0
 

@@ -42,7 +42,8 @@ SERVICE_HARDENING = [
     "--memory", "1g",
     "--pids-limit", "512",
 ]
-SERVICE_BUDGET = 90.0  # segundos para que los servicios queden sanos
+SERVICE_BUDGET = 90.0
+CANARY_ALIAS = "cachai-canario"  # segundos para que los servicios queden sanos
 
 
 class SandboxError(RuntimeError):
@@ -364,10 +365,12 @@ INCOMPLETE = {"schema": 1, "status": "incomplete", "suites": {}, "attacks": None
 
 
 def _run_trusted(app: AppHandle, name: str, mounts: list[tuple[Path, str]], args: list[str], budget: float,
-                 entrypoint: list[str] | None = None) -> tuple[int | None, str, str]:
+                 entrypoint: list[str] | None = None, aliases: tuple[str, ...] = ()) -> tuple[int | None, str, str]:
     """Corre la imagen de Cachai en la red de la app. Devuelve (código, stdout, stderr);
     código None si hubo que matarlo por tiempo."""
     cmd = ["run", "--rm", "--name", name, "--network", app.network, *HARDENING]
+    for alias in aliases:
+        cmd += ["--network-alias", alias]
     for src, dst in mounts:
         cmd += ["-v", f"{src.resolve()}:{dst}:ro"]
     if entrypoint:
@@ -419,10 +422,15 @@ def run_redteam(app: AppHandle, case: Case | Target, inventory_file: Path, budge
     args = ["--base-url", app.base_url, "--health", case.app.health, "--inventory", "/work/inventory.json", "--budget", str(budget)]
     if families:
         args += ["--families", ",".join(families)]
+    aliases: tuple[str, ...] = ()
+    if not families or "ssrf" in families:
+        # El canario de SSRF corre en este contenedor: la app lo alcanza por este nombre, dentro de la red interna.
+        args += ["--canary-host", CANARY_ALIAS]
+        aliases = (CANARY_ALIAS,)
     code, out, err = _run_trusted(
         app, f"{app.run_id}-red", [(inventory_file, "/work/inventory.json")],
         args,
-        budget, entrypoint=["python", "-m", "cachai.redteam"],
+        budget, entrypoint=["python", "-m", "cachai.redteam"], aliases=aliases,
     )
     data = _last_json(out) if code == 0 else None
     if data is None or "attacks" not in data:
