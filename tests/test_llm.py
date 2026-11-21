@@ -140,7 +140,11 @@ def test_valid_structured_response_is_parsed_and_request_is_well_formed():
     assert req["path"] == "/v1/chat/completions"
     assert req["headers"]["Authorization"] == "Bearer secreto-123"
     assert req["body"]["model"] == "red-lora"
-    assert req["body"]["messages"] == [{"role": "system", "content": "sistema"}, {"role": "user", "content": "usuario"}]
+    system, user = req["body"]["messages"]
+    assert system["role"] == "system" and system["content"].startswith("sistema")
+    assert user == {"role": "user", "content": "usuario"}
+    # Algunos proveedores de HF ignoran response_format: el esquema va también en el prompt.
+    assert json.dumps(llm.wire_schema(SCHEMA)) in system["content"]
     rf = req["body"]["response_format"]
     assert rf["type"] == "json_schema" and rf["json_schema"]["name"] == "demo"
     assert rf["json_schema"]["schema"] == llm.wire_schema(SCHEMA)

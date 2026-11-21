@@ -213,6 +213,9 @@ def complete_json(cfg: LLMConfig, model: str, system: str, user: str, name: str,
     """
     if not model:
         raise LLMError("no hay modelo configurado (CACHAI_RED_MODEL / CACHAI_BLUE_MODEL)")
+    # El esquema va también en el prompt: algunos proveedores (p. ej. Cloudflare en el router de
+    # Hugging Face) aceptan response_format pero lo ignoran y devuelven JSON con otra forma.
+    system += "\nResponde solo con un JSON que cumpla este esquema: " + json.dumps(wire_schema(schema))
     body = {
         "model": model,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -227,7 +230,6 @@ def complete_json(cfg: LLMConfig, model: str, system: str, user: str, name: str,
         if e.status != 400:
             raise
         del body["response_format"]
-        body["messages"][0]["content"] += "\nResponde solo con un JSON que cumpla este esquema: " + json.dumps(schema)
         raw = _post(cfg, body)
     try:
         content = json.loads(raw)["choices"][0]["message"]["content"]
