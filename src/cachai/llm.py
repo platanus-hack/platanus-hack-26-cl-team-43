@@ -185,6 +185,23 @@ def _post(cfg: LLMConfig, body: dict) -> bytes:
     return raw
 
 
+_BOUNDS = {"maxLength", "minLength", "maxItems", "minItems"}
+
+
+def wire_schema(schema: object) -> object:
+    """El esquema que viaja al servidor, sin límites de largo ni de cantidad.
+
+    Los servidores compilan el esquema a una gramática y llama.cpp (Ollama)
+    se cae con límites grandes ("number of repetitions exceeds sane defaults").
+    Los límites se siguen exigiendo localmente con el esquema completo.
+    """
+    if isinstance(schema, dict):
+        return {k: wire_schema(v) for k, v in schema.items() if k not in _BOUNDS}
+    if isinstance(schema, list):
+        return [wire_schema(x) for x in schema]
+    return schema
+
+
 def complete_json(cfg: LLMConfig, model: str, system: str, user: str, name: str, schema: dict) -> dict:
     """Pide al modelo una respuesta con la forma de `schema` y la devuelve ya validada.
 
@@ -201,7 +218,8 @@ def complete_json(cfg: LLMConfig, model: str, system: str, user: str, name: str,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         "temperature": 0,
         "max_tokens": cfg.max_tokens,
-        "response_format": {"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}},
+        "response_format": {"type": "json_schema",
+                            "json_schema": {"name": name, "strict": True, "schema": wire_schema(schema)}},
     }
     try:
         raw = _post(cfg, body)

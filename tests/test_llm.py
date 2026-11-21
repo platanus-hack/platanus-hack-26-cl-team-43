@@ -142,7 +142,20 @@ def test_valid_structured_response_is_parsed_and_request_is_well_formed():
     assert req["body"]["model"] == "red-lora"
     assert req["body"]["messages"] == [{"role": "system", "content": "sistema"}, {"role": "user", "content": "usuario"}]
     rf = req["body"]["response_format"]
-    assert rf["type"] == "json_schema" and rf["json_schema"]["name"] == "demo" and rf["json_schema"]["schema"] == SCHEMA
+    assert rf["type"] == "json_schema" and rf["json_schema"]["name"] == "demo"
+    assert rf["json_schema"]["schema"] == llm.wire_schema(SCHEMA)
+
+
+def test_schema_sent_to_the_server_has_no_bounds_but_they_are_still_enforced_locally():
+    # llama.cpp (Ollama) se cae al compilar maxLength grandes a gramática:
+    # "number of repetitions exceeds sane defaults". Los límites se exigen solo aquí.
+    sent = json.dumps(llm.wire_schema(llm.PATCH_SCHEMA))
+    assert not any(k in sent for k in ("maxLength", "minLength", "maxItems", "minItems"))
+    assert "maxLength" in json.dumps(llm.PATCH_SCHEMA)  # el original no cambia
+    with Mock({"summary": "s", "files": []}) as m:
+        with pytest.raises(llm.LLMError):
+            llm.complete_json(cfg(m), "blue-lora", "s", "u", "patch", llm.PATCH_SCHEMA)
+    assert m.requests[0]["body"]["response_format"]["json_schema"]["schema"] == llm.wire_schema(llm.PATCH_SCHEMA)
 
 
 def test_max_tokens_is_sent():
