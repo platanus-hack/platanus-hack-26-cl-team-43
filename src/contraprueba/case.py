@@ -21,6 +21,8 @@ CASE_KEYS = {"id", "description", "app", "tests_dir", "attacks", "holdout_tests"
 APP_KEYS = {"module", "port", "health"}
 PR_KEYS = {"name", "kind", "description", "delete"}
 SPLIT_KEYS = {"shown", "seed"}
+CONFIG_FILE = ".contraprueba.json"  # configuración de la evaluación; solo vale la de la rama base
+CONFIG_KEYS = {"app", "tests_dir"}
 BRANCH_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 MODULE_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$")
 
@@ -38,6 +40,27 @@ class AppSpec:
             raise ValueError(f"puerto inválido: {self.port!r}")
         if not isinstance(self.health, str) or not self.health.startswith("/") or self.health.startswith("//"):
             raise ValueError(f"ruta de salud inválida: {self.health!r}")
+
+
+@dataclass(frozen=True)
+class Target:
+    """Qué se evalúa y cómo. Viene de la rama base o del caso, nunca del PR."""
+
+    app: AppSpec
+    tests_dir: str = "tests"
+
+    def to_dict(self) -> dict:
+        return {"app": {"module": self.app.module, "port": self.app.port, "health": self.app.health}, "tests_dir": self.tests_dir}
+
+
+def load_target(data: bytes | str) -> Target:
+    """Lee `.contraprueba.json` (el contenido que tiene en la rama base)."""
+    d = json.loads(data)
+    if not isinstance(d, dict) or not isinstance(d.get("app"), dict):
+        raise ValueError(f"{CONFIG_FILE} inválido")
+    _check_keys(d, CONFIG_KEYS, CONFIG_FILE)
+    _check_keys(d["app"], APP_KEYS, "app")
+    return Target(AppSpec(**d["app"]), safe_relpath(d.get("tests_dir", "tests"), "tests_dir"))
 
 
 @dataclass(frozen=True)
@@ -77,6 +100,9 @@ class Case:
     @property
     def holdout_tests_path(self) -> Path | None:
         return self.root / self.holdout_tests_dir if self.holdout_tests_dir else None
+
+    def target(self) -> Target:
+        return Target(self.app, self.tests_dir)
 
     def attacks(self) -> list[Attack]:
         return load_attacks(self.root / self.attacks_file) if self.attacks_file else []
@@ -154,7 +180,10 @@ def load_case(path: str | Path) -> Case:
 
 def _git(repo: Path, *args: str) -> None:
     subprocess.run(
-        ["git", "-C", str(repo), "-c", "user.name=contraprueba", "-c", "user.email=contraprueba@localhost", *args],
+        [
+            "git", "-C", str(repo), "-c", "user.name=contraprueba", "-c", "user.email=contraprueba@localhost",
+            "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", *args,
+        ],
         check=True,
         capture_output=True,
     )
@@ -189,6 +218,8 @@ def _confined(repo: Path, rel: str) -> Path:
 def materialize(case: Case, dest: str | Path) -> Path:
     """Crea en `dest` un repo git con `main` (la base) y una rama por PR.
 
+    La base lleva además `.contraprueba.json`, generado desde `case.json`.
+
     Los casos son fixtures locales confiables; aun así las capas se validan para
     que no escriban ni borren fuera de `dest` ni toquen `.git`. No es un sandbox.
     """
@@ -198,7 +229,8 @@ def materialize(case: Case, dest: str | Path) -> Path:
     repo.mkdir(parents=True, exist_ok=True)
     _git(repo, "init", "-q", "-b", "main")
     _copy_tree(case.base_dir, repo)
-    _git(repo, "add", "-A")
+    (repo / CONFIG_FILE).write_text(json.dumps(case.target().to_dict(), indent=2) + "\n")
+    _git(repo, "add", "-A", "-f")
     _git(repo, "commit", "-q", "-m", f"{case.id}: rama base")
     for pr in case.prs:
         _git(repo, "checkout", "-q", "-b", pr.name, "main")
@@ -206,7 +238,7 @@ def materialize(case: Case, dest: str | Path) -> Path:
             _copy_tree(case.overlay_dir(pr), repo)
         for rel in pr.delete:
             _confined(repo, rel).unlink()
-        _git(repo, "add", "-A")
+        _git(repo, "add", "-A", "-f")
         _git(repo, "commit", "-q", "--allow-empty", "-m", f"{case.id}: {pr.name}")
     _git(repo, "checkout", "-q", "main")
     return repo

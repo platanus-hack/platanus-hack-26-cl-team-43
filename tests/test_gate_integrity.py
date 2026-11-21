@@ -16,7 +16,7 @@ def test_classify_flags_hooks_config_and_tests():
         "conftest.py": "hook de evaluación",
         "app/_hook.pth": "hook de evaluación",
         "pyproject.toml": "configuración de pytest",
-        "tests/test_invoices.py": "tests",
+        "tests/test_invoices.py": "tests existentes modificados",
     }
 
 

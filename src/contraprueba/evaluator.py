@@ -8,7 +8,8 @@ Contrato de salida (`schema` 1):
 
 - `status`: `ok` (todo pasó), `failed` (la evaluación terminó y algo falló) o
   `incomplete` (algo no se pudo ejecutar: app caída, timeout, sin tests).
-- `suites.<nombre>`: resultado por suite (`base`, `holdout`).
+- `suites.<nombre>`: resultado por suite (`base`, `holdout`). `failures` trae
+  archivo, línea y mensaje de cada test que falló.
 - `attacks`: resultado por ataque (fase 2), o `null`.
 - `errors`: errores de infraestructura.
 - `log_tail` en cada suite es solo informativo; no es parte del contrato.
@@ -57,16 +58,25 @@ def wait_for(url: str, deadline: float) -> bool:
 
 
 def parse_junit(path: Path) -> list[dict]:
-    """Devuelve un resultado por test: nodeid y outcome (passed, failed, error, skipped)."""
+    """Devuelve un resultado por test: nodeid, outcome (passed, failed, error, skipped),
+    archivo, línea (desde 1) y, si falló, la primera línea del mensaje."""
     results = []
     for tc in ET.parse(path).getroot().iter("testcase"):
         nodeid = f"{tc.get('classname', '')}::{tc.get('name', '')}"
-        outcome = "passed"
+        outcome, message = "passed", ""
         for child in tc:
             if child.tag in ("failure", "error", "skipped"):
                 outcome = {"failure": "failed", "error": "error", "skipped": "skipped"}[child.tag]
+                message = (child.get("message") or "").strip().splitlines()[0][:200] if child.get("message") else ""
                 break
-        results.append({"nodeid": nodeid, "outcome": outcome})
+        line = tc.get("line")
+        results.append({
+            "nodeid": nodeid,
+            "outcome": outcome,
+            "file": tc.get("file"),
+            "line": int(line) + 1 if line and line.isdigit() else None,
+            "message": message,
+        })
     return results
 
 
@@ -82,6 +92,10 @@ def summarize(cases: list[dict], exit_code: int | None, timed_out: bool, log: st
         "total": len(cases),
         "passed": passed,
         "failed": failed,
+        "failures": [
+            {k: c.get(k) for k in ("nodeid", "file", "line", "message")}
+            for c in cases if c["outcome"] in ("failed", "error")
+        ],
         "skipped": skipped,
         "ok": complete and exit_code == 0 and not failed and not skipped,
         "log_tail": log[-2000:],
@@ -100,7 +114,7 @@ def run_suite(base_url: str, rootdir: Path, target: str, budget: float) -> dict:
             "PYTHONDONTWRITEBYTECODE": "1",
         }
         cmd = [
-            sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+            sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-o", "junit_family=xunit1",
             f"--junitxml={junit}", f"--rootdir={rootdir}", str(rootdir / target),
         ]
         try:

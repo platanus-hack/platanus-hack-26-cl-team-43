@@ -8,7 +8,9 @@ Cada caso es una carpeta con:
 - `attacks.json`: variantes de ataque; `holdout.py` decide cuáles ve el parchador (`split`: proporción visible y semilla, registradas en la evidencia; siempre queda al menos uno reservado).
 - `holdout_tests` (opcional): carpeta fuera de `base/` con tests funcionales reservados. El parchador no la ve; el evaluador la monta aparte.
 
-`contraprueba.case.materialize` arma con eso un repo git con `main` y una rama por PR.
+`contraprueba.case.materialize` arma con eso un repo git con `main` y una rama por PR. La base lleva además `.contraprueba.json`, generado desde `case.json`.
+
+`contraprueba case cases/facturas` corre todos los PR del caso en los tres modos.
 
 Formato de un ataque. Se confirma con un predicado sobre la respuesta, nunca ejecutando código. `path` es relativo al origen de la app (sin host) y las redirecciones no se siguen. Al ejecutarlos, cada ataque queda `confirmed`, `blocked` o `error`; un error deja la evaluación incompleta y se rechaza, nunca cuenta como bloqueado.
 

@@ -9,14 +9,15 @@ Docker interna, sin salida a internet.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from .case import Case
-from .integrity import EVAL_CONFIG
+from .case import Case, Target
+from .integrity import EVAL_CONFIG, is_hook
 
 ROOT = Path(__file__).resolve().parents[2]
 EVALUATOR_IMAGE = "contraprueba-evaluator"
@@ -55,13 +56,59 @@ def build_evaluator_image(root: Path = ROOT) -> str:
     return EVALUATOR_IMAGE
 
 
+def _copy_regular_tree(src: Path, dst: Path) -> None:
+    """Copia un árbol de archivos regulares. No sigue ni copia enlaces simbólicos."""
+    if src.is_symlink() or not src.is_dir():
+        raise SandboxError(f"se esperaba una carpeta real: {src}")
+    for root, dirs, files in os.walk(src, followlinks=False):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        for name in dirs + files:
+            if (Path(root) / name).is_symlink():
+                raise SandboxError(f"enlace simbólico en los tests de la base: {Path(root) / name}")
+        for name in files:
+            f = Path(root) / name
+            target = dst / f.relative_to(src)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(f, target)
+
+
+def _plain_path(root: Path, rel: str) -> Path:
+    """`root/rel` si ningún componente es un enlace simbólico; si no, error."""
+    path = root
+    for part in Path(rel).parts:
+        if part in ("..", "/") or Path(part).is_absolute():
+            raise SandboxError(f"ruta fuera del árbol: {rel}")
+        path = path / part
+        if path.is_symlink():
+            raise SandboxError(f"enlace simbólico en la ruta: {path}")
+    return path
+
+
+def _claim_path(root: Path, rel: str | Path) -> Path:
+    """Devuelve `root/rel` garantizando que sus carpetas ancestro sean reales.
+
+    Cualquier ancestro que sea un enlace o un archivo se reemplaza por una
+    carpeta vacía, sin seguirlo. La ruta final se deja como esté.
+    """
+    parts = Path(rel).parts
+    if not parts or any(p in ("..", "/") or Path(p).is_absolute() for p in parts):
+        raise SandboxError(f"ruta fuera del árbol: {rel}")
+    path = root
+    for part in parts[:-1]:
+        path = path / part
+        if path.is_symlink() or (path.exists() and not path.is_dir()):
+            path.unlink()
+        path.mkdir(exist_ok=True)
+    return path / parts[-1]
+
+
 def prepare_eval_workdir(base_src: Path, tests_dir: str, dest: Path) -> Path:
     """Arma el directorio que ve el evaluador: tests y configuración de pytest de la base.
 
     `base_src` debe venir de la rama base, nunca del checkout del PR.
     """
     dest.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(base_src / tests_dir, dest / tests_dir, symlinks=False, ignore=shutil.ignore_patterns("__pycache__"))
+    _copy_regular_tree(_plain_path(base_src, tests_dir), dest / tests_dir)
     for name in EVAL_CONFIG:
         f = base_src / name
         if f.is_file() and not f.is_symlink():
@@ -69,7 +116,76 @@ def prepare_eval_workdir(base_src: Path, tests_dir: str, dest: Path) -> Path:
     return dest
 
 
-def start_app(context: Path, case: Case) -> AppHandle:
+def _remove(path: Path) -> None:
+    """Borra un archivo, enlace o carpeta sin seguir enlaces."""
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
+
+
+def restore_eval_files(pr_tree: Path, base_tree: Path, tests_dir: str) -> Path:
+    """Línea base «restaurar»: deja en el árbol del PR los tests, la configuración
+    y los hooks de la rama base. Modifica `pr_tree` y lo devuelve.
+
+    Es la defensa habitual, reforzada: además de reponer los tests borra todo
+    hook de evaluación (`conftest.py`, `sitecustomize.py`, `*.pth`) que no esté
+    en la base. El código del PR sigue en el mismo contenedor que pytest.
+
+    El árbol del PR no es confiable: nunca se borra ni se escribe a través de
+    un enlace simbólico, tampoco si está en una carpeta ancestro.
+    """
+    for root, dirs, files in os.walk(pr_tree, followlinks=False):
+        dirs[:] = [d for d in dirs if not (Path(root) / d).is_symlink()]
+        for name in files:
+            if is_hook(name):
+                _remove(Path(root) / name)
+    for name in EVAL_CONFIG:
+        _remove(pr_tree / name)
+    tests_dst = _claim_path(pr_tree, tests_dir)
+    _remove(tests_dst)
+    for root, dirs, files in os.walk(base_tree, followlinks=False):
+        for name in files:
+            src = Path(root) / name
+            rel = src.relative_to(base_tree)
+            if src.is_symlink() or not (is_hook(name) or (len(rel.parts) == 1 and name in EVAL_CONFIG)):
+                continue
+            dst = _claim_path(pr_tree, rel)
+            _remove(dst)
+            shutil.copyfile(src, dst)
+    _copy_regular_tree(_plain_path(base_tree, tests_dir), _claim_path(pr_tree, tests_dir))
+    return pr_tree
+
+
+def run_pytest_inside(context: Path, tests_dir: str, budget: float = 120.0) -> dict:
+    """Líneas base: corre pytest dentro del mismo contenedor que el código.
+
+    Devuelve lo que vería un CI: `passed` es verdadero si pytest salió con 0.
+    """
+    run_id = f"cp-{uuid.uuid4().hex[:10]}"
+    image = f"{run_id}-ci"
+    _docker("build", "-q", "-f", str(ROOT / "docker" / "app.Dockerfile"), "-t", image, str(context))
+    try:
+        try:
+            proc = _docker(
+                "run", "--rm", "--name", run_id, "--network", "none", *HARDENING,
+                image, "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", tests_dir,
+                timeout=budget, check=False,
+            )
+        except subprocess.TimeoutExpired:
+            _docker("rm", "-f", run_id, check=False, timeout=60)
+            return {"passed": False, "exit_code": None, "timed_out": True, "log_tail": ""}
+        return {
+            "passed": proc.returncode == 0,
+            "exit_code": proc.returncode,
+            "timed_out": False,
+            "log_tail": (proc.stdout + proc.stderr)[-2000:],
+        }
+    finally:
+        _docker("rmi", "-f", image, check=False, timeout=60)
+
+
+def start_app(context: Path, case: Case | Target) -> AppHandle:
     """Construye y levanta la app de `context` en un contenedor aislado, sin salida a internet."""
     run_id = f"cp-{uuid.uuid4().hex[:10]}"
     image = f"{run_id}-app"
@@ -87,7 +203,7 @@ def start_app(context: Path, case: Case) -> AppHandle:
     return AppHandle(run_id, run_id, container, image, f"http://app:{case.app.port}")
 
 
-def run_evaluator(app: AppHandle, case: Case, workdir: Path, holdout_dir: Path | None = None, budget: float = 120.0) -> tuple[int, dict]:
+def run_evaluator(app: AppHandle, case: Case | Target, workdir: Path, holdout_dir: Path | None = None, budget: float = 120.0) -> tuple[int, dict]:
     """Corre el evaluador contra la app. Devuelve (código de salida, JSON del evaluador).
 
     Si el contenedor no termina en `budget` + margen, se mata y se devuelve una
