@@ -23,7 +23,7 @@ import tempfile
 from pathlib import Path
 
 from . import bench, fixer, pipeline, sandbox
-from .case import load_case, materialize
+from .case import ConfigError, load_case, materialize
 from .holdout import Attack, load_attacks, split_record
 
 
@@ -49,7 +49,11 @@ def cmd_check(args: argparse.Namespace) -> int:
     if args.attacks:
         attacks = load_attacks(args.attacks)
         plan = pipeline.AttackPlan(tuple(attacks), split_record(attacks, args.shown, args.seed))
-    result = pipeline.check(args.repo, args.base, args.pr, args.mode, holdout_tests=holdout, budget=args.budget, plan=plan)
+    try:
+        result = pipeline.check(args.repo, args.base, args.pr, args.mode, holdout_tests=holdout, budget=args.budget, plan=plan)
+    except ConfigError as e:
+        print(f"error de configuración en la rama base: {e}", file=sys.stderr)
+        return 2
     _print(result, args)
     return 0 if result.approved else 1
 

@@ -14,7 +14,8 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from .holdout import Attack, Split, load_attacks, split_record
+from .holdout import FAMILIES, Attack, Split, load_attacks, split_record
+from .redteam import Inventory
 
 PR_KINDS = ("cheat", "honest", "half_patch", "correct_patch", "breaking_patch")
 # Parches de seguridad: dicen arreglar la falla, así que deben bloquear los ataques del caso.
@@ -24,9 +25,23 @@ APP_KEYS = {"module", "port", "health"}
 PR_KEYS = {"name", "kind", "description", "delete"}
 SPLIT_KEYS = {"shown", "seed"}
 CONFIG_FILE = ".cachai.json"  # configuración de la evaluación; solo vale la de la rama base
-CONFIG_KEYS = {"app", "tests_dir"}
+CONFIG_VERSION = 2
+# v1: solo `app` y `tests_dir`, sin `version`. Se sigue leyendo.
+CONFIG_KEYS_V1 = {"app", "tests_dir"}
+CONFIG_KEYS = {"version", "app", "tests_dir", "inventory", "attacks", "hidden"}
+ATTACKS_KEYS = {"families"}
+HIDDEN_KEYS = {"package", "key_env"}
 BRANCH_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 MODULE_RE = re.compile(r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$")
+ENV_RE = re.compile(r"^[A-Z_][A-Z0-9_]{0,63}$")
+
+
+class ConfigError(ValueError):
+    """`.cachai.json` inválido. El mensaje dice qué campo falla."""
+
+    def __init__(self, field: str, problem: str) -> None:
+        self.field = field
+        super().__init__(f"{CONFIG_FILE}: {f'«{field}» ' if field else ''}{problem}")
 
 
 @dataclass(frozen=True)
@@ -45,24 +60,124 @@ class AppSpec:
 
 
 @dataclass(frozen=True)
+class Hidden:
+    """Dónde está el material reservado (nunca el material): un paquete cifrado
+    y el nombre de la variable de entorno del CI con su clave."""
+
+    package: str
+    key_env: str
+
+
+@dataclass(frozen=True)
 class Target:
     """Qué se evalúa y cómo. Viene de la rama base o del caso, nunca del PR."""
 
     app: AppSpec
     tests_dir: str = "tests"
+    # Usuarios, registros y archivos con dueño que el equipo rojo usa para atacar.
+    inventory: dict | None = field(default=None, hash=False)
+    attack_families: tuple[str, ...] = ()
+    hidden: Hidden | None = None
 
     def to_dict(self) -> dict:
-        return {"app": {"module": self.app.module, "port": self.app.port, "health": self.app.health}, "tests_dir": self.tests_dir}
+        d: dict = {
+            "version": CONFIG_VERSION,
+            "app": {"module": self.app.module, "port": self.app.port, "health": self.app.health},
+            "tests_dir": self.tests_dir,
+        }
+        if self.inventory is not None:
+            d["inventory"] = self.inventory
+        if self.attack_families:
+            d["attacks"] = {"families": list(self.attack_families)}
+        if self.hidden is not None:
+            d["hidden"] = {"package": self.hidden.package, "key_env": self.hidden.key_env}
+        return d
+
+
+def _known(d: dict, allowed: set[str], where: str) -> None:
+    unknown = sorted(set(d) - allowed)
+    if unknown:
+        name = f"{where}.{unknown[0]}" if where else unknown[0]
+        extra = f" (y {len(unknown) - 1} más)" if len(unknown) > 1 else ""
+        raise ConfigError(name, f"es un campo desconocido{extra}; los válidos son: {', '.join(sorted(allowed))}")
+
+
+def _obj(d: dict, key: str) -> dict:
+    v = d[key]
+    if not isinstance(v, dict):
+        raise ConfigError(key, "debe ser un objeto")
+    return v
 
 
 def load_target(data: bytes | str) -> Target:
-    """Lee `.cachai.json` (el contenido que tiene en la rama base)."""
-    d = json.loads(data)
-    if not isinstance(d, dict) or not isinstance(d.get("app"), dict):
-        raise ValueError(f"{CONFIG_FILE} inválido")
-    _check_keys(d, CONFIG_KEYS, CONFIG_FILE)
-    _check_keys(d["app"], APP_KEYS, "app")
-    return Target(AppSpec(**d["app"]), safe_relpath(d.get("tests_dir", "tests"), "tests_dir"))
+    """Lee `.cachai.json` (el contenido que tiene en la rama base).
+
+    Acepta la v1 (`app` y `tests_dir`, sin `version`) y la v2 descrita en
+    `schema/cachai.schema.json`. Cualquier campo desconocido es un error.
+    """
+    try:
+        d = json.loads(data)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise ConfigError("", f"no es JSON válido ({e})") from e
+    if not isinstance(d, dict):
+        raise ConfigError("", "debe ser un objeto JSON")
+    version = d.get("version", 1)
+    if isinstance(version, bool) or version not in (1, CONFIG_VERSION):
+        raise ConfigError("version", f"debe ser {CONFIG_VERSION} (o no estar, para la v1)")
+    if "version" in d and version == 1:
+        raise ConfigError("version", "la v1 no lleva el campo; quítalo o usa 2")
+    _known(d, CONFIG_KEYS if version == CONFIG_VERSION else CONFIG_KEYS_V1, "")
+    if "app" not in d:
+        raise ConfigError("app", "es obligatorio")
+    app = _obj(d, "app")
+    _known(app, APP_KEYS, "app")
+    if "module" not in app:
+        raise ConfigError("app.module", "es obligatorio")
+    try:
+        spec = AppSpec(**app)
+    except ValueError as e:
+        raise ConfigError("app", str(e)) from e
+    try:
+        tests_dir = safe_relpath(d.get("tests_dir", "tests"), "tests_dir")
+    except ValueError as e:
+        raise ConfigError("tests_dir", str(e)) from e
+
+    inventory = None
+    if "inventory" in d:
+        inventory = _obj(d, "inventory")
+        try:
+            Inventory.from_dict(inventory)
+        except ValueError as e:
+            raise ConfigError("inventory", str(e)) from e
+    families: tuple[str, ...] = ()
+    if "attacks" in d:
+        attacks = _obj(d, "attacks")
+        _known(attacks, ATTACKS_KEYS, "attacks")
+        fams = attacks.get("families")
+        if not isinstance(fams, list) or not fams or len(set(map(str, fams))) != len(fams):
+            raise ConfigError("attacks.families", "debe ser una lista no vacía y sin repetidos")
+        bad = [f for f in fams if f not in FAMILIES]
+        if bad:
+            raise ConfigError("attacks.families", f"familia desconocida {bad[0]!r}; las válidas son: {', '.join(FAMILIES)}")
+        families = tuple(fams)
+        if inventory is None:
+            raise ConfigError("inventory", "es obligatorio si hay familias de ataque activas")
+    hidden = None
+    if "hidden" in d:
+        h = _obj(d, "hidden")
+        _known(h, HIDDEN_KEYS, "hidden")
+        for k in sorted(HIDDEN_KEYS):
+            if not isinstance(h.get(k), str) or not h[k]:
+                raise ConfigError(f"hidden.{k}", "es obligatorio y debe ser un texto")
+        if not ENV_RE.match(h["key_env"]):
+            raise ConfigError("hidden.key_env", "debe ser el nombre de una variable de entorno (MAYÚSCULAS, dígitos y _)")
+        if not h["package"].startswith("/"):
+            try:
+                safe_relpath(h["package"], "hidden.package")
+            except ValueError as e:
+                raise ConfigError("hidden.package", str(e)) from e
+        hidden = Hidden(h["package"], h["key_env"])
+    return Target(spec, tests_dir, inventory, families, hidden)
 
 
 @dataclass(frozen=True)
@@ -114,7 +229,8 @@ class Case:
         return self.root / self.holdout_tests_dir if self.holdout_tests_dir else None
 
     def target(self) -> Target:
-        return Target(self.app, self.tests_dir)
+        families = tuple(sorted({a.family for a in self.attacks()}))
+        return Target(self.app, self.tests_dir, self.inventory, families)
 
     def attacks(self) -> list[Attack]:
         path = self.root / self.attacks_file if self.attacks_file else None

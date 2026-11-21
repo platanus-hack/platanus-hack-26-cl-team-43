@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/platanus-hack/platanus-hack-26-cl-team-43/schema/cachai.schema.json",
+  "title": ".cachai.json v2",
+  "description": "Configuración de la revisión de Cachai. Solo vale la de la rama base: un PR no puede cambiar con qué se lo juzga. Describe dónde está el material reservado, nunca el material.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "app"],
+  "properties": {
+    "version": {
+      "const": 2,
+      "description": "Versión del formato. Sin este campo se lee como v1 (solo app y tests_dir)."
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module"],
+      "description": "Cómo levantar la app del PR dentro de su contenedor.",
+      "properties": {
+        "module": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][\\w.]*:[A-Za-z_]\\w*$",
+          "description": "Objeto ASGI, p. ej. invoices.main:app."
+        },
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535, "default": 8000},
+        "health": {
+          "type": "string",
+          "pattern": "^/(?!/)",
+          "default": "/health",
+          "description": "Ruta que responde cuando la app está lista."
+        }
+      }
+    },
+    "tests_dir": {
+      "type": "string",
+      "default": "tests",
+      "description": "Carpeta de tests de la rama base, relativa al repo, sin .. ni .git."
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["users"],
+      "description": "Identidades de prueba y recursos con dueño que el equipo rojo usa para atacar. Las marcas son textos que solo aparecen en el recurso de su dueño.",
+      "properties": {
+        "users": {
+          "type": "object",
+          "minProperties": 2,
+          "propertyNames": {"pattern": "^[a-z0-9][a-z0-9_-]{0,30}$"},
+          "additionalProperties": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {"type": "string"},
+            "description": "Headers de autenticación de ese usuario."
+          }
+        },
+        "records": {"type": "array", "items": {"$ref": "#/$defs/owned", "required": ["id", "owner", "markers"]}},
+        "files": {"type": "array", "items": {"$ref": "#/$defs/owned", "required": ["path", "owner", "markers"]}},
+        "files_root": {"type": "string", "pattern": "^/", "description": "Raíz absoluta de los adjuntos dentro del contenedor de la app."}
+      }
+    },
+    "attacks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["families"],
+      "description": "Familias de ataque activas. Requiere inventory.",
+      "properties": {
+        "families": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["authz", "files"]}
+        }
+      }
+    },
+    "hidden": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "key_env"],
+      "description": "Dónde está el paquete reservado (cifrado) y qué variable del CI tiene su clave.",
+      "properties": {
+        "package": {"type": "string", "minLength": 1, "description": "Ruta absoluta, o relativa al repo sin .. ni .git."},
+        "key_env": {"type": "string", "pattern": "^[A-Z_][A-Z0-9_]{0,63}$"}
+      }
+    }
+  },
+  "$defs": {
+    "owned": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "owner": {"type": "string"},
+        "markers": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 4}}
+      }
+    }
+  }
+}

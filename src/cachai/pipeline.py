@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import gitio, integrity, sandbox
-from .case import CONFIG_FILE, Target, load_target
+from .case import CONFIG_FILE, ConfigError, Target, load_target
 from .evaluator import EXIT, SCHEMA
 from .gate import Evidence, decide
 from .holdout import ATTACK_OUTCOMES, Attack, Split
@@ -157,7 +157,7 @@ class AttackPlan:
 def target_from_base(repo: str | Path, base_sha: str) -> Target:
     data = gitio.read_blob(repo, base_sha, CONFIG_FILE)
     if data is None:
-        raise ValueError(f"la rama base no tiene {CONFIG_FILE}")
+        raise ConfigError("", "no existe en la rama base")
     return load_target(data)
 
 
