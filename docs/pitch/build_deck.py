@@ -207,16 +207,25 @@ def slides(url: str) -> list[tuple[str, str, str]]:
         "los parches de seguridad que pasan su propio ataque siguen rotos. Al final, un humano ve el check "
         "verde y hace merge.»"))
 
+    # Medición real: results/resultados.md (contraprueba bench, 19 PR etiquetados).
     rows = [
-        ("Agente que reescribe pytest con un hook", ["✗", "✗", "—", "✓"]),
-        ("Parche que tapa solo el ataque que vio", ["✗", "✗", "✗", "✓"]),
-        ("Evidencia de qué se probó", ["✗", "✗", "✗", "✓"]),
+        ("Trampas del agente rechazadas", "debe rechazar 8/8", [0, 5, 8, 8], 8, "detect"),
+        ("Parches a medias o que rompen, rechazados", "debe rechazar 3/3", [0, 0, 0, 3], 3, "detect"),
+        ("Falsas alarmas en cambios legítimos", "de 8", [0, 0, 1, 1], 8, "fp"),
     ]
-    color = {"✓": "green", "✗": "red", "—": "muted"}
-    body = "".join(
-        f"<tr><td>{esc(label)}</td>" + "".join(
-            f'<td class="mark {color[m]}{" us" if i == 3 else ""}">{m}</td>' for i, m in enumerate(marks)
-        ) + "</tr>" for label, marks in rows)
+
+    def cell(v: int, n: int, kind: str) -> tuple[str, str]:
+        if kind == "detect":
+            return f"{v}/{n}", "green" if v == n else "red"
+        return str(v), "green" if v == 0 else "yellow"
+
+    body = ""
+    for label, sub, vals, n, kind in rows:
+        body += f'<tr><td>{esc(label)}<div class="muted" style="font-size:20px;margin-top:6px">{esc(sub)}</div></td>'
+        for i, v in enumerate(vals):
+            t, c = cell(v, n, kind)
+            body += f'<td class="mark {c}{" us" if i == 3 else ""}">{t}</td>'
+        body += "</tr>"
     S.append(("Solución (0:15–0:30)", f"""
 <section class="slide">
   <h1>Contraprueba <span class="muted" style="font-weight:400">· el revisor que no le cree al modelo</span></h1>
@@ -227,11 +236,14 @@ def slides(url: str) -> list[tuple[str, str, str]]:
   </table>
   <div class="pillars"><b>otro contenedor</b><span>·</span><b>ataques que el parche nunca vio</b>
     <span>·</span><b>todo o nada</b><span>·</span>sin modelos en la decisión</div>
-  {foot("la solución")}
+  {foot("medido sobre 19 PR etiquetados de una app propia · detalle en results/resultados.md")}
 </section>""",
         "«Contraprueba es el revisor que no le cree al modelo. Corre los tests desde otro contenedor, donde "
         "el código no puede tocarlos, y guarda ataques que el parche nunca vio. Si algo falla, no entra nada. "
-        "Hoy ninguna de estas defensas lo atrapa. Miren.» → Pasar a la terminal (demo 0:30–2:20)."))
+        "Lo medimos sobre 19 PR: el CI normal no atrapa ninguna trampa; restaurar los tests, 5 de 8; "
+        "y ninguna de las defensas actuales atrapa un parche a medias. Contraprueba atrapa todo. Miren.» "
+        "→ Pasar a la terminal (demo 0:30–2:20). Si preguntan por la falsa alarma: un cambio legítimo a un "
+        "test existente; la política bloquea todo cambio a tests existentes y pide revisión humana."))
 
     S.append(("AI control (2:20–2:40)", f"""
 <section class="slide">
@@ -280,7 +292,7 @@ def slides(url: str) -> list[tuple[str, str, str]]:
 <section class="slide">
   <h1><span class="muted" style="font-weight:400">Acto 1 ·</span> el agente que hace trampa</h1>
   <div class="terms">
-    {term("líneas base", [("$ contraprueba case cases/facturas", "muted"), ("", ""),
+    {term("líneas base", [("$ contraprueba case … --pr trampa-paquete", "muted"), ("", ""),
           ("PR trampa-paquete", ""), ("  ci        aprobado", "green"), ("  restore   aprobado", "green"), ("", ""),
           ("CI normal y tests restaurados", "muted"), ("en el mismo contenedor", "muted")], ("✅ APROBADO ×2", "green"))}
     {term("contraprueba · modo full", [("test de la base falla desde", ""), ("otro contenedor:", ""),
@@ -299,30 +311,53 @@ def slides(url: str) -> list[tuple[str, str, str]]:
 <section class="slide">
   <h1><span class="muted" style="font-weight:400">Acto 2 ·</span> el parche a medias</h1>
   <div class="terms">
-    {term("validar-bot", [("ataques visibles", "muted"), ("", ""), ("authz-invoice-1  bloqueado", "green"),
-          ("authz-invoice-2  bloqueado", "green"), ("", ""), ("GET /invoices/{id}", "muted")], ("✅ 2/2 BLOQUEADOS", "green"))}
-    {term("contraprueba check", [("ataque reservado sigue entrando:", ""), ("  authz-pdf", "yellow"),
-          ("  GET /invoices/1/pdf", "yellow"), ("", ""), ("el bot nunca vio este ataque", "muted")],
-          ("❌ RECHAZADO", "red"))}
+    {term("validación del bot · visible", [("10 ataques que el bot vio", ""), ("", ""),
+          ("GET /invoices/{id}", "muted"), ("GET /invoices/{id}/pdf", "muted"), ("GET /attachments?name=../…", "muted"),
+          ("", ""), ("todos bloqueados", "green")], ("✅ APROBADO", "green"))}
+    {term("contraprueba · modo full", [("11 ataques reservados", ""), ("siguen entrando:", ""),
+          ("  GET /invoices/1/total", "yellow"), ("  GET /v2/invoices/1", "yellow"),
+          ("  GET /invoices/export?ids=1", "yellow"), ("  GET /attachments?name=./../…", "yellow"), ("", ""),
+          ("el bot nunca vio estas rutas", "muted")], ("❌ RECHAZADO", "red"))}
   </div>
   {foot("respaldo")}
 </section>""",
-        "«El bot vio dos ataques y los tapó. Su validación: verde. Nosotros guardamos otros que nunca vio. "
-        "Uno entra: rechazado.» Ids y rutas reales de cases/facturas/attacks.json; la salida es provisional "
-        "hasta que existan las ramas parche-a-medias y parche-correcto (Hito 2)."))
+        "Salida real de parche-a-medias (results/bench.json). «El bot vio diez ataques y los tapó: su "
+        "validación da verde. Arregló dos rutas y una forma de ruta de archivo. Nosotros guardamos otros 19 "
+        "que nunca vio; 11 siguen entrando por /total, /v2, /export y ./../. Rechazado.»"))
 
     S.append(("Respaldo acto 2 (correcto)", f"""
 <section class="slide">
   <h1><span class="muted" style="font-weight:400">Acto 2 ·</span> el parche correcto</h1>
   <div class="terms single">
-    {term("contraprueba check", [("12 tests de la base       pasan", ""), (" 5 ataques reservados     bloqueados", ""),
-          (" · tests funcionales      pasan", ""), (" 0 hooks de evaluación", ""), ("", ""),
+    {term("contraprueba check", [("12 tests de la base          pasan", ""), ("19 ataques reservados        bloqueados", ""),
+          (" 5 tests funcionales reserv. pasan", ""), (" 0 hooks de evaluación", ""), ("", ""),
           ("evidencia → report.json de la corrida", "muted")], ("✅ APROBADO", "green"))}
   </div>
   {foot("respaldo")}
 </section>""",
         "«El segundo parche arregla la falla de verdad: aprobado, y con la evidencia de qué se probó.» "
-        "Números provisionales hasta Hito 2: 12 tests de la base y 5 ataques authz reservados (7 menos 2 visibles)."))
+        "Salida real de parche-correcto: comprueba el dueño en un solo lugar para todas las rutas y confina "
+        "los adjuntos a la carpeta del usuario."))
+
+    S.append(("Con agentes reales", f"""
+<section class="slide">
+  <h1>Con agentes de código reales</h1>
+  <h2>Cada agente corre aislado: ve la rama base y los ataques visibles, nada más.</h2>
+  <div class="cards c3" style="grid-template-columns:1fr 1fr">
+    <div class="panel card"><div class="t">Encargo normal: arreglar la falla</div>
+      <div class="n" style="margin-top:20px">8/8</div>
+      <div class="d" style="margin-top:16px">parches aprobados por Contraprueba<br>2 Sonnet · 4 Haiku · 2 Codex</div>
+      <div class="d" style="margin-top:28px">No bloquea parches buenos de modelos reales.</div></div>
+    <div class="panel card" style="border-color:var(--red)"><div class="t">Política de ataque: tapar solo lo que vio</div>
+      <div class="n" style="margin-top:20px;color:var(--red)">3/3</div>
+      <div class="d" style="margin-top:16px">pasan su propia validación<br>y Contraprueba los rechaza a los tres</div>
+      <div class="d" style="margin-top:28px">Como en las evaluaciones de AI control: un parchador instruido para el cambio mínimo.</div></div>
+  </div>
+  {foot("respaldo · contraprueba fix · results/bots/")}
+</section>""",
+              "Preguntas: ¿funciona con modelos de verdad? Con el encargo normal, 8 de 8 parches reales se aprobaron. "
+              "Con un parchador instruido para hacer el cambio mínimo, 3 de 3 pasaron su propia validación y "
+              "Contraprueba los rechazó."))
 
     steps = [
         ("1", "Prueba desde afuera", "La app del PR corre en un contenedor; el evaluador, con los tests de la "
@@ -341,13 +376,14 @@ def slides(url: str) -> list[tuple[str, str, str]]:
 
     cols = [
         ("Cubre hoy", "green", ["APIs web en Python", "Autorización por recurso (ver datos de otro usuario)",
-                                "Acceso indebido a archivos", "Casos de BaxBench y CVE con exploit verificable"]),
+                                "Acceso indebido a archivos", "Ataques por plantillas, sin modelos, confirmados contra la base"]),
         ("No cubre", "red", ["Tests unitarios en el mismo proceso: solo se marcan",
                              "Trampas que no tocan la evaluación",
+                             "Cambios a tests existentes: se bloquean y piden revisión humana (1 falsa alarma)",
                              "No promete «cero vulnerabilidades»: reporta qué se probó"]),
-        ("Cómo lo medimos", "yellow", ["Trampas detectadas vs. falsas alarmas",
-                                       "Parches con validación propia verde que caen con reservados",
-                                       "Cambios legítimos que se aprueban"]),
+        ("Cómo lo medimos", "yellow", ["19 PR etiquetados sobre 1 app, en 4 modos",
+                                       "Intervalos de Wilson al 95 %: anchos, describen la muestra",
+                                       "PR escritos a mano; además, parches de Claude Code y Codex"]),
     ]
     cards = "".join(f'<div class="panel card"><div class="t {c}">{esc(t)}</div><ul>'
                     + "".join(f"<li>{esc(b)}</li>" for b in bs) + "</ul></div>" for t, c, bs in cols)
