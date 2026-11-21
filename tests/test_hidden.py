@@ -27,6 +27,9 @@ def test_roundtrip_keeps_attacks_split_and_tests(sealed, tmp_path):
     assert m.split == case.split()
     assert (m.holdout_tests / "test_funcional.py").read_bytes() == (case.holdout_tests_path / "test_funcional.py").read_bytes()
     assert oct((tmp_path / "r").stat().st_mode & 0o777) == "0o700"
+    # Adentro, legible por otro usuario: el evaluador corre con un uid distinto al del runner.
+    assert (m.holdout_tests / "test_funcional.py").stat().st_mode & 0o004
+    assert m.holdout_tests.stat().st_mode & 0o005 == 0o005
 
 
 def test_package_is_not_readable_without_the_key(sealed):

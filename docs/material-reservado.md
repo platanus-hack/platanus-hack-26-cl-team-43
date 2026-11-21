@@ -26,7 +26,7 @@ El paquete cifrado puede vivir en el repo. La configuración de la rama base lo 
 
 1. `cachai check` lee `.cachai.json` y el paquete **del commit de la base**, por hash. El árbol del PR no se usa para eso: un PR que reemplaza el paquete no cambia nada, y además la revisión de integridad lo marca.
 2. La clave sale de la variable que nombra `key_env`, en el proceso de Cachai.
-3. El paquete se descifra en una carpeta temporal privada (0700) del runner.
+3. El paquete se descifra en una carpeta temporal privada (0700) del runner. Lo de adentro queda legible para que el usuario del contenedor del evaluador, que tiene otro uid, pueda leerlo a través del montaje.
 4. Esa carpeta se monta de solo lectura **solo** en el contenedor del evaluador. El contenedor de la app del PR no recibe la carpeta, ni el archivo cifrado, ni ninguna variable de entorno del job.
 5. Si falta la clave o el paquete no abre, la revisión queda **incompleta** y no se aprueba. Sin evidencia no hay aprobado.
 

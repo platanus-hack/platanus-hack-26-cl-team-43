@@ -83,7 +83,7 @@ def _tar(files: dict[str, bytes]) -> bytes:
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         for name in sorted(files):
             info = tarfile.TarInfo(name)
-            info.size, info.mode, info.mtime = len(files[name]), 0o600, 0
+            info.size, info.mode, info.mtime = len(files[name]), 0o644, 0
             tar.addfile(info, io.BytesIO(files[name]))
     return buf.getvalue()
 
@@ -117,7 +117,13 @@ def seal(key: str, attacks_file: Path | None = None, holdout_tests: Path | None 
 
 
 def open_package(sealed: bytes, key: str | None, dest: Path) -> HiddenMaterial:
-    """Comprueba, descifra y extrae en `dest` (que se crea con permisos 0700)."""
+    """Comprueba, descifra y extrae en `dest`.
+
+    `dest` se crea con permisos 0700: en el host, nadie más que este proceso
+    entra. Lo de adentro queda legible (0755 y 0644) porque se monta en el
+    contenedor del evaluador, que corre con otro usuario: en un runner de CI
+    ese uid no coincide con el del dueño de los archivos.
+    """
     key = _check_key(key)
     if not sealed.startswith(MAGIC) or len(sealed) < len(MAGIC) + 48:
         raise HiddenError("no es un paquete reservado de Cachai")
@@ -129,6 +135,11 @@ def open_package(sealed: bytes, key: str | None, dest: Path) -> HiddenMaterial:
     dest.mkdir(mode=0o700, parents=True, exist_ok=False)
     with tarfile.open(fileobj=io.BytesIO(plain), mode="r:gz") as tar:
         tar.extractall(dest, filter="data")
+    for root, dirs, files in os.walk(dest):
+        for d in dirs:
+            os.chmod(Path(root) / d, 0o755)
+        for f in files:
+            os.chmod(Path(root) / f, 0o644)
     manifest = json.loads((dest / MANIFEST).read_text())
     if manifest.get("format") != FORMAT:
         raise HiddenError(f"formato de paquete desconocido: {manifest.get('format')!r}")
