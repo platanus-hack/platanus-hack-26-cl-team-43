@@ -216,6 +216,14 @@
           }
         }
       }
+    },
+    "tests_runner": {
+      "enum": [
+        "pytest",
+        "jest"
+      ],
+      "default": "pytest",
+      "description": "Con qué corren los tests de la base. jest corre con la imagen construida desde la rama base (necesita app.dockerfile o app.compose), en otro contenedor que la app del PR, con BASE_URL."
     }
   },
   "$defs": {

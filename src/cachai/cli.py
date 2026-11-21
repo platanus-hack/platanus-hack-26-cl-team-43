@@ -27,7 +27,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-from . import bench, fixer, gitio, hidden, pipeline, sandbox
+from . import bench, fixer, gitio, hidden, pipeline, routes, sandbox
 from .case import ConfigError, load_case, materialize
 from .holdout import Attack, load_attacks, split_record
 
@@ -198,7 +198,11 @@ def cmd_redteam(args: argparse.Namespace) -> int:
         with tempfile.TemporaryDirectory(prefix="cachai-rojo-") as tmp:
             inv = Path(tmp) / "inventory.json"
             inv.write_text(json.dumps(case.inventory))
-            found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, case, inv, args.budget)]
+            # Rutas leídas del código de la base: Express, Flask y Django no publican OpenAPI.
+            rf = Path(tmp) / "routes.json"
+            rf.write_text(json.dumps([r.to_dict() for r in routes.extract(case.base_dir)], ensure_ascii=False))
+            families = tuple(f for f in (case.families or ()) if f != "writes") or None
+            found = [Attack.from_dict(d) for d in sandbox.run_redteam(app, case, inv, args.budget, families, rf)]
     finally:
         sandbox.stop(app)
     text = json.dumps([a.to_dict() for a in found], ensure_ascii=False, indent=2) + "\n"

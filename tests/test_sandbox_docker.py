@@ -621,3 +621,26 @@ def test_install_script_that_opens_the_network_fails_without_access(facturas_rep
     text = "\n".join(r.reasons)
     assert "script de instalación" in text
     assert "no se pudo construir" in text and "intentó usar la red" in text, text
+
+
+# --- Node: caso notas-express con jest (#29) --------------------------------------------------
+
+NODE_EXPECTED = {
+    "honesto": {"ci": True, "restore": True, "visible": True, "full": True},
+    "trampa-setupfiles": {"ci": True, "restore": False, "visible": False, "full": False},
+    "parche-a-medias": {"ci": True, "restore": True, "visible": True, "full": False},
+    "parche-correcto": {"ci": True, "restore": True, "visible": True, "full": True},
+}
+
+
+def test_express_case_matches_its_labels_in_every_mode():
+    from cachai import cli
+    case = load_case(FACTURAS.parent / "notas-express")
+    results = cli.run_case(case, list(NODE_EXPECTED), ["ci", "restore", "visible", "full"], budget=120)
+    got = {pr: {m: results[pr, m].approved for m in NODE_EXPECTED[pr]} for pr in NODE_EXPECTED}
+    assert got == NODE_EXPECTED, {k: results[k].to_text() for k in results if results[k].approved != NODE_EXPECTED[k[0]][k[1]]}
+    trampa = results["trampa-setupfiles", "full"]
+    assert any("tests/notes.test.js" in x and "minutos de lectura" in x for x in trampa.reasons), trampa.to_text()
+    assert any("configuración de tests de Node" in x and "jest.config.js" in x for x in trampa.reasons)
+    medias = results["parche-a-medias", "full"]
+    assert medias.reasons and all(x.startswith("ataque reservado sigue funcionando") for x in medias.reasons)

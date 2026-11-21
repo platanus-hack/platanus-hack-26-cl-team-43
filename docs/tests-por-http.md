@@ -93,3 +93,22 @@ cargaban antes de que el plugin instalara los sustitutos, así que la suite ente
 `ModuleNotFoundError` (`pandas`, `sqlalchemy`), y en fastapi-nano llamar `create_app()` en
 la fixture del cliente dejaba los 9 como no evaluados. El plugin ahora instala los
 sustitutos antes de los `conftest.py` y los hace perezosos, como se describe arriba.
+
+## Node (jest)
+
+Con `"tests_runner": "jest"` en `.cachai.json`, los tests de la base corren con jest en un
+contenedor construido desde la rama base (su Dockerfile, sus dependencias de desarrollo, su
+configuración de jest y sus tests), en la misma red que la app del PR y con `BASE_URL`. Nada
+del PR entra en esa imagen. Necesita `app.dockerfile` o `app.compose`, y que la base tenga
+`jest-junit` entre sus dependencias de desarrollo (Cachai lee el resultado de ahí).
+
+Los tests usan supertest contra la URL cuando existe:
+
+```js
+const request = require('supertest');
+const client = () => request(process.env.BASE_URL || require('../src/app'));
+```
+
+Un PR que cambia `jest.config.*`, `vitest.config.*`, `.mocharc*` o la sección `jest`, `mocha`
+o el script `test` de `package.json` se bloquea: ahí viven `setupFiles` y los reporters. Ver
+el caso `cases/notas-express`.
