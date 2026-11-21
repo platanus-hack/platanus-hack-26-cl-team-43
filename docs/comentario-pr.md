@@ -1,8 +1,10 @@
 # Comentario de Cachai en el PR
 
 Así se ve el comentario que la Action publica en el PR (issue #9). Es un solo comentario:
-la Action lo encuentra por el marcador oculto `<!-- cachai-report -->` y por su autor
-(`github-actions[bot]`), y lo edita en cada push en vez de sumar uno nuevo. Además crea un
+la Action (`action/publish.js`) lo reconoce porque lo firma su autor (`github-actions[bot]`),
+empieza con `### Cachai:` y termina con el marcador oculto `<!-- cachai-report -->`, y lo edita en
+cada push en vez de sumar uno nuevo. Si la revisión se cae o se cancela, lo pasa a «sin veredicto»;
+si GitHub rechaza el cuerpo, publica uno mínimo. El cuerpo nunca pasa de 60000 caracteres. Además crea un
 check run `cachai: veredicto` cuyo título es el resumen corto (`public.summary` del reporte v2).
 
 Los ejemplos de abajo son la salida real de `cachai check --mode full` con Docker sobre PRs de

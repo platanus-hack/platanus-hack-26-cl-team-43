@@ -57,14 +57,22 @@ LOCATION = re.compile(r"^(\S+:\d+)\s+(.*)$", re.S)
 VISIBLE_ATTACK = re.compile(r"^(\S+) \(([A-Z]+ \S.*)\)$", re.S)  # `Attack.describe`: id (MÉTODO ruta)
 MAX_PER_KIND = 15  # motivos por sección; el resto va contado
 MAX_SUMMARY = 200  # largo del título de un check run
+MAX_CODE = 300  # caracteres de un detalle en el comentario
+# GitHub rechaza (422) un comentario de más de 65536 caracteres y deja el anterior: el cuerpo nunca lo pasa.
+MAX_BODY = 60000
+CUT = "- … recortado: ver el reporte JSON del job"
 
 
 def code(text: str) -> str:
-    """Texto como código en línea, a prueba de comillas invertidas, saltos de línea y comentarios HTML."""
+    """Texto como código en línea, a prueba de comillas invertidas, saltos de línea y comentarios HTML.
+
+    Siempre cierra en la misma línea: recortar el comentario por líneas nunca deja un bloque abierto."""
     # Sin «<!--»: un detalle del PR no puede llevar una copia del marcador del comentario.
     text = " ".join(str(text).split()).replace("<!--", "<!- -")
     if not text:
         return ""
+    if len(text) > MAX_CODE:
+        text = text[: MAX_CODE - 1] + "…"
     fence = "`" * (max((len(m) for m in re.findall(r"`+", text)), default=0) + 1)
     pad = " " if text.startswith("`") or text.endswith("`") else ""
     return f"{fence}{pad}{text}{pad}{fence}"
@@ -150,23 +158,63 @@ def _reasons(reasons: list[dict]) -> list[str]:
     return lines
 
 
-def markdown(report: dict) -> str:
-    """Cuerpo del comentario del PR. Termina con `MARKER` para que la Action lo encuentre y lo edite."""
-    outcome = report["outcome"]
-    lines = [f"### Cachai: {OUTCOME_TITLE[outcome]}", "",
+def _tail(report: dict) -> list[str]:
+    """Texto fijo del final: cómo reproducir lo visible y el marcador."""
+    return ["", "<details><summary>Reproducir en local lo visible</summary>", "",
+            "```sh", repro_command(report), "```", "",
+            "Corre la app y el evaluador en contenedores separados con los tests de la rama base y los ataques "
+            "visibles. Los ataques y tests reservados no se reproducen en local: por eso miden algo que el autor "
+            "del PR no pudo ver.", "", "</details>", "", MARKER]
+
+
+def _head(report: dict) -> list[str]:
+    lines = [f"### Cachai: {OUTCOME_TITLE[report['outcome']]}", "",
              f"PR `{report['pr'][:10]}` sobre base `{report['base'][:10]}`, modo `{report['mode']}`."]
     if report["mode"] in MODE_DESC:
         lines += ["", f"**Cómo se evaluó:** {MODE_DESC[report['mode']]}"]
+    return lines
+
+
+def markdown(report: dict) -> str:
+    """Cuerpo del comentario del PR. Termina con `MARKER` para que la Action lo encuentre y lo edite.
+
+    El reporte llega ya redactado; acá no se redacta nada, así el texto fijo (títulos, `<details>`,
+    comando, marcador) queda intacto aunque un texto reservado coincida con una de sus palabras.
+    """
+    head, tail = _head(report), _tail(report)
+    body: list[str] = []
     if report["checked"]:
-        lines += ["", "**Comprobado**", ""] + [f"- {c}" for c in report["checked"]]
-    if outcome == "incomplete":
-        lines += ["", "No se detectó un problema, pero faltó evidencia: sin evidencia no hay aprobado."]
-    lines += _reasons(report["reasons"])
+        body += ["", "**Comprobado**", ""] + [f"- {c}" for c in report["checked"]]
+    if report["outcome"] == "incomplete":
+        body += ["", "No se detectó un problema, pero faltó evidencia: sin evidencia no hay aprobado."]
+    body += _reasons(report["reasons"])
     if report["notes"]:
-        lines += ["", "**Notas** (no bloquean)", ""] + [f"- {code(n)}" for n in report["notes"]]
-    lines += ["", "<details><summary>Reproducir en local lo visible</summary>", "",
-              "```sh", repro_command(report), "```", "",
-              "Corre la app y el evaluador en contenedores separados con los tests de la rama base y los ataques "
-              "visibles. Los ataques y tests reservados no se reproducen en local: por eso miden algo que el autor "
-              "del PR no pudo ver.", "", "</details>", "", MARKER]
-    return "\n".join(lines) + "\n"
+        body += ["", "**Notas** (no bloquean)", ""] + [f"- {code(n)}" for n in report["notes"]]
+    # Se recorta por líneas enteras: cada línea del cuerpo abre y cierra sus bloques de código.
+    budget = MAX_BODY - len("\n".join(head + tail)) - len(CUT) - 4
+    kept, used = [], 0
+    for line in body:
+        if used + len(line) + 1 > budget:
+            kept += ["", CUT]
+            break
+        kept.append(line)
+        used += len(line) + 1
+    text = "\n".join(head + kept + tail) + "\n"
+    ensure_intact(text, report)
+    return text
+
+
+def ensure_intact(text: str, report: dict) -> None:
+    """Falla si el texto fijo del comentario no quedó entero: sin él, la Action no encuentra su comentario."""
+    lines = text.rstrip("\n").split("\n")
+    problems = []
+    if lines[0] != f"### Cachai: {OUTCOME_TITLE[report['outcome']]}":
+        problems.append("título")
+    if lines[-1] != MARKER or text.count(MARKER) != 1:
+        problems.append("marcador")
+    if lines[-len(_tail(report)):] != _tail(report):
+        problems.append("reproducción")
+    if len(text) > MAX_BODY:
+        problems.append("largo")
+    if problems:
+        raise ValueError(f"comentario de Cachai roto ({', '.join(problems)})")

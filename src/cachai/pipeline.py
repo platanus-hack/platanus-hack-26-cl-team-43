@@ -106,8 +106,10 @@ class CheckResult:
         """Reporte v2 (`schema/report.schema.json`): lo que la Action sube y comenta en el PR.
 
         Todo el reporte es público: los motivos de un reservado llevan solo
-        familia y ruta, y una última pasada borra cualquier texto del material
-        reservado (ids, pedidos, marcas, nombres de tests) que se haya colado.
+        familia y ruta, y antes de armar el texto se borra de los motivos, las
+        notas y lo comprobado cualquier texto del material reservado (ids,
+        pedidos, marcas, nombres de tests) que se haya colado. El texto fijo del
+        comentario se agrega después y `report_md.ensure_intact` lo verifica.
         El detalle completo queda en `to_dict`, para quien tiene el material.
         """
         typed = self.typed or [Reason("incomplete" if self.outcome == "incomplete" else "test_base", r, r) for r in self.reasons]
@@ -126,14 +128,14 @@ class CheckResult:
             "pr": self.pr,
             "approved": self.approved,
             "outcome": self.outcome,
-            "checked": self.checked(),
-            "reasons": reasons,
-            "notes": list(self.notes),
+            # Solo los campos que vienen de datos se redactan, y antes de armar el texto: el texto fijo
+            # del comentario (títulos, comando, marcador) no se toca aunque un secreto coincida con él.
+            "checked": _redact(self.checked(), self.secrets),
+            "reasons": _redact(reasons, self.secrets),
+            "notes": _redact(list(self.notes), self.secrets),
         }
-        # Se redacta antes de armar el texto y otra vez después: nada reservado llega al comentario.
-        report = _redact(report, self.secrets)
         report["public"] = {"summary": report_md.summary(report), "markdown": report_md.markdown(report)}
-        return _redact(report, self.secrets)
+        return report
 
 
 def checked_lines(report: dict) -> list[str]:

@@ -1,5 +1,7 @@
 # Copia este archivo a .github/workflows/cachai.yml y marca el check «cachai» como obligatorio
 # en la regla de la rama principal. Ver docs/material-reservado.md.
+# El check obligatorio es el job «cachai», no el check run «cachai: veredicto»: ese es solo el
+# resumen para la lista de checks, y no existe en un PR desde un fork ni si la revisión se cae.
 name: cachai
 
 on:
@@ -18,7 +20,7 @@ concurrency:
 # En un PR desde un fork, GitHub da un token de solo lectura aunque pidas write: Cachai
 # corre igual, avisa con un warning y deja el veredicto en el resumen del job y en el
 # artefacto. No uses pull_request_target para «arreglarlo»: correría el código del fork
-# con un token con permisos de escritura.
+# con un token con permisos de escritura (la Action corta con error si ve ese evento).
 permissions:
   contents: read
   pull-requests: write
