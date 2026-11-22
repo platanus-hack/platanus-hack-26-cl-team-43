@@ -23,7 +23,7 @@ El adversario es el proveedor. Controla el servidor, ve cada petición y puede c
 | A1 | Inyecta un system prompt propio delante del pedido del cliente | Respuestas normales | Excedente **constante** de tokens de prompt frente a la referencia en mensajes mínimos; si el prompt cambia el comportamiento, el canario | E2 | **Medido** con el tramposo propio |
 | A2 | Desvía todo el tráfico a un modelo más barato y responde con el nombre del pedido | El nombre del modelo correcto | Exactitud y coincidencia con la referencia en tareas con respuesta calculable (Fisher exacto) | E2 | **Medido** con el tramposo propio |
 | A3 | Desvía solo una fracción del tráfico | Casi siempre respuestas buenas | Prueba combinada sobre todas las fallas; la potencia crece con el número de tareas | E2 | **Medido**: 30 % detectado en 6/30 con 20 tareas y en 30/30 con 80 |
-| A4 | Rompe las tool calls (parser o plantilla) | Agentes que fallan | Una tool con esquema estricto; se valida nombre, claves y valores | E2 | Implementado, sin medición propia |
+| A4 | Rompe las tool calls (parser o plantilla) | Agentes que fallan | Tres tools con esquema estricto (objetos anidados, enteros con rango, `$ref`), la mitad en streaming; se valida nombre, claves, tipos y valores | E2 | **Medido** en GLM-5.3: tres de seis endpoints devuelven un objeto anidado como texto |
 | A5 | **Reconoce las auditorías** y se porta bien solo con ellas | Un benchmark limpio | Juego ciego: pruebas generadas con una semilla nueva en cada auditoría | E2 | **Medido**: el benchmark fijo lo detecta 0/120 veces; el ciego, 30/30 en A1, A2 y A1+A3 |
 | A6 | Reconoce además **la forma** de las pruebas ciegas (estudió el generador) | Un benchmark limpio | No lo detecta. Mitigación: auditar con tráfico real del comprador (§7) | E2 | **Medido como límite**: 0/30 en todas las trampas |
 | A7 | Falsea el `usage` (cuenta de tokens) | Factura coherente | El excedente de tokens desaparece; queda la prueba de comportamiento | E2 | Límite declarado |
@@ -33,7 +33,7 @@ El adversario es el proveedor. Controla el servidor, ve cada petición y puede c
 
 - **Caja negra.** Solo hay acceso a la API, como cualquier comprador. Sin pesos ni GPU propia.
 - **Referencia.** Es el endpoint first-party si existe; si no, una referencia elegida o el consenso de los endpoints. La referencia también es un endpoint: se mide equivalencia con ella, no con los pesos.
-- **Costo.** 48 pruebas por endpoint, más una segunda pasada a la referencia como piso de ruido, y un tope de gasto por auditoría (`--max-usd`, 2 USD por defecto).
+- **Costo.** 52 pruebas por endpoint, más una segunda pasada a la referencia como piso de ruido, y un tope de gasto por auditoría (`--max-usd`, 2 USD por defecto).
 - **No determinismo.** Temperatura 0 y semilla fija reducen la variación, pero no la eliminan entre hardware distinto.
 - **Ética.** Solo se audita con uso normal de la API desde una cuenta propia. El proveedor tramposo es un proxy nuestro; nunca se ataca a terceros.
 
@@ -70,7 +70,7 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 
 **Auditor** (`src/cachai/`)
 1. **Lo declarado** (`endpoints.py`): lee de la API pública de OpenRouter la cuantización y el precio de cada endpoint del modelo, y elige cuáles auditar (el first-party más los más baratos, o los que se pidan).
-2. **Juego de pruebas** (`suite.py`): con una semilla, genera 48 pruebas: 6 mensajes mínimos para contar tokens, 20 tareas (suma, producto, ordenar, repetir), 4 tool calls con esquema estricto, 8 canarios (un secreto en el system prompt y un pedido de revelarlo) y 10 frases cortas de texto libre. Las de texto libre van al final, así una semilla anterior genera las mismas 38 primeras. Sin semilla genera el juego público, siempre igual.
+2. **Juego de pruebas** (`suite.py`): con una semilla, genera 52 pruebas: 6 mensajes mínimos para contar tokens, 20 tareas (suma, producto, ordenar, repetir), 8 tool calls con tres esquemas estrictos (la mitad en streaming), 8 canarios (un secreto en el system prompt y un pedido de revelarlo) y 10 frases cortas de texto libre. Las de texto libre van al final, así una semilla anterior genera las mismas 38 primeras. Sin semilla genera el juego público, siempre igual.
 3. **Cliente** (`client.py`): una llamada por prueba, con el proveedor fijado (`provider.only`, `allow_fallbacks: false`), temperatura 0 y semilla 7. **Nunca lanza**: un error vuelve dentro de la respuesta y se clasifica (clave inválida, sin crédito, falla del proveedor).
 4. **Ejecución** (`scan.py`): los endpoints se auditan en paralelo (hasta cuatro a la vez), con un tope de gasto compartido. Una clave inválida detiene ese endpoint en vez de reintentar.
 5. **Controles** (`checks.py`): de respuestas crudas a una medición por endpoint. Tokens: excedente constante o variable frente a la referencia. Tareas: exactitud con intervalo de Wilson y coincidencia con la referencia. Coincidencia: cuántas respuestas (tareas y texto libre) son idénticas a las de la referencia, comparado con Fisher contra lo que coincide el piso de ruido (la misma referencia en otra llamada); así el no determinismo del servidor no se cuenta como trampa. Tool calls: validez estricta. Canario: un juez determinista (el secreto aparece literal en la respuesta o no). Cada comparación con la referencia es un **test exacto de Fisher a dos colas** con α = 0,01 fijado antes de medir; si ningún control individual dispara, una prueba combinada suma todas las fallas.
@@ -99,10 +99,10 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 
 | Medición | Qué es | Métrica y estado |
 |---|---|---|
-| **M1. Tests** | 28 tests de punta a punta en memoria, sin red ni claves (`tests/`) | Todos pasan antes de cada cambio. **Medido**: 28/28. |
+| **M1. Tests** | 59 tests de punta a punta en memoria, sin red ni claves (`tests/`) | Todos pasan antes de cada cambio. **Medido**: 59/59. |
 | **M2. Línea base con el juguete** | Benchmark fijo contra juego ciego, cinco proveedores (uno honesto), 30 repeticiones por celda, 20 y 80 tareas | Detección por trampa con IC95 de Wilson; falsas alarmas del honesto. **Medido** (§6). |
 | **M3. Modelos reales servidos por nosotros** | Qwen2.5 1.5B servido con Ollama: Q8 como referencia y piso de ruido, y proveedores propios que sirven Q4, Q2, el 0.5B, un prompt oculto o un desvío del 30 %, más uno honesto (`cachai experimento --ollama`, 20 repeticiones) | Falsas alarmas del honesto ≤ 1/20 para aceptar α = 0,01; detección por trampa con IC95. **Medido**: honesto 0/20; prompt oculto, Q4, Q2 y 0.5B 20/20 cada uno; desvío del 30 % 8/20 (IC95 22-61 %); piso de ruido 30/30 en las 20. El Q4 se marcó solo por coincidencia: su exactitud no alcanzó a distinguirse de la referencia ([tabla](../results/linea-base/ollama-qwen2.5-t20.md)). |
-| **M4. Proveedores reales** | `cachai scan` sobre los endpoints de un modelo con varios proveedores | Fichas con su evidencia en `results/proveedores/`. **Preliminar**: una corrida sobre GLM-5.3 con la referencia incompleta por el límite de pedidos de Z.AI (sin prompt oculto en cinco endpoints; SiliconFlow corta las respuestas en la mitad del límite pedido). |
+| **M4. Proveedores reales** | `cachai scan` sobre los endpoints de un modelo con varios proveedores | Fichas con su evidencia en `results/proveedores/`. **Medido** en una auditoría de GLM-5.3 (cinco endpoints contra el del autor, 364 respuestas sin errores): sin prompt oculto, ninguno distinguible, y tres de seis endpoints devuelven un objeto anidado de una tool call como texto. El texto libre no tiene potencia con ese modelo (piso de ruido 0 de 10). |
 
 **Reglas de evidencia**
 

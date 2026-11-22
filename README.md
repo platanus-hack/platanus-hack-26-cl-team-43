@@ -82,7 +82,7 @@ El adversario es el proveedor. Controla el servidor, ve cada petición y puede c
 | Desviar todo el tráfico a un modelo más barato y responder con el nombre pedido | Exactitud y coincidencia con la referencia en tareas con respuesta calculable | Medido |
 | Servir una versión cuantizada que acierta casi lo mismo | Coincidencia del texto libre con la referencia, contra un piso de ruido | Medido con Qwen2.5 servido por nosotros |
 | Desviar solo una fracción del tráfico | Prueba combinada sobre todas las fallas; la potencia crece con el número de tareas | Medido: el 30 % se detecta en 6/30 con 20 tareas y en 30/30 con 80 |
-| Romper las tool calls (parser o plantilla) | Una herramienta con esquema estricto | Implementado, sin medición propia |
+| Romper las tool calls (parser o plantilla) | Tres herramientas con esquema estricto (objetos anidados, enteros con rango, `$ref`), la mitad en streaming | Medido en GLM-5.3: tres de seis endpoints devuelven un objeto anidado como texto |
 | **Reconocer las auditorías** y portarse bien solo con ellas | Juego ciego: pruebas generadas con una semilla nueva en cada auditoría | Medido: el benchmark fijo lo detecta 0/120 veces; el ciego, 30/30 |
 | Reconocer además la forma de las pruebas ciegas | No lo detecta. Mitigación: auditar con tráfico real | Medido como límite: 0/30 |
 | Mirar o guardar los datos | No se puede medir desde afuera | Fuera del alcance |
@@ -99,14 +99,14 @@ Se apoya en tres ideas:
 2. **Controles deterministas, sin juez LLM.** Todas las pruebas tienen respuesta calculable. El auditor no puede ser inyectado por la respuesta que audita y da el mismo veredicto cada vez.
 3. **Evidencia con su nivel a la vista.** Cada dato de la ficha dice si lo declara el proveedor (E1), si se midió desde afuera (E2) o si está atestado criptográficamente (E3). Un sello único de «proveedor confiable» mezclaría lo que el proveedor dice con lo que se midió. Hoy el código cubre E1 y E2.
 
-Qué mide en cada endpoint (48 pruebas por auditoría):
+Qué mide en cada endpoint (52 pruebas por auditoría):
 
 | Control | Qué delata | Cómo |
 |---|---|---|
 | Tokens de prompt de sobra | Un prompt oculto | 6 mensajes mínimos; un excedente constante frente a la referencia es la firma de un prefijo agregado |
 | Exactitud y coincidencia con la referencia | Un modelo sustituido o degradado | 20 tareas con respuesta calculable (sumas, productos, ordenar, repetir), a temperatura 0 |
 | Coincidencia del texto libre | Una cuantización o un modelo distinto que acierta igual | 10 frases cortas a temperatura 0. Se compara con lo que coincide la referencia consigo misma en otra llamada (el piso de ruido), no con un 100 % ideal |
-| Tool calls válidas | Un parser o una plantilla distintos | 4 llamadas a una herramienta con esquema estricto |
+| Tool calls válidas | Un parser o una plantilla distintos | 8 llamadas a tres herramientas con esquema estricto, la mitad en streaming |
 | Canario | Que el endpoint filtre el secreto del system prompt | 8 secretos distintos y un juez determinista: el secreto aparece literal en la respuesta o no |
 | Confiabilidad | Un endpoint inestable | Errores y latencia mediana de cada endpoint durante la corrida |
 
@@ -121,7 +121,7 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 **El auditor** (`cachai scan`) recorre cinco pasos:
 
 1. **Lo declarado** (`endpoints.py`). Lee de la API pública de OpenRouter la cuantización y el precio de cada endpoint del modelo, y elige cuáles auditar.
-2. **Juego ciego** (`suite.py`). Con una semilla nueva genera las 48 pruebas. Sin semilla genera el juego público, siempre igual, que sirve de comparación.
+2. **Juego ciego** (`suite.py`). Con una semilla nueva genera las 52 pruebas. Sin semilla genera el juego público, siempre igual, que sirve de comparación.
 3. **Las mismas pruebas a todos** (`client.py`, `scan.py`). Las manda a cada endpoint fijado (`provider.only`, sin fallback) y a una referencia, a temperatura 0, en paralelo y con un tope de gasto. La referencia se consulta dos veces: la segunda es el piso de ruido. Un error no detiene la auditoría: se registra como dato de confiabilidad.
 4. **Controles** (`checks.py`). Convierte las respuestas crudas en una medición por endpoint y la compara con la referencia. Si ningún control individual dispara, una prueba combinada suma todas las fallas.
 5. **Ficha** (`ficha.py`). JSON y Markdown con lo declarado, lo medido, el motivo de cada marca, los límites, la semilla y el SHA-256 de las respuestas crudas, que se guardan aparte.
@@ -150,6 +150,7 @@ Un proveedor tramposo propio (un proxy hacia el mismo modelo) aplica cuatro tram
 - **La potencia depende del tamaño de la muestra**: con 80 tareas, el desvío del 30 % pasa de 6/30 a 30/30.
 - **El límite, medido igual**: un tramposo que además reconoce las plantillas del juego ciego evade a Cachai en todas las condiciones (0/30). Por eso el diseño final audita con una muestra del tráfico real del comprador ([`docs/arquitectura.md`](docs/arquitectura.md#7-lo-que-sigue)).
 - **Alcance**: el upstream es un modelo de juguete con reglas fijas. Prueba que el mecanismo funciona; no es un hallazgo sobre ningún proveedor.
+- **Versión del juego**: esta tabla y la de Qwen se midieron con el juego de 48 pruebas. Después se sumaron tool calls con esquemas anidados y streaming (52 pruebas). Repetida con el juego nuevo, la línea base del juguete da el mismo patrón: control 0/30, prompt oculto y desvío total 30/30, desvío del 30 % 12/30 y evasión por plantillas 0/30 ([`juguete-t20-52-pruebas.md`](results/linea-base/juguete-t20-52-pruebas.md)).
 
 ### Modelos reales servidos por nosotros
 
@@ -171,12 +172,22 @@ La misma línea base con un modelo real: Qwen2.5 1.5B servido con Ollama. La ref
 
 ### Medición contra proveedores reales
 
-Una primera corrida, preliminar: `cachai scan z-ai/glm-5.3` sobre OpenRouter el 22-11-2026, con los cinco endpoints más baratos de GLM-5.3 contra el del autor (USD 0,05). La ficha, las respuestas crudas y cómo leerlas están en [`results/proveedores/`](results/proveedores/).
+`cachai scan z-ai/glm-5.3` sobre OpenRouter el 22-11-2026: los cinco endpoints más baratos de GLM-5.3 (de cuatro proveedores) contra el del autor, Z.AI. Son 364 respuestas sin ningún error, por USD 0,16. La ficha, las respuestas crudas y cómo leerlas están en [`results/proveedores/`](results/proveedores/).
 
-- **Ningún endpoint agrega un prompt oculto**: los cinco cuentan los mismos tokens de prompt que la referencia. Las tool calls cumplen el esquema en todos.
-- **Cuatro de los cinco no se distinguen de la referencia en las tareas** (19 o 20 de 20 correctas).
-- **SiliconFlow corta las respuestas en la mitad exacta del límite pedido**, en los cuatro tipos de prueba (128 de 256, 32 de 64, 24 de 48, 4 de 8). Como GLM-5.3 razona antes de responder, la respuesta queda trunca y la ficha lo marca con 9 de 20. Es una diferencia real del endpoint, no evidencia de otro modelo, y no verificamos si el corte es del proveedor o del adaptador de OpenRouter.
-- **Alcance**: la referencia quedó incompleta. Z.AI limita las cuentas nuevas de OpenRouter a 20 pedidos por minuto y respondió 30 de 48 pruebas, así que esta corrida no tiene piso de ruido ni comparación de texto libre. Desde entonces el auditor espera y repite ante un 429, y `--extra-tokens` da margen a los modelos que razonan siempre.
+| Endpoint | Cuantización declarada | Prompt oculto | Tareas correctas | Tool calls válidas | Resultado |
+|---|---|---|---|---|---|
+| Z.AI (el autor, referencia) | fp8 | | 20/20 | 5/8 | referencia |
+| Wafer (us) | fp4 | No | 20/20 | 8/8 | sin desviación detectada |
+| Wafer (fp4) | fp4 | No | 20/20 | 8/8 | sin desviación detectada |
+| Decart | fp4 | No | 20/20 | 8/8 | sin desviación detectada |
+| SiliconFlow | fp8 | No | 19/20 | 5/8 | sin desviación detectada |
+| Novita | fp8 | No | 20/20 | 5/8 | sin desviación detectada |
+
+- **Ningún endpoint agrega un prompt oculto ni se distingue de la referencia** con esta muestra, y ninguno reveló el secreto del system prompt.
+- **Las tool calls con un objeto anidado fallan en el endpoint del autor.** Z.AI, SiliconFlow y Novita devuelven el objeto `target` como un texto con JSON adentro, en las tres llamadas que lo piden; Wafer y Decart lo devuelven como objeto. La ficha no marca a nadie porque la referencia es el endpoint del autor y los que cumplen el esquema son los que se apartan de ella (p = 0,2 con 8 llamadas). Un agente que valide el esquema fallaría esas llamadas en los tres endpoints fp8.
+- **SiliconFlow corta las respuestas en la mitad del límite pedido.** En una primera corrida sin margen de tokens, eso truncó sus respuestas y salió marcado con 9 de 20 tareas; con margen acierta 19 de 20. Era truncamiento, no otro modelo. No verificamos si el corte es del proveedor o del adaptador de OpenRouter.
+- **El piso de ruido evitó cinco falsas alarmas.** GLM-5.3 razona siempre y no es determinista a temperatura 0: la referencia consultada dos veces no repitió ninguna de sus 10 frases. Ningún endpoint coincide con ella en texto libre y eso, aquí, no significa nada.
+- **Alcance**: una auditoría, una semilla, cinco endpoints. Con este modelo el control de texto libre no tiene potencia, y es el que delata una cuantización: que los tres fp4 no se distingan del fp8 no prueba que sean equivalentes.
 
 ## Lo que no prometemos
 
@@ -191,7 +202,7 @@ Una primera corrida, preliminar: `cachai scan z-ai/glm-5.3` sobre OpenRouter el 
 ```
 src/cachai/        el auditor
   endpoints.py       lo que declara cada endpoint en OpenRouter (E1) y cuáles auditar
-  suite.py           juego público (fijo) y ciego (con semilla): 48 pruebas (38 con respuesta calculable y 10 de texto libre)
+  suite.py           juego público (fijo) y ciego (con semilla): 52 pruebas (42 con respuesta calculable y 10 de texto libre)
   client.py          una llamada a un endpoint: proveedor fijado, temperatura 0, nunca lanza
   scan.py            corre las pruebas en paralelo por endpoint, con tope de gasto
   checks.py          controles deterministas, Fisher exacto, Wilson y el veredicto por endpoint
@@ -202,7 +213,7 @@ src/cachai/        el auditor
   providers.py       atajos de proveedores compatibles con OpenAI (URL y variable de la clave)
   serve.py           la demo en vivo: tres proveedores, uno tramposo, y la auditoría por SSE (demo.html)
   cli.py             cachai demo · scan · endpoints · serve · experimento
-tests/             28 tests de punta a punta, sin red ni claves
+tests/             59 tests de punta a punta, sin red ni claves
 examples/          configuraciones listas para copiar (OpenRouter, APIs directas, servidor propio, CI)
 results/linea-base/  resultados del experimento (JSON y Markdown)
 results/proveedores/  primera corrida contra proveedores reales (ficha y respuestas crudas)
@@ -211,7 +222,7 @@ deploy/demo/       imagen de la demo en vivo: Ollama con los modelos y cachai se
 
 ```bash
 uv sync
-uv run pytest -q                                   # 28 tests, sin red ni claves
+uv run pytest -q                                   # 59 tests, sin red ni claves
 uv run cachai experimento --toy --reps 30          # la línea base, sin claves (~2 min)
 uv run cachai endpoints z-ai/glm-5.3               # lo que declara cada proveedor, sin clave
 uv run cachai scan z-ai/glm-5.3 --providers 6 --max-usd 2   # necesita OPENROUTER_API_KEY

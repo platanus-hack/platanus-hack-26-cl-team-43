@@ -254,7 +254,7 @@ footer .equipo{display:flex;flex-wrap:wrap;gap:4px 16px}
       <div class="rejilla">
         <div><h3>Tokens de prompt de sobra <span class="insignia">E2</span></h3><p>Compara los tokens de prompt de mensajes mínimos contra la referencia. Un excedente constante es la firma de un prompt oculto.</p></div>
         <div><h3>Exactitud y coincidencia <span class="insignia">E2</span></h3><p>Tareas con respuesta calculable y frases de texto libre, a temperatura 0. La coincidencia con la referencia se compara con la de la propia referencia en otra llamada (el piso de ruido). Así se ve una cuantización que acierta igual pero responde distinto.</p></div>
-        <div><h3>Tool calls válidas <span class="insignia">E2</span></h3><p>Una herramienta con esquema estricto. Cuenta cuántas llamadas lo cumplen.</p></div>
+        <div><h3>Tool calls válidas <span class="insignia">E2</span></h3><p>Tres herramientas con esquema estricto, con objetos anidados y la mitad en streaming. Cuenta cuántas llamadas lo cumplen.</p></div>
         <div><h3>Secreto del system prompt <span class="insignia">E2</span></h3><p>Un canario en el system prompt y un juez determinista miden si el endpoint lo filtra cuando se lo piden. En la demo, el prompt oculto del tramposo lo hace filtrarlo 8 de 8 veces.</p></div>
         <div><h3>Confiabilidad <span class="insignia">E2</span></h3><p>Errores y latencia mediana de cada endpoint durante la corrida.</p></div>
         <div><h3>Lo declarado <span class="insignia">E1</span></h3><p>Cuantización y precio, tal como los publica cada proveedor en la API de OpenRouter.</p></div>
