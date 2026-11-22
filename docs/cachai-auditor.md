@@ -85,7 +85,7 @@ Resultados en `results/linea-base/` y su lectura en [`arquitectura.md`](arquitec
 
 ## Estado (22-nov)
 
-- Corre de punta a punta contra el juguete y el tramposo; 21 tests (`uv run pytest -q`).
+- Corre de punta a punta contra el juguete y el tramposo; 27 tests (`uv run pytest -q`).
 - `cachai endpoints` está probado contra la API real de OpenRouter.
 - **Nunca corrió contra proveedores reales**: no había clave en `.env`. Falta confirmar
   con una llamada que OpenRouter devuelve `prompt_tokens` nativos con el proveedor

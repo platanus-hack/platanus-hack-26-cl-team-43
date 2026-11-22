@@ -99,7 +99,7 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 
 | Medición | Qué es | Métrica y estado |
 |---|---|---|
-| **M1. Tests** | 21 tests de punta a punta en memoria, sin red ni claves (`tests/`) | Todos pasan antes de cada cambio. **Medido**: 21/21. |
+| **M1. Tests** | 27 tests de punta a punta en memoria, sin red ni claves (`tests/`) | Todos pasan antes de cada cambio. **Medido**: 27/27. |
 | **M2. Línea base con el juguete** | Benchmark fijo contra juego ciego, cinco proveedores (uno honesto), 30 repeticiones por celda, 20 y 80 tareas | Detección por trampa con IC95 de Wilson; falsas alarmas del honesto. **Medido** (§6). |
 | **M3. Modelos reales servidos por nosotros** | Qwen2.5 1.5B servido con Ollama: Q8 como referencia y piso de ruido, y proveedores propios que sirven Q4, Q2, el 0.5B, un prompt oculto o un desvío del 30 %, más uno honesto (`cachai experimento --ollama`, 20 repeticiones) | Falsas alarmas del honesto ≤ 1/20 para aceptar α = 0,01; detección por trampa con IC95. **En curso** (una repetición local: honesto sin marca, piso 30/30, Q4 marcado solo por coincidencia 12/30 con exactitud igual a la referencia). |
 | **M4. Proveedores reales** | `cachai scan` sobre los endpoints de un modelo con varios proveedores | Fichas con su evidencia en `results/proveedores/`. **En curso.** |

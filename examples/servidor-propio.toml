@@ -1,0 +1,20 @@
+# Verifica que tu propio servidor (vLLM, SGLang, Ollama, llama.cpp) o el de un proveedor
+# contratado sirve lo mismo que una referencia. Sirve, por ejemplo, para comprobar que
+# cuantizar o cambiar la plantilla no cambió el comportamiento antes de pasar a producción.
+# Uso: cachai scan -c examples/servidor-propio.toml
+
+openrouter = false
+
+[[endpoint]]
+provider = "ollama"                     # la referencia: la versión en Q8
+model = "qwen2.5:1.5b-instruct-q8_0"
+
+[[endpoint]]
+provider = "ollama"                     # la candidata: la misma en Q4
+model = "qwen2.5:1.5b-instruct-q4_K_M"
+
+[[endpoint]]
+name = "produccion"                     # cualquier URL compatible con OpenAI
+url = "http://10.0.0.5:8000/v1"
+key_env = "PRODUCCION_API_KEY"          # opcional: el nombre de la variable, nunca la clave
+model = "Qwen/Qwen2.5-1.5B-Instruct"

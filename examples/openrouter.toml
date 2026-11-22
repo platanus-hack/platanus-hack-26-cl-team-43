@@ -1,0 +1,6 @@
+# Audita los proveedores de un modelo en OpenRouter contra el del autor.
+# Uso: cachai scan -c examples/openrouter.toml   (necesita OPENROUTER_API_KEY)
+
+model = "z-ai/glm-5.3"     # el nombre del modelo en OpenRouter
+openrouter_providers = 6    # los 6 endpoints más baratos, más el del autor como referencia
+max_usd = 2                 # tope de gasto de toda la auditoría

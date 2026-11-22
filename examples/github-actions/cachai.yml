@@ -1,0 +1,23 @@
+# Auditoría semanal de los proveedores que usa tu producto. Copiar a .github/workflows/.
+# La ficha queda como artefacto del workflow; si un endpoint sale «DISTINGUIBLE», el job falla.
+name: cachai
+
+on:
+  schedule: [{ cron: "0 9 * * 1" }]   # lunes 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  auditoria:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Auditar
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 \
+            cachai scan z-ai/glm-5.3 --providers 4 --max-usd 1 --out fichas --strict
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: ficha, path: fichas/ }

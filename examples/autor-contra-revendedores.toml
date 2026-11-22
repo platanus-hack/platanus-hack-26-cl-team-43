@@ -1,0 +1,21 @@
+# Compara la API del autor del modelo con proveedores que lo revenden, sin pasar por
+# OpenRouter. El primer endpoint es la referencia.
+# Uso: cachai scan -c examples/autor-contra-revendedores.toml
+# Claves: DEEPSEEK_API_KEY, TOGETHER_API_KEY y FIREWORKS_API_KEY en el entorno o en .env
+#
+# Ojo: compará la misma versión del modelo en todos (el nombre cambia por proveedor).
+
+openrouter = false
+max_usd = 1
+
+[[endpoint]]
+provider = "deepseek"                              # el autor: la referencia
+model = "deepseek-chat"
+
+[[endpoint]]
+provider = "together"
+model = "deepseek-ai/DeepSeek-V3"
+
+[[endpoint]]
+provider = "fireworks"
+model = "accounts/fireworks/models/deepseek-v3"

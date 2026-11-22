@@ -11,22 +11,69 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 
-from cachai import checks, endpoints, ficha, scan, suite
+from cachai import checks, endpoints, ficha, providers, scan, suite
 from cachai.client import Target
 
 
-def _direct(spec: str) -> Target:
-    """NOMBRE=URL[,VARIABLE_DE_CLAVE[,MODELO]]"""
-    name, _, rest = spec.partition("=")
+def _key(env: str, keys_url: str = "") -> str:
+    key = os.environ.get(env, "") if env else ""
+    if env and not key:
+        hint = f" (la sacás en {keys_url})" if keys_url else ""
+        sys.exit(f"{env} no está definida{hint}. Ponela en tu entorno o en un archivo .env")
+    return key
+
+
+def _endpoint(spec: str, default_model: str = "") -> Target:
+    """PROVEEDOR[:MODELO] (atajo de providers.py) o NOMBRE=URL[,VARIABLE_DE_CLAVE[,MODELO]]."""
+    if "=" not in spec:
+        name, _, model = spec.partition(":")
+        preset = providers.PRESETS.get(name)
+        if preset is None:
+            sys.exit(f"proveedor desconocido: {name!r}. Conocidos: {providers.names()}. "
+                     "Para otro servidor: NOMBRE=URL[,VARIABLE_DE_CLAVE[,MODELO]]")
+        model = model or default_model
+        if not model:
+            sys.exit(f"falta el modelo en {spec!r}: {name}:MODELO")
+        return Target(name=spec if spec != name else name, model=model,
+                      base_url=preset.base_url, api_key=_key(preset.key_env, preset.keys_url))
+    name, rest = spec.split("=", 1)
     parts = rest.split(",")
     if not name or not parts[0]:
-        sys.exit(f"--direct mal formado: {spec!r} (NOMBRE=URL[,VARIABLE_DE_CLAVE[,MODELO]])")
-    key_env = parts[1] if len(parts) > 1 else ""
-    key = os.environ.get(key_env, "") if key_env else ""
-    if key_env and not key:
-        sys.exit(f"{key_env} no está definida")
-    return Target(name=name, base_url=parts[0], api_key=key,
-                  model=parts[2] if len(parts) > 2 else "")
+        sys.exit(f"--endpoint mal formado: {spec!r} (NOMBRE=URL[,VARIABLE_DE_CLAVE[,MODELO]])")
+    return Target(name=name, base_url=parts[0],
+                  api_key=_key(parts[1] if len(parts) > 1 else ""),
+                  model=(parts[2] if len(parts) > 2 and parts[2] else default_model))
+
+
+def _config_endpoint(e: dict) -> str:
+    """Una entrada [[endpoint]] de cachai.toml como especificación de --endpoint."""
+    if "provider" in e:
+        return f"{e['provider']}:{e['model']}" if e.get("model") else e["provider"]
+    if "url" not in e or "name" not in e:
+        sys.exit(f"cada [[endpoint]] necesita provider, o name y url: {e}")
+    return f"{e['name']}={e['url']},{e.get('key_env', '')},{e.get('model', '')}"
+
+
+def _load_config(args) -> None:
+    """Completa con cachai.toml lo que no vino por la línea de comandos."""
+    path = Path(args.config) if args.config else Path("cachai.toml")
+    if not path.exists():
+        if args.config:
+            sys.exit(f"no existe {path}")
+        return
+    import tomllib
+
+    cfg = tomllib.loads(path.read_text())
+    print(f"configuración: {path}")
+    args.model = args.model or cfg.get("model")
+    args.direct = [_config_endpoint(e) for e in cfg.get("endpoint", [])] + args.direct
+    args.reference = args.reference or cfg.get("reference")
+    if cfg.get("openrouter") is False:
+        args.no_openrouter = True
+    args.providers = cfg.get("openrouter_providers", args.providers)
+    for k in ("tasks", "max_usd", "out"):
+        if k in cfg and getattr(args, k) == SCAN_DEFAULTS[k]:
+            setattr(args, k, cfg[k])
 
 
 def _print_declared(model: str, d: dict) -> None:
@@ -47,47 +94,59 @@ def cmd_endpoints(args) -> None:
 
 
 def cmd_scan(args) -> None:
-    directs = [_direct(s) for s in args.direct]
+    _load_config(args)
+    if not args.model and not args.direct:
+        sys.exit("decí qué auditar: cachai scan MODELO, --endpoint, o un cachai.toml "
+                 "(ver examples/). Para probar sin claves: cachai demo")
     targets: list[Target] = []
     declared = None
+    use_openrouter = not args.no_openrouter and bool(args.model) and (
+        not args.direct or os.environ.get("OPENROUTER_API_KEY"))
     with httpx.Client(timeout=args.timeout) as http:
-        if not args.no_openrouter:
-            key = os.environ.get("OPENROUTER_API_KEY")
-            if not key:
-                sys.exit("OPENROUTER_API_KEY no está definida (o usá --no-openrouter con --direct)")
+        if use_openrouter:
+            key = _key("OPENROUTER_API_KEY", providers.PRESETS["openrouter"].keys_url)
             eps = endpoints.list_endpoints(args.model, http)
             declared = endpoints.declared_summary(eps)
             _print_declared(args.model, declared)
             only = args.only.split(",") if args.only else None
             targets = endpoints.pick(endpoints.to_targets(args.model, eps, key),
                                      args.providers, only)
-        targets += [Target(name=d.name, base_url=d.base_url, api_key=d.api_key,
-                           model=d.model or args.model) for d in directs]
+        targets += [_endpoint(d, args.model or "") for d in args.direct]
         if len(targets) < 2:
             sys.exit("hacen falta al menos dos endpoints para comparar")
         names = [t.name for t in targets]
+        # sin first-party: la referencia es el primer --endpoint (o el consenso en OpenRouter)
         reference = args.reference or next(
-            (t.name for t in targets if t.first_party), checks.CONSENSUS)
+            (t.name for t in targets if t.first_party),
+            checks.CONSENSUS if use_openrouter else names[0])
         if reference != checks.CONSENSUS and reference not in names:
             sys.exit(f"la referencia {reference!r} no está entre: {', '.join(names)}")
-        floor = None
-        if reference != checks.CONSENSUS and not args.no_floor:
-            # el piso de ruido: la misma referencia por segunda vez; lo que coincide consigo
-            # misma es la vara para la coincidencia de los demás
-            floor = f"{reference} (piso)"
-            ref_t = next(t for t in targets if t.name == reference)
-            targets.append(replace(ref_t, name=floor, first_party=False))
-        seed = None if args.public else (
-            args.seed if args.seed is not None else secrets.randbelow(2**32))
-        probes = suite.build(seed, n_tasks=args.tasks)
-        print(f"{len(targets)} endpoints × {len(probes)} pruebas · referencia: {reference} · "
-              + ("juego público" if seed is None else f"juego ciego, semilla {seed}"))
-        replies, spend = scan.run(
-            targets, probes, http=http, max_usd=args.max_usd,
-            on_reply=lambda r: print("." if r.ok else "x", end="", flush=True))
-        print()
+        f = _audit(args.model or targets[0].model, targets, reference, http, args, declared)
+    if args.strict and any(e.get("distinguible") for e in f["endpoints"]):
+        sys.exit(2)
+
+
+def _audit(model: str, targets: list[Target], reference: str, http: httpx.Client, args,
+           declared: dict | None = None) -> dict:
+    """Corre las pruebas, puntúa, escribe la ficha y muestra lo medido."""
+    floor = None
+    if reference != checks.CONSENSUS and not args.no_floor:
+        # el piso de ruido: la misma referencia por segunda vez; lo que coincide consigo
+        # misma es la vara para la coincidencia de los demás
+        floor = f"{reference} (piso)"
+        ref_t = next(t for t in targets if t.name == reference)
+        targets = targets + [replace(ref_t, name=floor, first_party=False)]
+    seed = None if args.public else (
+        args.seed if args.seed is not None else secrets.randbelow(2**32))
+    probes = suite.build(seed, n_tasks=args.tasks)
+    print(f"{len(targets)} endpoints × {len(probes)} pruebas · referencia: {reference} · "
+          + ("juego público" if seed is None else f"juego ciego, semilla {seed}"))
+    replies, spend = scan.run(
+        targets, probes, http=http, max_usd=args.max_usd,
+        on_reply=lambda r: print("." if r.ok else "x", end="", flush=True))
+    print()
     cards = checks.score(probes, replies, reference, floor)
-    f = ficha.build(args.model, targets, cards, replies, reference=reference,
+    f = ficha.build(model, targets, cards, replies, reference=reference,
                     suite="publico" if seed is None else "ciego", seed=seed,
                     declared=declared, spent_usd=spend.spent)
     md = ficha.to_markdown(f)
@@ -101,6 +160,36 @@ def cmd_scan(args) -> None:
         for per in replies.values() for r in per.values()) + "\n")
     print(md[md.index("## Medido"):md.index("## Qué no afirma")])
     print(f"ficha: {out / (stem + '.md')}  ·  gasto: USD {spend.spent:.4f}")
+    return f
+
+
+def cmd_demo(args) -> None:
+    """Un mundo en memoria: el modelo de juguete, un proveedor honesto y dos tramposos."""
+    import warnings
+
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    from fastapi.testclient import TestClient
+
+    from cachai.experiment import Router
+    from cachai.toy import create_toy
+    from cachai.villain import HIDDEN_PROMPT, create_villain
+
+    toy = TestClient(create_toy(), base_url="http://toy")
+    up = "http://toy/v1"
+    apps = {
+        "honesto": create_villain(up, "", http=toy),
+        "prompt-oculto": create_villain(up, "", http=toy, inject=HIDDEN_PROMPT),
+        "modelo-chico": create_villain(up, "", http=toy, swap_model="toy-small"),
+    }
+    router = Router(apps)
+    router.local["toy"] = toy
+    targets = [Target("referencia", "toy-large", base_url=up)] + [
+        Target(name, "toy-large", base_url=f"http://{name}/v1") for name in apps]
+    print("demo sin claves ni red: el modelo de juguete servido por una referencia, un "
+          "proveedor honesto,\nuno que agrega un prompt oculto y uno que responde con un "
+          "modelo más chico con el mismo nombre.\n")
+    _audit("toy-large", targets, "referencia", router, args)
+    print("\nSiguiente paso: cachai scan con tus endpoints (ver examples/ en el repo).")
 
 
 def cmd_toy(args) -> None:
@@ -154,6 +243,21 @@ def cmd_experimento(args) -> None:
     print(f"resultados en {j} y {m}")
 
 
+SCAN_DEFAULTS = {"tasks": 20, "max_usd": 2.0, "out": "audit/fichas"}
+
+
+def _audit_options(p) -> None:
+    p.add_argument("--public", action="store_true", help="usa el juego público de prompts fijos")
+    p.add_argument("--seed", type=int, help="semilla del juego ciego (para volver a correrlo)")
+    p.add_argument("--tasks", type=int, default=SCAN_DEFAULTS["tasks"])
+    p.add_argument("--no-floor", action="store_true",
+                   help="no consulta la referencia dos veces (sin control de coincidencia)")
+    p.add_argument("--max-usd", type=float, default=SCAN_DEFAULTS["max_usd"],
+                   help="tope de gasto de la auditoría en USD")
+    p.add_argument("--timeout", type=float, default=120)
+    p.add_argument("--out", default=SCAN_DEFAULTS["out"])
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="cachai", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -162,24 +266,35 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("model")
     p.set_defaults(fn=cmd_endpoints)
 
-    p = sub.add_parser("scan", help="audita los endpoints de un modelo y escribe la ficha")
-    p.add_argument("model")
+    p = sub.add_parser(
+        "scan", help="audita endpoints de un modelo y escribe la ficha",
+        description="Audita endpoints de un modelo contra una referencia y escribe la ficha.",
+        epilog="ejemplos:\n"
+        "  cachai scan qwen/qwen-2.5-7b-instruct                 # los proveedores de OpenRouter\n"
+        "  cachai scan -e deepseek:deepseek-chat -e together:deepseek-ai/DeepSeek-V3\n"
+        "  cachai scan -e ollama:qwen2.5:7b -e mio=http://10.0.0.5:8000/v1,MI_KEY,qwen2.5-7b\n"
+        "  cachai scan                                           # lee ./cachai.toml\n"
+        f"proveedores conocidos: {providers.names()}",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("model", nargs="?", help="nombre del modelo en OpenRouter (opcional con -e)")
+    p.add_argument("-e", "--endpoint", "--direct", dest="direct", action="append", default=[],
+                   metavar="PROVEEDOR[:MODELO] | NOMBRE=URL[,VAR_CLAVE[,MODELO]]",
+                   help="un endpoint compatible con OpenAI; se puede repetir. El primero es "
+                   "la referencia si no hay --reference")
+    p.add_argument("-c", "--config", help="archivo TOML (por defecto ./cachai.toml si existe)")
     p.add_argument("--providers", type=int, default=6, help="cuántos de OpenRouter (los más baratos)")
     p.add_argument("--only", help="tags de OpenRouter separados por coma")
-    p.add_argument("--direct", action="append", default=[],
-                   metavar="NOMBRE=URL[,VAR_CLAVE[,MODELO]]",
-                   help="API directa compatible con OpenAI; se puede repetir")
     p.add_argument("--no-openrouter", action="store_true")
     p.add_argument("--reference", help="nombre del endpoint de referencia, o 'consenso'")
-    p.add_argument("--public", action="store_true", help="usa el juego público de prompts fijos")
-    p.add_argument("--seed", type=int, help="semilla del juego ciego (para volver a correrlo)")
-    p.add_argument("--tasks", type=int, default=20)
-    p.add_argument("--no-floor", action="store_true",
-                   help="no consulta la referencia dos veces (sin control de coincidencia)")
-    p.add_argument("--max-usd", type=float, default=2.0)
-    p.add_argument("--timeout", type=float, default=120)
-    p.add_argument("--out", default="audit/fichas")
+    p.add_argument("--strict", action="store_true",
+                   help="sale con código 2 si algún endpoint es distinguible (para CI)")
+    _audit_options(p)
     p.set_defaults(fn=cmd_scan)
+
+    p = sub.add_parser("demo", help="prueba en 10 segundos, sin claves: auditor contra "
+                       "un proveedor honesto y dos tramposos de juguete")
+    _audit_options(p)
+    p.set_defaults(fn=cmd_demo, out="audit/demo")
 
     p = sub.add_parser("villain", help="proveedor tramposo propio, para la demo")
     p.add_argument("--upstream", required=True, help="URL base del proveedor real (…/v1)")

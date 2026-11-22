@@ -10,6 +10,37 @@ Platanus Hack 26: Santiago ft. Buk · Track: 🛡️ AI Security · team-43
 
 **¿Cachai qué modelo te están sirviendo?** Las evaluaciones de seguridad de un modelo se hacen sobre un modelo y una configuración concretos. Cuando ese modelo lo sirve un tercero, nadie comprueba que lo que responde siga siendo lo que se evaluó. Cachai lo audita desde afuera: le manda a cada endpoint pruebas generadas en el momento, que el proveedor no puede reconocer, compara las respuestas con una referencia y escribe una ficha que separa lo que el proveedor declara de lo que se midió.
 
+## Pruébalo en un minuto
+
+```bash
+# sin instalar nada (necesita uv: https://docs.astral.sh/uv/)
+uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 cachai demo
+
+# o instalado como comando
+uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43   # o pipx install
+cachai demo                                          # sin claves: un proveedor honesto y dos tramposos de juguete
+cachai scan z-ai/glm-5.3                             # los proveedores de un modelo en OpenRouter (OPENROUTER_API_KEY)
+cachai scan -e deepseek:deepseek-chat -e together:deepseek-ai/DeepSeek-V3   # APIs directas
+cachai scan                                          # lee ./cachai.toml
+```
+
+`cachai demo` audita en memoria a un proveedor honesto, a uno que agrega un prompt oculto y a uno que responde con un modelo más chico con el mismo nombre, y marca a los dos tramposos. Más casos (servidor propio, autor contra revendedores, auditoría semanal en GitHub Actions) en [`examples/`](examples/).
+
+### Dónde se puede usar
+
+Cachai solo necesita lo mismo que cualquier cliente: una API compatible con la de OpenAI. No pide acceso al modelo ni que el proveedor colabore.
+
+| Dónde | Cómo | Ejemplo |
+|---|---|---|
+| **OpenRouter** | Lee los endpoints del modelo, fija cada proveedor sin fallback y los compara con el del autor | `cachai scan z-ai/glm-5.3` |
+| **Proveedores de inferencia** | Atajos para Together, Fireworks, DeepInfra, Groq, Cerebras, SambaNova, Novita, Hyperbolic y Nebius | `-e together:MODELO` |
+| **La API del autor del modelo** | Como referencia: DeepSeek, Moonshot (Kimi), Z.ai (GLM), Mistral | `-e deepseek:deepseek-chat` |
+| **Servidores propios** | Ollama, vLLM, SGLang, LM Studio, llama.cpp: para comprobar que una cuantización o una plantilla nueva no cambió el comportamiento | `-e ollama:qwen2.5:7b` |
+| **Cualquier otra API compatible con OpenAI** | Un gateway interno, el proveedor contratado, un endpoint en Railway o Modal | `-e prod=https://.../v1,PROD_API_KEY,modelo` |
+| **CI** | Auditoría periódica que falla si un endpoint se vuelve distinguible | [`examples/github-actions/cachai.yml`](examples/github-actions/cachai.yml) |
+
+Lo probamos de punta a punta con el modelo de juguete y con Qwen2.5 servido por nosotros en Ollama; OpenRouter es el modo por defecto. Los atajos de los demás proveedores usan su API pública compatible con OpenAI; la ficha registra contra qué URL se midió.
+
 ## El problema
 
 Un modelo abierto no llega a producción desde su autor: llega a través de un proveedor de inferencia, y decenas de proveedores sirven el mismo modelo con el mismo nombre. GLM-5.3 tiene 47 endpoints en OpenRouter y 14 no declaran con qué cuantización lo sirven (API pública de OpenRouter, 21-11-2026). Quien usa el modelo ve el nombre, no lo que hay detrás.
@@ -135,13 +166,16 @@ src/cachai/        el auditor
   villain.py         proveedor tramposo propio para la demo: prompt oculto, desvío, evasión
   toy.py             modelo de juguete con reglas fijas, para probar sin claves
   experiment.py      experimento de línea base: benchmark fijo contra juego ciego
-tests/             21 tests de punta a punta, sin red ni claves
+  providers.py       atajos de proveedores compatibles con OpenAI (URL y variable de la clave)
+  cli.py             cachai demo · scan · endpoints · experimento
+tests/             27 tests de punta a punta, sin red ni claves
+examples/          configuraciones listas para copiar (OpenRouter, APIs directas, servidor propio, CI)
 results/linea-base/  resultados del experimento (JSON y Markdown)
 ```
 
 ```bash
 uv sync
-uv run pytest -q                                   # 21 tests, sin red ni claves
+uv run pytest -q                                   # 27 tests, sin red ni claves
 uv run cachai experimento --toy --reps 30          # la línea base, sin claves (~2 min)
 uv run cachai endpoints z-ai/glm-5.3               # lo que declara cada proveedor, sin clave
 uv run cachai scan z-ai/glm-5.3 --providers 6 --max-usd 2   # necesita OPENROUTER_API_KEY
