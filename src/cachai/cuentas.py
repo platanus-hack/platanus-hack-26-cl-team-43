@@ -11,6 +11,7 @@ página con su SHA-256 (el desafío), la persona lo aprueba con su sesión y el 
 verificador por la clave.
 """
 import hashlib
+import logging
 import secrets
 import statistics
 from collections import defaultdict
@@ -25,6 +26,7 @@ from sqlalchemy.exc import IntegrityError
 
 from cachai.db import Auditoria, AutorizacionCli, Clave, Medicion, Usuario, now
 
+log = logging.getLogger("cachai.cuentas")
 KEY_PREFIX = "cachai_"
 LOGIN_TTL = timedelta(minutes=10)
 MAX_BODY = 512 * 1024
@@ -248,7 +250,9 @@ def router(sessions, verify: Callable[[str], dict], public_url: str,
                 return key.usuario_id, "cli"
             try:
                 uid = str(verify(token)["sub"])
-            except Exception:
+            except Exception as e:
+                # el motivo queda en el log del servidor, no en la respuesta
+                log.warning("sesión rechazada: %s: %s", type(e).__name__, e)
                 raise HTTPException(401, "sesión inválida o vencida") from None
             user = s.get(Usuario, uid)
             if user is None:

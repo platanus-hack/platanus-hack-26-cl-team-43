@@ -1,11 +1,12 @@
 """Las cuentas: migración, sesión, `cachai login`, fichas subidas y el panel."""
 import hashlib
 import json
+import os
 import warnings
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 
 from cachai import cli, cuentas, db, sesion
 from cachai.serve import create_app
@@ -29,9 +30,22 @@ def web(name: str) -> dict:
     return {"Authorization": f"Bearer jwt-{name}"}
 
 
+def fresh_database(tmp_path) -> str:
+    """SQLite por defecto. Con CACHAI_TEST_DATABASE_URL, un Postgres de prueba que se vacía."""
+    url = os.environ.get("CACHAI_TEST_DATABASE_URL")
+    if not url:
+        return f"sqlite:///{tmp_path / 'cachai.db'}"
+    engine = create_engine(db.normalize(url))
+    with engine.begin() as c:
+        c.execute(text("DROP SCHEMA public CASCADE"))
+        c.execute(text("CREATE SCHEMA public"))
+    engine.dispose()
+    return url
+
+
 @pytest.fixture
 def client(tmp_path):
-    app = create_app(database_url=f"sqlite:///{tmp_path / 'cachai.db'}", verify=fake_verify)
+    app = create_app(database_url=fresh_database(tmp_path), verify=fake_verify)
     return TestClient(app, base_url="http://testserver")
 
 
@@ -44,9 +58,9 @@ def cli_key(client, name: str = "ana") -> str:
 
 
 def test_la_migracion_crea_lo_mismo_que_los_modelos(tmp_path):
-    url = f"sqlite:///{tmp_path / 'm.db'}"
+    url = fresh_database(tmp_path)
     db.upgrade(url)
-    found = inspect(create_engine(url))
+    found = inspect(create_engine(db.normalize(url)))
     for table in db.Base.metadata.sorted_tables:
         cols = {c["name"]: c for c in found.get_columns(table.name)}
         assert set(cols) == {c.name for c in table.columns}, table.name
