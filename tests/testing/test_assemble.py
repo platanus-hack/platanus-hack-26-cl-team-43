@@ -169,4 +169,4 @@ def test_sync_config_upserts_and_keeps_disabled(conn):
     m = {r["id"]: r for r in conn.execute("select * from models")}
     assert m["m1"]["enabled"] is False and m["m1"]["openrouter_id"] == "a/b2"
     assert m["m2"]["enabled"] is False
-    assert m["m1"]["tier"] == "1"
+    assert m["m1"]["tier"] == 1

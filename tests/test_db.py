@@ -34,3 +34,17 @@ def test_allowed_emails_comma_separated(monkeypatch):
     s = Settings(_env_file=None)
     assert s.allowed_emails == ["a@x.com", "b@y.com"]
     assert s.daily_budget_usd == 20.0
+
+
+def test_testing_migration_allows_unknown_and_int_tier(conn):
+    conn.execute("insert into models(id, openrouter_id, tier) values ('m','a/b',2)")
+    conn.execute("insert into goals(id, kind, text) values ('g','canary','t')")
+    conn.execute(
+        "insert into baselines(model_id, goal_id, date, verdict, cost_usd) "
+        "values ('m','g',current_date,'unknown',0.01)"
+    )
+    conn.execute("insert into candidates(text) values ('x')")
+    conn.execute("insert into test_jobs(candidate_id, model_id, stage) values (1,'m','screen')")
+    conn.execute("insert into results(job_id, goal_id, verdict) values (1,'g','unknown')")
+    assert conn.execute("select tier from models").fetchone()["tier"] == 2
+    assert conn.execute("select cost_usd from baselines").fetchone()["cost_usd"] == 0.01

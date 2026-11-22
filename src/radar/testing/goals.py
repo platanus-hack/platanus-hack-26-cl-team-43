@@ -61,5 +61,5 @@ def sync_config(conn, goals: list[Goal], models: list[ModelSpec]) -> None:
             "values (%s,%s,%s,%s) on conflict (id) do update set "
             "openrouter_id=excluded.openrouter_id, tier=excluded.tier, "
             "enabled=models.enabled and excluded.enabled",
-            (m.id, m.openrouter_id, str(m.tier), m.enabled),
+            (m.id, m.openrouter_id, int(m.tier), m.enabled),
         )
