@@ -14,7 +14,7 @@ COLLECTORS = ("github_discovery", "github_watchlist", "github_code_search", "hf_
 
 def candidate_status(conn, candidate_id: int, budget_ok: bool) -> str:
     row = conn.execute(
-        "select c.test_status, c.untested_reason,"
+        "select c.test_status, c.untested_reason, c.novelty,"
         " (select count(*) from breaks b where b.candidate_id = c.id) as breaks,"
         " (select count(*) from test_jobs j where j.candidate_id = c.id and j.status='running') as running,"
         " (select count(*) from test_jobs j where j.candidate_id = c.id and j.status='queued') as queued"
@@ -23,6 +23,8 @@ def candidate_status(conn, candidate_id: int, budget_ok: bool) -> str:
     ).fetchone()
     if row is None:
         return "queued"
+    if row["novelty"] == "known":
+        return "known (not tested)"
     if row["running"]:
         return "testing"
     if row["breaks"]:
@@ -42,7 +44,8 @@ def counters(conn, cap_usd: float) -> dict:
     one = lambda sql: conn.execute(sql, (since,)).fetchone()["n"]  # noqa: E731
     return {
         "raw_items": one("select count(*) n from raw_items where fetched_at >= %s"),
-        "candidates": one("select count(*) n from candidates where first_seen_at >= %s"),
+        "candidates": one("select count(*) n from candidates where first_seen_at >= %s"
+                          " and novelty is distinct from 'known'"),
         "novel": one("select count(*) n from candidates where novelty='novel' and first_seen_at >= %s"),
         "breaks": one("select count(*) n from breaks where confirmed_at >= %s"),
         "spent": spent_today(conn),

@@ -40,8 +40,13 @@ def _first_source(conn, candidate_id: int) -> str | None:
 
 
 def enqueue_for_candidate(conn, candidate_id: int) -> int:
-    """Queue a screen job per enabled model; 0 (and untested_reason) if untestable."""
+    """Queue a screen job per enabled model; 0 (and untested_reason) if untestable.
+
+    Known candidates (seed corpus) are never tested: 0, test_status untouched.
+    """
     row = conn.execute("select * from candidates where id = %s", (candidate_id,)).fetchone()
+    if row["novelty"] == "known":
+        return 0
     reason = testability(CandidateRow.from_row(row))
     if reason is not None:
         conn.execute(

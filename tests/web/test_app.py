@@ -306,3 +306,15 @@ def test_short_secret_key_rejected():
     with pytest.raises(Exception):
         Settings(_env_file=None, secret_key="short", **base)
     assert Settings(_env_file=None, secret_key="k" * 32, **base).secret_key
+
+
+def test_known_candidate_status_and_not_counted(conn):
+    from radar.web.queries import counters
+
+    k = add_candidate(conn, status=None)
+    n = add_candidate(conn, status="queued")
+    conn.execute("update candidates set novelty='known' where id=%s", (k,))
+    conn.execute("update candidates set novelty='novel' where id=%s", (n,))
+    conn.commit()
+    assert candidate_status(conn, k, True) == "known (not tested)"
+    assert counters(conn, 20.0)["candidates"] == 1

@@ -39,7 +39,7 @@ def test_enqueue_creates_screen_job_per_enabled_model(conn):
 
 def test_enqueue_uses_earliest_sighting_source(conn):
     seed_config(conn)
-    cid = seed_candidate(conn, source="reddit", novelty="known")
+    cid = seed_candidate(conn, source="reddit", novelty=None)
     rid = conn.execute("insert into raw_items(source, external_id, content_hash) "
                        "values ('github_watchlist','later','h') returning id").fetchone()["id"]
     conn.execute("insert into sightings(candidate_id, raw_item_id, seen_at) "
@@ -222,3 +222,14 @@ def test_rate_limiter_sliding_window_per_provider():
     lim.acquire("openai/gpt")  # third openai call waits until the first ages out
     assert clock.slept == [50.0]
     assert clock.now == 1060.0
+
+
+def test_enqueue_known_candidate_is_noop(conn):
+    seed_config(conn)
+    cid = seed_candidate(conn, novelty="known")
+    conn.execute("update candidates set test_status = null where id=%s", (cid,))
+    conn.commit()
+    assert enqueue_for_candidate(conn, cid) == 0
+    assert conn.execute("select count(*) n from test_jobs").fetchone()["n"] == 0
+    assert conn.execute("select test_status from candidates where id=%s",
+                        (cid,)).fetchone()["test_status"] is None
