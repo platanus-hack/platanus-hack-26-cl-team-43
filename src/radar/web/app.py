@@ -7,7 +7,7 @@ CSRF: no framework; the session cookie is SameSite=Lax, which is the mitigation.
 import logging
 import re
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -28,7 +28,9 @@ def _safe_url(url) -> str | None:
     return None
 
 
-def _bucket(rate: float) -> str:
+def _bucket(rate: float | None) -> str:
+    if rate is None:
+        return "b0"
     if rate >= 0.75:
         return "b4"
     if rate >= 0.5:
@@ -46,7 +48,8 @@ def create_app(settings, conn_factory, trigger_poll, send_email=default_send_ema
         loader=FileSystemLoader(Path(__file__).parent / "templates"),
         autoescape=select_autoescape(["html"]),
     )
-    env.filters["pct"] = lambda r: f"{round((r or 0) * 100)}%"
+    env.filters["pct"] = lambda r: "" if r is None else f"{round(r * 100)}%"
+    env.filters["urlpath"] = lambda v: quote(str(v), safe="")
     env.globals.update(safe_url=_safe_url, bucket=_bucket)
     secure = settings.base_url.startswith("https")
 
@@ -64,6 +67,8 @@ def create_app(settings, conn_factory, trigger_poll, send_email=default_send_ema
     def require_user(request: Request) -> str:
         email = auth.read_session(settings, request.cookies.get(auth.COOKIE))
         if not email or not auth.is_allowed(settings, email):
+            if request.headers.get("HX-Request"):
+                raise HTTPException(401, headers={"HX-Redirect": "/login"})
             raise HTTPException(303, headers={"Location": "/login"})
         request.state.user = email
         return email

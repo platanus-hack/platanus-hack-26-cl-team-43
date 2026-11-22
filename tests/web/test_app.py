@@ -14,7 +14,7 @@ EVIL = "<script>alert(1)</script>"
 
 
 def make_settings(**kw):
-    base = dict(allowed_emails=["Me@Example.com"], secret_key="s3cret",
+    base = dict(allowed_emails=["Me@Example.com"], secret_key="s3cret" * 6,
                 base_url="http://testserver", daily_budget_usd=1.0)
     base.update(kw)
     return SimpleNamespace(**base)
@@ -101,7 +101,7 @@ def test_secure_cookie_on_https(conn):
 
 
 def test_expired_token_rejected(env, monkeypatch):
-    tok = URLSafeTimedSerializer("s3cret", salt="login").dumps("me@example.com")
+    tok = URLSafeTimedSerializer("s3cret" * 6, salt="login").dumps("me@example.com")
     import radar.web.auth as auth
     monkeypatch.setattr(auth, "LOGIN_MAX_AGE", -1)
     r = env.client.get(f"/auth/{tok}")
@@ -110,7 +110,7 @@ def test_expired_token_rejected(env, monkeypatch):
 
 
 def test_session_token_cannot_be_used_as_login_token(env):
-    tok = URLSafeTimedSerializer("s3cret", salt="session").dumps("me@example.com")
+    tok = URLSafeTimedSerializer("s3cret" * 6, salt="session").dumps("me@example.com")
     assert env.client.get(f"/auth/{tok}").status_code == 400
 
 
@@ -250,4 +250,59 @@ def test_status_variants(conn):
     assert candidate_status(conn, t, True) == "no break"
     conn.execute("insert into breaks(candidate_id, model_id, break_rate) values (%s,'m1',0.5)", (t,))
     conn.commit()
-    assert candidate_status(conn, t, True) == "broke 1 models"
+    assert candidate_status(conn, t, True) == "broke 1 model"
+
+
+def test_status_plural(conn):
+    add_model(conn, "m1")
+    add_model(conn, "m2")
+    t = add_candidate(conn, status="tested")
+    for m in ("m1", "m2"):
+        conn.execute("insert into breaks(candidate_id, model_id, break_rate) values (%s,%s,0.5)", (t, m))
+    conn.commit()
+    assert candidate_status(conn, t, True) == "broke 2 models"
+
+
+def test_collector_health_counts_actual_sources(env, conn):
+    for i, src in enumerate(["arxiv", "hf_papers", "github_readme"]):
+        conn.execute("insert into raw_items(source, external_id, content_hash) values (%s,%s,'h')", (src, str(i)))
+    conn.commit()
+    env.login()
+    from radar.web.queries import sources
+    h = {x["name"]: x["items_24h"] for x in sources(conn)["health"]}
+    assert h["papers"] == 2 and h["github_discovery"] == 1 and h["hf_datasets"] == 0
+
+
+def test_matrix_blank_for_untested_model(env, conn):
+    add_model(conn, "m1")
+    add_model(conn, "m2")
+    cid = add_candidate(conn, status="tested")
+    add_job(conn, cid, "m1", "done")
+    conn.commit()
+    from radar.web.queries import matrix
+    assert matrix(conn, ["m1", "m2"])[0]["cells"] == [0.0, None]
+    env.login()
+    t = env.client.get("/").text
+    assert "0%" in t
+    assert re.search(r'<td class="b0"></td>', t)
+
+
+def test_htmx_unauthenticated_gets_hx_redirect(env):
+    r = env.client.get("/feed/rows", headers={"HX-Request": "true"})
+    assert r.status_code == 401 and r.headers["hx-redirect"] == "/login"
+
+
+def test_mute_action_is_urlencoded(env, conn):
+    conn.execute("insert into watch_repos(full_name, status) values ('a/b.c','seed')")
+    conn.commit()
+    env.login()
+    assert "/sources/watch/a/b.c/mute" in env.client.get("/sources").text
+
+
+def test_short_secret_key_rejected():
+    from radar.settings import Settings
+    base = dict(database_url="x", github_token="x", openrouter_api_key="x", extractor_model="x",
+                judge_model="x", email_from="x", base_url="x")
+    with pytest.raises(Exception):
+        Settings(_env_file=None, secret_key="short", **base)
+    assert Settings(_env_file=None, secret_key="k" * 32, **base).secret_key

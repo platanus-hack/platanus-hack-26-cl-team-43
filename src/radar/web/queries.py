@@ -1,6 +1,14 @@
 """Read queries for the dashboard pages."""
 from radar.testing.budget import _santiago_midnight, can_spend, spent_today
 
+# raw_items.source values written by each collector
+COLLECTOR_SOURCES = {
+    "github_discovery": ("github_readme",),
+    "github_watchlist": ("github_watchlist",),
+    "github_code_search": ("github_code",),
+    "hf_datasets": ("hf_dataset",),
+    "papers": ("arxiv", "hf_papers"),
+}
 COLLECTORS = ("github_discovery", "github_watchlist", "github_code_search", "hf_datasets", "papers")
 
 
@@ -18,7 +26,8 @@ def candidate_status(conn, candidate_id: int, budget_ok: bool) -> str:
     if row["running"]:
         return "testing"
     if row["breaks"]:
-        return f"broke {row['breaks']} models"
+        n = row["breaks"]
+        return f"broke {n} model{'' if n == 1 else 's'}"
     if row["test_status"] == "untested":
         return f"untested: {row['untested_reason'] or 'unknown'}"
     if row["queued"]:
@@ -53,14 +62,21 @@ def matrix(conn, models: list[str]) -> list[dict]:
         " order by f.id desc limit 30").fetchall()
     ids = [f["id"] for f in fams]
     best = {}
+    done = set()
     if ids:
+        for r in conn.execute(
+            "select distinct c.family_id, j.model_id from test_jobs j"
+            " join candidates c on c.id = j.candidate_id"
+            " where j.status='done' and c.family_id = any(%s)", (ids,)):
+            done.add((r["family_id"], r["model_id"]))
         for r in conn.execute(
             "select c.family_id, b.model_id, max(b.break_rate) r from breaks b"
             " join candidates c on c.id = b.candidate_id where c.family_id = any(%s)"
             " group by 1, 2", (ids,)):
             best[(r["family_id"], r["model_id"])] = r["r"]
     return [{"id": f["id"], "label": f["label"],
-             "cells": [best.get((f["id"], m), 0.0) for m in models]} for f in fams]
+             "cells": [best.get((f["id"], m), 0.0 if (f["id"], m) in done else None)
+                       for m in models]} for f in fams]
 
 
 def robustness(conn, models: list[str]) -> list[dict]:
@@ -122,6 +138,6 @@ def sources(conn) -> dict:
     names = list(COLLECTORS) + sorted(n for n in state if n not in COLLECTORS)
     health = [{"name": n, "last_run_at": (state.get(n) or {}).get("last_run_at"),
                "last_error": (state.get(n) or {}).get("last_error"),
-               "items_24h": items.get(n, 0)} for n in names]
+               "items_24h": sum(items.get(x, 0) for x in COLLECTOR_SOURCES.get(n, (n,)))} for n in names]
     watch = conn.execute("select full_name, status, added_at from watch_repos order by added_at desc").fetchall()
     return {"health": health, "watch": watch}

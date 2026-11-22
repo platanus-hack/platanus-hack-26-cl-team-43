@@ -21,7 +21,7 @@
   <tr><th>Repo</th><th>Status</th><th></th></tr>
   {% for w in watch %}
   <tr><td>{{ w.full_name }}</td><td>{{ w.status }}</td>
-    <td>{% if w.status != 'muted' %}<form method="post" action="/sources/watch/{{ w.full_name }}/mute"><button>Mute</button></form>{% endif %}</td></tr>
+    <td>{% if w.status != 'muted' %}<form method="post" action="/sources/watch/{% set parts = w.full_name.split('/') %}{{ parts[0] | urlpath }}/{{ parts[1] | urlpath }}/mute"><button>Mute</button></form>{% endif %}</td></tr>
   {% else %}<tr><td colspan="3" class="muted">Empty.</td></tr>{% endfor %}
 </table>
 {% endblock %}

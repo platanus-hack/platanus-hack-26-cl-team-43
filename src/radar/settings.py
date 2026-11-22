@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     secret_key: str
     base_url: str
 
+    @field_validator("secret_key")
+    @classmethod
+    def _secret_len(cls, v):
+        if len(v) < 32:
+            raise ValueError("secret_key must be at least 32 characters")
+        return v
+
     @field_validator("allowed_emails", mode="before")
     @classmethod
     def _split_emails(cls, v):
