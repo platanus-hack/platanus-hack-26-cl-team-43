@@ -5,7 +5,7 @@ from fakes import FakeEmbedder, FakeLLM, unit
 from helpers import fake_llm_echo, insert_raw, prompt_json
 from psycopg.pq import TransactionStatus
 
-from radar.llm.base import LLMError
+from radar.llm.base import ChatResult, LLMError
 from radar.pipeline.dedupe import ingest_prompt
 from radar.pipeline.extract import ExtractedPrompt
 from radar.pipeline.process import process_pending_raw_items
@@ -184,3 +184,48 @@ def test_watchlist_items_processed_before_older_items(conn):
                                   lambda _: None, limit=1)
     assert n == 1
     assert processed(conn, wl) and not processed(conn, old_hf)
+
+
+def test_extractor_cost_is_recorded_and_counts_toward_spent_today(conn):
+    from radar.testing.budget import spent_today
+
+    insert_raw(conn, text=P)
+    out = json.dumps({"prompts": [prompt_json(text=P, goal_slot=None)]})
+    llm = FakeLLM({"x": ChatResult(out, cost_usd=0.04, latency_ms=1, provider_blocked=False)})
+    process_pending_raw_items(conn, llm, FakeEmbedder(default=vec(1)), "x", lambda _: None)
+    rows = conn.execute("select kind, cost_usd from llm_spend").fetchall()
+    assert [(r["kind"], r["cost_usd"]) for r in rows] == [("extract", 0.04)]
+    assert spent_today(conn) == 0.04
+
+
+def test_exhausted_budget_leaves_items_unprocessed(conn):
+    first = insert_raw(conn, text=P, fetched_at=T0)
+    second = insert_raw(conn, text=P + " again", fetched_at=datetime(2026, 11, 2, tzinfo=UTC))
+    out = json.dumps({"prompts": [prompt_json(text=P, goal_slot=None)]})
+    llm = FakeLLM({"x": ChatResult(out, cost_usd=1.0, latency_ms=1, provider_blocked=False)})
+    n = process_pending_raw_items(conn, llm, FakeEmbedder(default=vec(1)), "x",
+                                  lambda _: None, budget_usd=1.0)
+    assert n == 1
+    assert processed(conn, first) and not processed(conn, second)
+    assert len(llm.calls) == 1
+
+
+def test_poison_pill_is_marked_processed_after_three_attempts(conn, caplog):
+    import pytest
+
+    rid = insert_raw(conn, text=P)
+
+    class Boom:
+        def embed(self, texts):
+            raise RuntimeError("embedder exploded")
+
+    for attempt in (1, 2, 3):
+        with pytest.raises(RuntimeError), caplog.at_level("ERROR"):
+            process_pending_raw_items(conn, fake_llm_returning(P), Boom(), "x", lambda _: None)
+        row = conn.execute("select process_attempts, processed_at from raw_items where id=%s",
+                           (rid,)).fetchone()
+        assert row["process_attempts"] == attempt
+        assert (row["processed_at"] is not None) is (attempt == 3)
+    assert any("raw_item" in r.message and r.levelname == "ERROR" and "giving up" in r.message
+               for r in caplog.records)
+    assert conn.execute("select count(*) c from candidates").fetchone()["c"] == 0

@@ -22,11 +22,15 @@ def _santiago_midnight(now: datetime | None = None) -> datetime:
 
 
 def spent_today(conn, now: datetime | None = None) -> float:
-    """USD spent since 00:00 America/Santiago: results plus baseline calls."""
+    """USD spent since 00:00 America/Santiago: results, baselines and other LLM calls
+    (extraction, in llm_spend)."""
+    midnight = _santiago_midnight(now)
     row = conn.execute(
         "select coalesce((select sum(cost_usd) from results where created_at >= %s), 0)"
-        " + coalesce((select sum(cost_usd) from baselines where date = %s), 0) as spent",
-        (_santiago_midnight(now), santiago_today(now)),
+        " + coalesce((select sum(cost_usd) from baselines where date = %s), 0)"
+        " + coalesce((select sum(cost_usd) from llm_spend where created_at >= %s), 0)"
+        " as spent",
+        (midnight, santiago_today(now), midnight),
     ).fetchone()
     return float(row["spent"])
 

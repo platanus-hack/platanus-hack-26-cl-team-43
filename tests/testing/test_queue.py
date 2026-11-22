@@ -183,6 +183,15 @@ def test_spent_today_sums_results_and_baselines_since_santiago_midnight(conn):
     assert can_spend(conn, 2.0) is False
 
 
+def test_spent_today_includes_llm_spend_since_santiago_midnight(conn):
+    midnight = datetime.now(SCL).replace(hour=0, minute=0, second=0, microsecond=0)
+    conn.execute("insert into llm_spend(kind, cost_usd, created_at) values "
+                 "('extract', 0.75, %s), ('extract', 9, %s)",
+                 (midnight + timedelta(seconds=1), midnight - timedelta(seconds=1)))
+    conn.commit()
+    assert spent_today(conn) == 0.75
+
+
 def test_spent_today_empty_is_zero(conn):
     assert spent_today(conn) == 0.0
 

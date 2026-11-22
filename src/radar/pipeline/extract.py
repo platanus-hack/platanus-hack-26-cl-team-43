@@ -146,8 +146,11 @@ def extract_chunks(llm: LLM, model: str, content: str,
 
 
 def extract(llm: LLM, model: str, content: str,
-            max_chars: int = 40_000) -> list[ExtractedPrompt]:
+            max_chars: int = 40_000) -> tuple[list[ExtractedPrompt], float]:
+    """All prompts found in content, plus the total cost in USD of the calls."""
     out: list[ExtractedPrompt] = []
-    for prompts, _cost in extract_chunks(llm, model, content, max_chars):
+    total = 0.0
+    for prompts, cost in extract_chunks(llm, model, content, max_chars):
         out.extend(prompts)
-    return out
+        total += cost
+    return out, total

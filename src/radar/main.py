@@ -125,7 +125,8 @@ def build_scheduler(conn_factory, settings, *, llm=None, embedder=None, sources_
 
     scheduler.add_job(
         lambda: _run_job(conn_factory, "process_raw", lambda conn: process_pending_raw_items(
-            conn, llm, embedder, settings.extractor_model, on_new_candidate)),
+            conn, llm, embedder, settings.extractor_model, on_new_candidate,
+            budget_usd=settings.daily_budget_usd)),
         IntervalTrigger(minutes=1, timezone=TZ),
         id="process_raw", name="process_raw", max_instances=1, coalesce=True)
 
