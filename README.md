@@ -10,7 +10,7 @@ Platanus Hack 26: Santiago ft. Buk · Track: 🛡️ AI Security · team-43
 - Christian Rodrigo Rojas Rodriguez ([@Christian-Rojas-Rodriguez](https://github.com/Christian-Rojas-Rodriguez))
 - Federico Hörl ([@fede-h](https://github.com/fede-h))
 
-**¿Cachai qué modelo te están sirviendo?** Cachai audita a los proveedores que venden tokens de un mismo modelo abierto. Les manda pruebas generadas en el momento, que el proveedor no puede reconocer, compara sus respuestas con una referencia y escribe una ficha por endpoint que separa lo que el proveedor declara de lo que se midió.
+**¿Cachai qué modelo te están sirviendo?** Las evaluaciones de seguridad de un modelo se hacen sobre un modelo y una configuración concretos. Cuando ese modelo lo sirve un tercero, nadie comprueba que lo que responde siga siendo lo que se evaluó. Cachai lo audita desde afuera: le manda a cada endpoint pruebas generadas en el momento, que el proveedor no puede reconocer, compara las respuestas con una referencia y escribe una ficha que separa lo que el proveedor declara de lo que se midió.
 
 ## Entregables
 
@@ -24,23 +24,78 @@ Platanus Hack 26: Santiago ft. Buk · Track: 🛡️ AI Security · team-43
 
 ## El problema
 
-Decenas de proveedores sirven el mismo modelo abierto, con el mismo nombre y precios muy distintos. GLM-5.3 tiene 47 endpoints en OpenRouter: 14 no declaran cuantización y el precio de salida varía 4,7 veces (API pública de OpenRouter, 21-11-2026). Quien compra no puede comprobar qué recibe, y hay evidencia de que la diferencia existe:
+Un modelo abierto no llega a producción desde su autor: llega a través de un proveedor de inferencia, y decenas de proveedores sirven el mismo modelo con el mismo nombre. GLM-5.3 tiene 47 endpoints en OpenRouter y 14 no declaran con qué cuantización lo sirven (API pública de OpenRouter, 21-11-2026). Quien usa el modelo ve el nombre, no lo que hay detrás.
+
+### Por qué es un problema de seguridad de IA
+
+- **Las evaluaciones no se transfieren.** El red teaming, las evaluaciones de riesgo y las salvaguardas de un modelo se miden sobre ese modelo y esa configuración. Si el endpoint sirve otra cosa (otro modelo, una versión degradada o un prompt agregado), esas evaluaciones ya no describen lo que está en producción.
+- **Un prompt oculto es un ataque a la cadena de suministro.** El proveedor ve cada petición y puede agregar instrucciones propias delante del pedido del cliente, sin que nadie lo note. En nuestra demo, el prompt inyectado hace que el modelo revele el secreto de su system prompt 8 de 8 veces.
+- **El auditado puede reconocer la auditoría.** Es el mismo problema de toda evaluación de seguridad: un sistema que distingue la prueba del uso real puede portarse bien solo cuando lo evalúan. Los benchmarks públicos por endpoint usan suites fijas y conocidas, al menos en parte, así que son vulnerables a esa evasión (Cai et al., [arXiv 2504.04715](https://arxiv.org/abs/2504.04715)).
+- **Es un problema abierto de gobernanza técnica de IA**: verificar las características declaradas de un modelo sin tener acceso a él ([Reuel, Bucknall et al., *Open Problems in Technical AI Governance*, arXiv 2407.14981](https://arxiv.org/abs/2407.14981), §5.4.1).
+
+### La diferencia existe y está medida
 
 - *Model Equality Testing* ([Gao, Liang y Guestrin, arXiv 2410.20247](https://arxiv.org/abs/2410.20247)): 11 de 31 endpoints de Llama servían una distribución distinta a la de referencia.
 - *Endpoint Accuracy Index* de Artificial Analysis (medido entre el 8-10 y el 4-11-2026): 24 de 103 endpoints quedaron por debajo de una referencia con los pesos oficiales; en GLM-5.3, 10 de 26.
 - K2 Vendor Verifier (Moonshot): la precisión del esquema de tool calls de Kimi va de 84,63 % a 100 % según el proveedor.
 
-**Por qué es AI Security.** Una evaluación de seguridad vale para unos pesos y una configuración. Si no se puede verificar qué modelo responde, sus evaluaciones y salvaguardas no cubren lo que está en producción. Es un problema abierto de gobernanza técnica: verificar características declaradas de un modelo sin acceso a él ([Reuel, Bucknall et al., *Open Problems in Technical AI Governance*, arXiv 2407.14981](https://arxiv.org/abs/2407.14981), §5.4.1). Y un proveedor que agrega instrucciones ocultas al prompt del cliente es un ataque a la cadena de suministro.
+### El adversario
 
-**El adversario.** Un proveedor que puede degradar o sustituir el modelo (siempre o en una fracción del tráfico), inyectar un system prompt propio, romper las tool calls y, sobre todo, **reconocer las auditorías y portarse bien solo con ellas**. Los benchmarks públicos por endpoint usan suites fijas y conocidas, al menos en parte, así que son vulnerables a esa evasión (Cai et al., [arXiv 2504.04715](https://arxiv.org/abs/2504.04715)). El modelo de amenaza completo está en [`docs/arquitectura.md`](docs/arquitectura.md#11-modelo-de-amenaza).
+El adversario es el proveedor. Controla el servidor, ve cada petición y puede cambiar qué modelo responde. No controla la referencia ni el auditor, y no conoce la semilla de una auditoría antes de recibirla.
 
-## Cómo funciona
+| Qué puede hacer el proveedor | Cómo lo detecta Cachai | Estado |
+|---|---|---|
+| Inyectar un system prompt propio delante del pedido | Excedente constante de tokens de prompt frente a la referencia, y el canario si el prompt cambia el comportamiento | Medido con el proveedor tramposo propio |
+| Desviar todo el tráfico a un modelo más barato y responder con el nombre pedido | Exactitud y coincidencia con la referencia en tareas con respuesta calculable | Medido |
+| Desviar solo una fracción del tráfico | Prueba combinada sobre todas las fallas; la potencia crece con el número de tareas | Medido: el 30 % se detecta en 6/30 con 20 tareas y en 30/30 con 80 |
+| Romper las tool calls (parser o plantilla) | Una herramienta con esquema estricto | Implementado, sin medición propia |
+| **Reconocer las auditorías** y portarse bien solo con ellas | Juego ciego: pruebas generadas con una semilla nueva en cada auditoría | Medido: el benchmark fijo lo detecta 0/120 veces; el ciego, 30/30 |
+| Reconocer además la forma de las pruebas ciegas | No lo detecta. Mitigación: auditar con tráfico real | Medido como límite: 0/30 |
+| Mirar o guardar los datos | No se puede medir desde afuera | Fuera del alcance |
 
-1. **Lo declarado (E1).** Lee de la API pública de OpenRouter qué declara cada endpoint: cuantización y precio.
-2. **Un juego de pruebas ciego.** Genera 38 pruebas con una semilla nueva en cada auditoría: 6 de conteo de tokens, 20 tareas con respuesta calculable (sumas, productos, ordenar, repetir), 4 tool calls con esquema estricto y 8 canarios en el system prompt. La semilla queda en la ficha, así cualquiera puede repetir exactamente las mismas pruebas.
-3. **Las mismas pruebas a todos.** Las manda a cada endpoint fijado (`provider.only`, sin fallback) y a una referencia, a temperatura 0 y con un tope de gasto.
-4. **Controles deterministas, sin juez LLM.** Excedente constante de tokens de prompt (la firma de un prefijo oculto), exactitud y coincidencia con la referencia, tool calls válidas y filtración del canario. Cada comparación es un test exacto de Fisher con un umbral fijado antes de medir (p < 0,01).
-5. **La ficha.** Por endpoint: «distinguible de la referencia» o «sin desviación detectada», con la muestra, el p-valor, los límites de lo que se afirma y el SHA-256 de las respuestas crudas.
+El modelo de amenaza completo, con supuestos y casos difíciles, está en [`docs/arquitectura.md`](docs/arquitectura.md#11-modelo-de-amenaza).
+
+## La solución
+
+Cachai es un auditor de caja negra. Usa la misma API que cualquier cliente, sin acceso al modelo ni cooperación del proveedor, y responde una sola pregunta por endpoint: **¿se distingue de la referencia?**
+
+Se apoya en tres ideas:
+
+1. **Pruebas ciegas.** El juego de pruebas se genera con una semilla nueva en cada auditoría, así que el proveedor no puede memorizarlo ni reconocerlo de antemano. La semilla queda en la ficha para que cualquiera repita exactamente la misma auditoría.
+2. **Controles deterministas, sin juez LLM.** Todas las pruebas tienen respuesta calculable. El auditor no puede ser inyectado por la respuesta que audita y da el mismo veredicto cada vez.
+3. **Evidencia con su nivel a la vista.** Cada dato de la ficha dice si lo declara el proveedor (E1), si se midió desde afuera (E2) o si está atestado criptográficamente (E3). Un sello único de «proveedor confiable» mezclaría lo que el proveedor dice con lo que se midió. Hoy el código cubre E1 y E2.
+
+Qué mide en cada endpoint (38 pruebas por auditoría):
+
+| Control | Qué delata | Cómo |
+|---|---|---|
+| Tokens de prompt de sobra | Un prompt oculto | 6 mensajes mínimos; un excedente constante frente a la referencia es la firma de un prefijo agregado |
+| Exactitud y coincidencia con la referencia | Un modelo sustituido o degradado | 20 tareas con respuesta calculable (sumas, productos, ordenar, repetir), a temperatura 0 |
+| Tool calls válidas | Un parser o una plantilla distintos | 4 llamadas a una herramienta con esquema estricto |
+| Canario | Que el endpoint filtre el secreto del system prompt | 8 secretos distintos y un juez determinista: el secreto aparece literal en la respuesta o no |
+| Confiabilidad | Un endpoint inestable | Errores y latencia mediana de cada endpoint durante la corrida |
+
+Cada comparación con la referencia es un test exacto de Fisher con un umbral fijado antes de medir (p < 0,01). El veredicto es «distinguible de la referencia» o «sin desviación detectada», con la muestra, el p-valor y los límites de lo que se afirma.
+
+## Arquitectura
+
+![Arquitectura de Cachai](docs/arquitectura.png)
+
+Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, que mide al auditor contra proveedores tramposos propios; y la **ficha**, que publica lo medido con su evidencia.
+
+**El auditor** (`cachai scan`) recorre cinco pasos:
+
+1. **Lo declarado** (`endpoints.py`). Lee de la API pública de OpenRouter la cuantización y el precio de cada endpoint del modelo, y elige cuáles auditar.
+2. **Juego ciego** (`suite.py`). Con una semilla nueva genera las 38 pruebas. Sin semilla genera el juego público, siempre igual, que sirve de comparación.
+3. **Las mismas pruebas a todos** (`client.py`, `scan.py`). Las manda a cada endpoint fijado (`provider.only`, sin fallback) y a una referencia, a temperatura 0, en paralelo y con un tope de gasto. Un error no detiene la auditoría: se registra como dato de confiabilidad.
+4. **Controles** (`checks.py`). Convierte las respuestas crudas en una medición por endpoint y la compara con la referencia. Si ningún control individual dispara, una prueba combinada suma todas las fallas.
+5. **Ficha** (`ficha.py`). JSON y Markdown con lo declarado, lo medido, el motivo de cada marca, los límites, la semilla y el SHA-256 de las respuestas crudas, que se guardan aparte.
+
+**El laboratorio** (`cachai experimento`) responde otra pregunta: ¿el auditor detecta lo que dice detectar? No se puede saber la verdad sobre un tercero, y atacarlo no es ético, así que el auditor se mide contra un proveedor tramposo propio (`villain.py`): un proxy que inyecta un prompt, desvía una fracción del tráfico a un modelo más barato y se porta bien cuando reconoce una auditoría. Una referencia y cinco proxies hacia el mismo modelo (uno honesto, como control de falsas alarmas, y cuatro tramposos) se auditan con el juego fijo y con el ciego. Corre sin claves contra un modelo de juguete (`toy.py`) o contra OpenRouter.
+
+**La referencia** es el endpoint del autor del modelo cuando existe (si no, uno que se elige con `--reference`), consultado por la misma ruta que los demás. Así la comparación aísla al proveedor, sin GPU propia. Es una referencia más débil que correr el modelo original y la ficha lo dice.
+
+Las decisiones, con las alternativas descartadas y su porqué, están en [`docs/arquitectura.md`](docs/arquitectura.md#3-decisiones-y-alternativas-descartadas).
 
 ## Resultados
 
