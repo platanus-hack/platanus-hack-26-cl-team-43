@@ -223,11 +223,11 @@ footer .equipo{display:flex;flex-wrap:wrap;gap:4px 16px}
 
   <section class="fila" id="problema">
     <div class="pila">
-      <h2 class="h2">Una evaluación de seguridad vale para unos pesos y una configuración.</h2>
+      <h2 class="h2">Si el proveedor cambia el modelo, sus pruebas de seguridad dejan de valer.</h2>
       <div class="cifras">
         <div><b>47</b><span>endpoints sirven GLM-5.3 en OpenRouter con el mismo nombre</span></div>
         <div><b>14</b><span>no declaran con qué cuantización lo sirven</span></div>
-        <div><b>24</b><span>de 103 endpoints medidos quedaron bajo una referencia con los pesos oficiales</span></div>
+        <div><b>24</b><span>de 103 endpoints medidos rindieron menos que el modelo oficial</span></div>
       </div>
       <p class="nota">API pública de OpenRouter, consultada el 21 de noviembre de 2026. Endpoint Accuracy Index de Artificial Analysis, medido entre el 8 de octubre y el 4 de noviembre de 2026.</p>
       <div class="dos">
@@ -334,7 +334,7 @@ uv run cachai scan toy-large --no-openrouter --reference oficial \
         <div><b>«Sin desviación detectada» no significa «es el mismo modelo».</b> Cada dato de la ficha dice si está declarado por el proveedor o medido desde afuera.</div>
         <div><b>No certifica privacidad.</b> Desde afuera no se puede probar que un proveedor no mire ni guarde los datos.</div>
         <div><b>«Distinguible de la referencia» no es una acusación.</b> Puede deberse a la plantilla, al parser o a la cuantización.</div>
-        <div><b>La referencia también es un endpoint.</b> Si está cuantizada, se mide equivalencia con ella, no con los pesos.</div>
+        <div><b>La referencia también es un endpoint.</b> Si está cuantizada, se mide equivalencia con ella, no con el modelo original.</div>
         <div><b>Un proveedor que estudie el generador de pruebas puede evadirlo.</b> Está medido: 0 de 30 en todas las trampas. El paso siguiente es auditar con una muestra del tráfico real.</div>
       </div>
       <div class="acciones izq">
