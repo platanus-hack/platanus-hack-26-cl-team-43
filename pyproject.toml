@@ -25,6 +25,7 @@ dev = ["pytest>=8", "respx>=0.21"]
 
 [project.scripts]
 radar = "radar.cli:main"
+cachai = "radar.audit.cli:main"
 
 [build-system]
 requires = ["hatchling"]

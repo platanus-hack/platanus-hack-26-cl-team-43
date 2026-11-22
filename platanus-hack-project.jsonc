@@ -1,16 +1,16 @@
 {
   // Your project's name, as it will appear on the voting page.
-  "project-name": "<FILL THIS>",
+  "project-name": "Cachai",
 
   // Short one-line summary of your project (in Spanish).
-  "project-oneliner-spanish": "<FILL THIS>",
+  "project-oneliner-spanish": "El auditor que le dice a quien compra tokens de modelos abiertos qué le están sirviendo de verdad.",
 
   // Brief description of your project (in Spanish).
-  "project-description-spanish": "<FILL THIS>",
+  "project-description-spanish": "Decenas de proveedores sirven el mismo modelo abierto con el mismo nombre y precios muy distintos, y quien compra no puede comprobar qué recibe. Cachai le manda las mismas pruebas a cada endpoint y a una referencia, y escribe una ficha que separa lo declarado de lo medido: prompts ocultos, exactitud, tool calls y filtración del system prompt. Las pruebas se generan en el momento, así un proveedor tramposo no puede reconocerlas.",
 
   // Public URL where your project is deployed and running.
   // Must be a valid URL, for example: https://my-project.vercel.app
   // If your project is an app, put the download link here instead
   // (for example, a URL to download an APK).
-  "deploy-url": "<FILL THIS>"
+  "deploy-url": "https://cachai-ai.vercel.app"
 }

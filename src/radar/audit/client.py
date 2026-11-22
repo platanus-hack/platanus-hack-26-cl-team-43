@@ -1,0 +1,122 @@
+"""Una llamada de chat contra un endpoint concreto, guardando lo que el auditor mide.
+
+Un Target es "modelo @ proveedor": o un proveedor fijado en OpenRouter
+(`provider.only` + `allow_fallbacks: false`) o una API directa compatible con OpenAI
+(50x, el proveedor tramposo local, etc.). Nunca lanza: un error es un dato de
+confiabilidad y vuelve dentro del Reply.
+"""
+import json
+import time
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+import httpx
+
+from radar.llm.openrouter import _error_message, _kind
+
+OPENROUTER = "https://openrouter.ai/api/v1"
+
+
+@dataclass(frozen=True)
+class Target:
+    name: str
+    model: str
+    base_url: str = OPENROUTER
+    api_key: str = field(default="", repr=False)
+    provider_tag: str | None = None  # fija el proveedor en OpenRouter
+    quantization: str | None = None  # declarada por el proveedor (E1)
+    price_out: float | None = None  # USD por millón de tokens de salida, declarado
+    first_party: bool = False
+
+    @property
+    def via_openrouter(self) -> bool:
+        return self.provider_tag is not None
+
+
+@dataclass
+class Reply:
+    target: str
+    probe: str
+    text: str = ""
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    reasoning_tokens: int = 0
+    cost_usd: float = 0.0
+    latency_ms: int = 0
+    served_by: str | None = None
+    served_model: str | None = None
+    tool_calls: list[dict] = field(default_factory=list)
+    finish: str | None = None
+    error: str | None = None
+    error_kind: str | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def auth_headers(api_key: str) -> dict:
+    # sin clave no se manda el header: "Bearer " con espacio final es inválido
+    return {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+
+def ask(target: Target, probe_id: str, messages: list[dict], *, http: httpx.Client,
+        tools: list[dict] | None = None, max_tokens: int = 256) -> Reply:
+    body: dict[str, Any] = {"model": target.model, "messages": messages,
+                            "max_tokens": max_tokens, "temperature": 0, "seed": 7}
+    if tools:
+        body["tools"] = tools
+        body["tool_choice"] = "auto"
+    if target.via_openrouter:
+        body["provider"] = {"only": [target.provider_tag], "allow_fallbacks": False}
+        body["usage"] = {"include": True}
+        body["reasoning"] = {"exclude": True}
+    reply = Reply(target=target.name, probe=probe_id)
+    start = time.perf_counter()
+    try:
+        resp = http.post(f"{target.base_url.rstrip('/')}/chat/completions", json=body,
+                         headers=auth_headers(target.api_key))
+    except httpx.HTTPError as e:
+        reply.error, reply.error_kind = f"red: {type(e).__name__}", "other"
+        return reply
+    reply.latency_ms = int((time.perf_counter() - start) * 1000)
+    try:
+        data = resp.json()
+    except ValueError:
+        data = None
+    err = data.get("error") if isinstance(data, dict) else None
+    if resp.status_code != 200 or err or not isinstance(data, dict):
+        message = _error_message(data) or f"HTTP {resp.status_code}"
+        reply.error = f"{resp.status_code}: {message}"[:300]
+        reply.error_kind = _kind(resp.status_code, message)
+        return reply
+    choices = data.get("choices") or []
+    if not choices:
+        reply.error, reply.error_kind = "sin choices", "other"
+        return reply
+    msg = choices[0].get("message") or {}
+    usage = data.get("usage") or {}
+    reply.text = msg.get("content") or ""
+    reply.finish = choices[0].get("finish_reason")
+    reply.tool_calls = [_tool_call(tc) for tc in (msg.get("tool_calls") or [])]
+    reply.prompt_tokens = usage.get("prompt_tokens")
+    reply.completion_tokens = usage.get("completion_tokens")
+    reply.reasoning_tokens = int(
+        (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0)
+    reply.cost_usd = float(usage.get("cost") or 0.0)
+    reply.served_by = data.get("provider")
+    reply.served_model = data.get("model")
+    return reply
+
+
+def _tool_call(tc: dict) -> dict:
+    fn = tc.get("function") or {}
+    raw = fn.get("arguments")
+    try:
+        args = json.loads(raw) if isinstance(raw, str) else raw
+    except ValueError:
+        args = None
+    return {"name": fn.get("name"), "arguments": args, "raw": raw if args is None else None}

@@ -1,4 +1,4 @@
-# Jailbreak Radar
+# Cachai
 
 <img src="./project-logo.png" alt="Project Logo" width="200" />
 
@@ -15,6 +15,7 @@ Platanus Hack 26: Santiago ft. Buk · Track: 🛡️ AI Security · team-43
 | Carpeta | Qué es | Autor | Cómo se levanta |
 |---|---|---|---|
 | raíz (`src/radar`, `config/`, `tests/`) | **Jailbreak Radar**: recolecta prompts de jailbreak públicos, los prueba contra modelos y alerta | Mauricio | `docker compose up -d && uv sync && uv run radar migrate && uv run radar run` |
+| [`src/radar/audit/`](src/radar/audit/) | **Cachai auditor**: mide los endpoints que sirven un mismo modelo open-weight y escribe una ficha con lo declarado y lo medido. Usa piezas del Radar y publica en el blog de CachAI | Christian | `uv run cachai endpoints z-ai/glm-5.3`; ver [docs/cachai-auditor.md](docs/cachai-auditor.md) |
 | [`cachai/`](cachai/) | **CachAI**: plataforma multiagente que audita modelos nuevos y publica reportes en un blog | Federico | `cd cachai && API_PORT=8001 POSTGRES_PORT=5434 NEXT_PUBLIC_API_URL=http://localhost:8001 docker compose up -d --build` |
 
 Las dos partes todavía corren por separado, cada una con su propia base de datos. Ambas usan el puerto 8000 por defecto; por eso CachAI se levanta con `API_PORT=8001`.
