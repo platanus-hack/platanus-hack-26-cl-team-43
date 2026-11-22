@@ -10,6 +10,67 @@ Platanus Hack 26: Santiago ft. Buk · Track: 🛡️ AI Security · team-43
 - Christian Rodrigo Rojas Rodriguez ([@Christian-Rojas-Rodriguez](https://github.com/Christian-Rojas-Rodriguez))
 - Federico Hörl ([@fede-h](https://github.com/fede-h))
 
+**¿Cachai qué modelo te están sirviendo?** Cachai es el auditor de modelos servidos como *token-as-a-service*: mide los endpoints que sirven un mismo modelo abierto y le dice a quien compra tokens cuáles se apartan de la referencia.
+
+## El negocio
+
+### Problema
+
+- Decenas de proveedores sirven el mismo modelo abierto con el mismo nombre y precios muy distintos. GLM-5.3 tiene 47 endpoints en OpenRouter; 14 no declaran cuantización y el precio de salida varía 4,7 veces (API pública, 21-nov-2026).
+- Quien compra no puede comprobar qué recibe: si el modelo es el declarado, si está degradado o si el proveedor agrega instrucciones propias.
+- SOC 2 e ISO 27001 revisan procesos de la empresa. Ninguna certificación cubre qué modelo se sirve.
+- Es un problema de seguridad de IA: una evaluación de seguridad vale para unos pesos y una configuración. Si no se verifica qué se sirve, no cubre lo desplegado.
+
+### Cliente ideal
+
+Equipos que ya gastan en tokens de modelos abiertos a través de varios proveedores y tienen agentes en producción. Lo usa quien elige proveedor (plataforma o infraestructura de IA) para decidir a cuál mandarle tráfico y a cuál sacarlo.
+
+### Qué vendemos
+
+Una ficha por endpoint, medida en forma continua, que separa tres niveles de evidencia:
+
+| Nivel | Qué es | Ejemplo |
+|---|---|---|
+| E1, declarado | Lo afirma el proveedor | Cuantización, política de retención |
+| E2, medido | Lo medimos desde afuera, con método y muestra | Tokens de sobra, exactitud, tool calls |
+| E3, atestado | Evidencia criptográfica verificable | Pesos medidos dentro de un TEE |
+
+Hoy el código cubre E1 y E2.
+
+### Quién paga
+
+Quien compra los tokens, no quien los vende. Así el auditado no financia su propia auditoría. Los proveedores se suman gratis: dan acceso y obtienen una ficha pública para mostrar.
+
+### Competencia y cuña
+
+No somos los primeros en verificar proveedores de inferencia.
+
+| Quién | Qué hace | En qué nos diferenciamos |
+|---|---|---|
+| Artificial Analysis | Benchmarks públicos contra una referencia propia | Es una foto puntual |
+| Benchlist | Atestación de benchmarks, USD 499 al mes | Lo paga el proveedor |
+| OpenRouter Exacto | Calidad de tool calls sobre tráfico real | Es del intermediario y no publica una ficha |
+| Tinfoil, Phala | Prueba criptográfica de los pesos | Solo en sus propios endpoints |
+
+La cuña: auditoría continua, del lado del comprador, con pruebas que el proveedor no puede reconocer de antemano y con el nivel de evidencia de cada dato a la vista.
+
+### Mercado
+
+El gasto empresarial en modelos e inferencia fue de USD 94,2 mil millones a septiembre de 2026 (Menlo Ventures). Estimamos que unos USD 3,8 a 4,5 mil millones al año van a modelos abiertos por API. Cobrando entre 0,5 y 1 % del gasto del comprador, el techo sería de USD 20 a 45 millones al año. Las dos últimas cifras son estimaciones nuestras.
+
+### Validación y lo que falta
+
+- **Un comprador** dijo que lo compraría para elegir proveedores, que no conoce ningún certificado en el que confíe y que hace falta un estándar propio, no una ISO.
+- **Un proveedor** contó que pierde ventas porque le piden certificaciones que no tiene.
+- Es una entrevista por lado. No está validado cuánto pagarían ni quién firma la compra.
+- El auditor corre de punta a punta contra un modelo de juguete y un proveedor tramposo propio. Todavía no corrió contra proveedores reales.
+
+### Qué no prometemos
+
+- "Sin desviación detectada" no significa "es el mismo modelo".
+- No certificamos privacidad: desde afuera no se puede probar que un proveedor no mire ni guarde los datos.
+- "Distinguible de la referencia" no es una acusación. Puede deberse a la plantilla, al parser o a la cuantización.
+
 ## Qué hay en este repo
 
 | Carpeta | Qué es | Autor | Cómo se levanta |
