@@ -42,4 +42,14 @@ a VM) with the `.env` variables set. The hosted Postgres must have `pgvector`
 - Prompts are only ever tested with the harmless canary goal and low-severity policy
   goals in `config/goals.yaml`. Never add high-severity goals.
 - The dashboard is login-only (`ALLOWED_EMAILS`), and model spend is capped per day by
-  `DAILY_BUDGET_USD`.
+  `DAILY_BUDGET_USD`. The cap covers extraction as well as testing: once it is reached,
+  raw items wait unprocessed and test jobs wait queued until the next Santiago day.
+
+## Watchlist behaviour
+
+- First sight of a repo: `seed` repos (added by hand or on `/sources`) have their whole
+  tree read; `auto` (discovery) and `from_paper` repos only record their head commit and
+  emit later pushes. This keeps a flood of discovered repos from burying fresh pushes.
+- Watchlist items are processed before other sources' backlog.
+- A repo that errors is skipped for that run (WARNING log) without blocking the others;
+  a GitHub rate limit ends the run but keeps the progress of repos already polled.

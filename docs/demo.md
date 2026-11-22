@@ -37,10 +37,13 @@ values ('<team-email>', '<+E164-phone>', array['whatsapp','email'], 0, true);
 2. Log in to the dashboard, open `/sources`, and in the watch form (field `full_name`,
    format `owner/repo`) add `<team>/demo-prompts`. It is stored in `watch_repos` with status `seed`.
 3. Click "poll now" on `github_watchlist` (`POST /sources/github_watchlist/poll-now`).
-   This is the first-sight run: it reads the whole tree, so only the README is ingested.
+   This is the first-sight run. Repos added here are `seed`, so it reads the whole tree and
+   only the README is ingested. (Repos found by discovery are `auto`: their first sight only
+   records the head commit and ingests nothing.)
    Confirm on `/sources` that `github_watchlist` shows a fresh last run and an empty `last_error`.
 4. From here every push is picked up through the diff path (`compare old...new`), which is
-   the path the demo exercises. Only added lines of `.md .txt .json .yaml .yml .csv` files count.
+   the path the demo exercises. Only added lines of `.md .mkd .markdown .txt .json .yaml .yml .csv`
+   files count. Watchlist items jump ahead of any other raw-item backlog.
 
 ## 3. Choosing the demo prompt (safety)
 
@@ -53,7 +56,7 @@ Requirements for the file you push:
   Goals are only the canary and the low-severity policy goals in `config/goals.yaml`.
 - Alerts and the dashboard feed never print prompt text on stage beyond the detail page; do not read it aloud.
 
-Dry run on a scratch *repo* (the watchlist reads only a repo's default branch, so a branch is never seen). Do this the day before, and again right before going on stage):
+Dry run on a scratch *repo* (the watchlist reads only a repo's default branch, so a branch is never seen). Do this the day before, and again right before going on stage:
 
 1. Create a separate public scratch repo, add it on `/sources` (see section 2), and push the candidate file to its default branch.
 2. Locally: `uv run radar poll github_watchlist` (prints `github_watchlist: N new raw items`),
@@ -97,8 +100,10 @@ and the tester.
   channels). Failures are recorded in the `alerts` table as `failed: ...`:
   `select channel, status, sent_at from alerts order by id desc limit 5;`. Open the
   candidate detail page directly from the feed. Check the phone has an active sandbox join.
-- **Budget paused**: the candidate shows `paused by budget`. Raise `DAILY_BUDGET_USD`
-  (e.g. to 50.0) in the environment and restart the process; the queue resumes by itself.
+- **Budget paused**: the candidate shows `paused by budget`. The cap counts extraction too,
+  so once it is hit new raw items also stay unprocessed (no candidate appears at all). Raise
+  `DAILY_BUDGET_USD` (e.g. to 50.0) in the environment and restart the process; processing
+  and the queue resume by themselves.
 - **Collector error**: `/sources` shows the message in `last_error` for that collector.
   A 403 usually means a bad or rate-limited `GITHUB_TOKEN`. Fix the token, restart, poll again.
 - **Poll-now seems to do nothing**: if the collector is already running, the click is skipped. The redirect still looks like success; the only trace is a WARNING in the server output ("maximum number of running instances reached"). Wait ~10 s and click again.
