@@ -6,7 +6,7 @@ import psycopg
 from radar.llm.base import LLM, LLMError
 from radar.llm.embed import Embedder
 from radar.pipeline.dedupe import ingest_prompt
-from radar.pipeline.extract import extract
+from radar.pipeline.extract import ExtractedPrompt, extract_chunks
 
 log = logging.getLogger(__name__)
 
@@ -22,8 +22,9 @@ def process_pending_raw_items(conn: psycopg.Connection, llm: LLM, embedder: Embe
                               limit: int = 50) -> int:
     """Extract + dedupe unprocessed raw items, oldest first, one transaction each.
 
-    Returns the number of items marked processed. A retryable LLM error rolls back the
-    current item (left unprocessed) and stops the batch.
+    Returns the number of items marked processed. A retryable or auth LLM error rolls
+    back the current item (left unprocessed) and stops the batch. Other non-retryable
+    errors keep the prompts of chunks extracted before the error and mark it processed.
     """
     ids = [r["id"] for r in conn.execute(
         "select id from raw_items where processed_at is null "
@@ -42,13 +43,15 @@ def process_pending_raw_items(conn: psycopg.Connection, llm: LLM, embedder: Embe
                 continue
             text = item["content_text"] or ""
             if item["kind"] == "text" and text.strip():
+                prompts: list[ExtractedPrompt] = []
                 try:
-                    prompts = extract(llm, model, text)
+                    for chunk_prompts, _cost in extract_chunks(llm, model, text):
+                        prompts.extend(chunk_prompts)
                 except LLMError as e:
-                    if e.retryable:
+                    if e.retryable or e.kind == "auth":
                         raise
-                    log.warning("extraction failed for raw_item %s, skipping: %s", raw_id, e)
-                    prompts = []
+                    log.warning("extraction failed for raw_item %s, keeping %d prompts "
+                                "from earlier chunks: %s", raw_id, len(prompts), e)
                 for p in prompts:
                     out = ingest_prompt(conn, embedder, p, raw_id, item["seen_at"])
                     if out.novelty in ("novel", "variant"):
@@ -57,7 +60,8 @@ def process_pending_raw_items(conn: psycopg.Connection, llm: LLM, embedder: Embe
             conn.commit()
         except LLMError as e:
             conn.rollback()
-            log.warning("retryable LLM error on raw_item %s, stopping batch: %s", raw_id, e)
+            log.warning("LLM error on raw_item %s (retryable or auth), stopping batch: %s",
+                        raw_id, e)
             return done
         except Exception:
             conn.rollback()

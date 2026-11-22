@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
+
+ErrorKind = Literal["model", "auth", "other"]
 
 
 @dataclass
@@ -11,9 +13,13 @@ class ChatResult:
 
 
 class LLMError(Exception):
-    def __init__(self, message: str, *, retryable: bool):
+    """kind: "model" (model id gone/invalid), "auth" (bad key / no credits, global)
+    or "other"."""
+
+    def __init__(self, message: str, *, retryable: bool, kind: ErrorKind = "other"):
         super().__init__(message)
         self.retryable = retryable
+        self.kind = kind
 
 
 class LLM(Protocol):

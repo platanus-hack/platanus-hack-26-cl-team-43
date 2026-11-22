@@ -147,14 +147,18 @@ def release(conn, job_id: int) -> None:
                  (job_id,))
 
 
-def requeue(conn, job_id: int, delay: timedelta) -> None:
-    """Retry later with attempts+1; once attempts reaches MAX_ATTEMPTS the job fails."""
+def requeue(conn, job_id: int, delay: timedelta, *, count_attempt: bool = True) -> None:
+    """Retry later with attempts+1; once attempts reaches MAX_ATTEMPTS the job fails.
+
+    count_attempt=False retries without touching attempts (a global problem, not the job's).
+    """
+    inc = 1 if count_attempt else 0
     row = conn.execute(
-        "update test_jobs set attempts = attempts + 1, locked_at = null, "
+        "update test_jobs set attempts = attempts + %s, locked_at = null, "
         "not_before = now() + %s, "
-        "status = case when attempts + 1 >= %s then 'failed' else 'queued' end "
+        "status = case when attempts + %s >= %s then 'failed' else 'queued' end "
         "where id = %s returning candidate_id, status",
-        (delay, MAX_ATTEMPTS, job_id),
+        (inc, delay, inc, MAX_ATTEMPTS, job_id),
     ).fetchone()
     if row["status"] == "failed":
         refresh_candidate_status(conn, row["candidate_id"])

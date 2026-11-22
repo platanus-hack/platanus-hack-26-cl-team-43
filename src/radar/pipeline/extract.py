@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Literal
 
@@ -111,7 +112,7 @@ def _parse(raw: str) -> list[dict]:
         return []
 
 
-def _extract_chunk(llm: LLM, model: str, chunk: str) -> list[ExtractedPrompt]:
+def _extract_chunk(llm: LLM, model: str, chunk: str) -> tuple[list[ExtractedPrompt], float]:
     res = llm.chat(model, f"<document>\n{chunk}\n</document>", system=SYSTEM_PROMPT,
                    json_schema=EXTRACTION_SCHEMA, max_tokens=MAX_TOKENS)
     source = _collapse(chunk)
@@ -134,12 +135,19 @@ def _extract_chunk(llm: LLM, model: str, chunk: str) -> list[ExtractedPrompt]:
                 template_severity=p.get("template_severity") or "low"))
         except (KeyError, TypeError, ValueError) as e:
             log.warning("skipping malformed extracted prompt: %s", e)
-    return out
+    return out, res.cost_usd
+
+
+def extract_chunks(llm: LLM, model: str, content: str,
+                   max_chars: int = 40_000) -> Iterator[tuple[list[ExtractedPrompt], float]]:
+    """Yield (prompts, cost_usd) per chunk, so callers keep earlier chunks on an error."""
+    for chunk in split_text(content, max_chars):
+        yield _extract_chunk(llm, model, chunk)
 
 
 def extract(llm: LLM, model: str, content: str,
             max_chars: int = 40_000) -> list[ExtractedPrompt]:
     out: list[ExtractedPrompt] = []
-    for chunk in split_text(content, max_chars):
-        out.extend(_extract_chunk(llm, model, chunk))
+    for prompts, _cost in extract_chunks(llm, model, content, max_chars):
+        out.extend(prompts)
     return out

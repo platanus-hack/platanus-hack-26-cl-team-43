@@ -147,3 +147,30 @@ def test_callback_runs_after_commit(conn):
     process_pending_raw_items(conn, fake_llm_returning(P), FakeEmbedder.same_vector(), "x", cb)
     assert states == [TransactionStatus.IDLE]
     assert conn.execute("select count(*) c from candidates").fetchone()["c"] == 1
+
+
+def test_auth_error_leaves_items_unprocessed_and_stops(conn):
+    first = insert_raw(conn, text="boom here", fetched_at=T0)
+    second = insert_raw(conn, text=P, fetched_at=datetime(2026, 11, 2, tzinfo=UTC))
+    llm = FakeLLM({"x": LLMError("openrouter 402: no credits", retryable=False, kind="auth")})
+    n = process_pending_raw_items(conn, llm, FakeEmbedder(default=vec(1)), "x", lambda _: None)
+    assert n == 0
+    assert not processed(conn, first) and not processed(conn, second)
+    assert len(llm.calls) == 1
+
+
+def test_non_retryable_error_keeps_prompts_from_earlier_chunks(conn, monkeypatch):
+    import radar.pipeline.extract as ex
+    monkeypatch.setattr(ex, "split_text", lambda text, max_chars=40_000: [P, "boom chunk"])
+    rid = insert_raw(conn, text=P + " boom chunk")
+
+    def respond(model, user, system):
+        if "boom" in user:
+            raise LLMError("bad request", retryable=False)
+        return json.dumps({"prompts": [prompt_json(text=P, goal_slot=None)]})
+
+    new = []
+    n = process_pending_raw_items(conn, FakeLLM(respond), FakeEmbedder(default=vec(1)), "x",
+                                  new.append)
+    assert n == 1 and processed(conn, rid)
+    assert len(new) == 1

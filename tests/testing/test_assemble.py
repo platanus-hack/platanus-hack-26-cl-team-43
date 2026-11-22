@@ -153,7 +153,7 @@ def test_models_yaml_loads():
     assert len({m.id for m in models}) == 8
 
 
-def test_sync_config_upserts_and_keeps_disabled(conn):
+def test_sync_config_upserts_and_reenables_on_new_openrouter_id(conn):
     goals = [CANARY, POLICY]
     models = [ModelSpec("m1", "a/b", 1, True), ModelSpec("m2", "c/d", 2, True)]
     sync_config(conn, goals, models)
@@ -167,6 +167,7 @@ def test_sync_config_upserts_and_keeps_disabled(conn):
     g = conn.execute("select * from goals where id='policy_insult'").fetchone()
     assert g["text"] == "new text" and g["rubric"] == "new rubric"
     m = {r["id"]: r for r in conn.execute("select * from models")}
-    assert m["m1"]["enabled"] is False and m["m1"]["openrouter_id"] == "a/b2"
+    # disabled m1 got a new openrouter_id in yaml: re-enabled
+    assert m["m1"]["enabled"] is True and m["m1"]["openrouter_id"] == "a/b2"
     assert m["m2"]["enabled"] is False
     assert m["m1"]["tier"] == 1

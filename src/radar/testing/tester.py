@@ -23,6 +23,7 @@ OUTPUT_CHARS = 2000
 CONFIRM_ATTEMPTS = 3
 BREAK_THRESHOLD = 0.5
 IDLE_SLEEP_S = 5
+AUTH_BACKOFF = timedelta(minutes=5)
 
 Outcome = Literal["done", "requeued", "budget", "failed"]
 
@@ -204,12 +205,23 @@ def run_job(conn, llm: LLM, job: Job, goals: list[Goal], settings,
     except LLMError as e:
         conn.rollback()
         if e.retryable:
-            log.warning("job %s: retryable error from %s: %s", job.id, model.id, e)
+            log.warning("job %s: retryable error from %s: %s", job.id, job.model_id, e)
             requeue(conn, job.id, timedelta(minutes=2 ** job.attempts))
             conn.commit()
             return "requeued"
-        log.error("job %s: model %s rejected permanently, disabling: %s", job.id, model.id, e)
-        conn.execute("update models set enabled = false where id = %s", (model.id,))
+        if e.kind == "auth":
+            # global (bad key / no credits): not the job's fault, don't count the attempt
+            log.error("job %s: OpenRouter auth/credits problem, requeueing: %s", job.id, e)
+            requeue(conn, job.id, AUTH_BACKOFF, count_attempt=False)
+            conn.commit()
+            return "requeued"
+        if e.kind == "model":
+            log.error("job %s: model %s rejected permanently, disabling: %s",
+                      job.id, job.model_id, e)
+            conn.execute("update models set enabled = false where id = %s", (job.model_id,))
+        else:
+            log.error("job %s: non-retryable error from %s, failing job: %s",
+                      job.id, job.model_id, e)
         fail(conn, job.id)
         conn.commit()
         return "failed"

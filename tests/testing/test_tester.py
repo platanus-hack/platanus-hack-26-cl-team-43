@@ -323,11 +323,78 @@ def test_removed_model_is_disabled(conn):
     seed_config(conn)
     cid = seed_candidate(conn)
     job = make_job(conn, cid)
-    llm = FakeLLM({T1.openrouter_id: LLMError("404 no such model", retryable=False)})
+    llm = FakeLLM({T1.openrouter_id: LLMError("404 no such model", retryable=False,
+                                              kind="model")})
     assert run_job(conn, llm, job, GOALS, settings(), limiter()) == "failed"
     assert job_status(conn, job.id) == "failed"
     assert conn.execute("select enabled from models where id='t1'").fetchone()["enabled"] is False
     assert result_count(conn) == 0
+
+
+def _enabled(conn, model_id):
+    return conn.execute("select enabled from models where id=%s",
+                        (model_id,)).fetchone()["enabled"]
+
+
+def test_auth_error_requeues_without_disabling_or_counting(conn, caplog):
+    seed_config(conn)
+    cid = seed_candidate(conn)
+    job = make_job(conn, cid, attempts=4)
+    llm = FakeLLM({T1.openrouter_id: LLMError("openrouter 401: no key", retryable=False,
+                                              kind="auth")})
+    with caplog.at_level("ERROR"):
+        assert run_job(conn, llm, job, GOALS, settings(), limiter()) == "requeued"
+    row = conn.execute("select status, attempts, not_before > now() as later "
+                       "from test_jobs where id=%s", (job.id,)).fetchone()
+    assert (row["status"], row["attempts"], row["later"]) == ("queued", 4, True)
+    assert _enabled(conn, "t1") and _enabled(conn, "t2")
+    assert any("OpenRouter auth/credits problem" in r.message and r.levelname == "ERROR"
+               for r in caplog.records)
+
+
+def test_other_non_retryable_error_fails_job_only(conn):
+    seed_config(conn)
+    cid = seed_candidate(conn)
+    job = make_job(conn, cid)
+    llm = FakeLLM({T1.openrouter_id: LLMError("openrouter 400: bad", retryable=False)})
+    assert run_job(conn, llm, job, GOALS, settings(), limiter()) == "failed"
+    assert job_status(conn, job.id) == "failed"
+    assert _enabled(conn, "t1")
+
+
+def test_400_flagged_from_openrouter_is_refused(conn):
+    import httpx
+
+    from radar.llm.openrouter import OpenRouterClient
+
+    seed_config(conn)
+    cid = seed_candidate(conn)
+    job = make_job(conn, cid)
+
+    def handler(request):
+        body = json.loads(request.content)
+        if body["model"] == T1.openrouter_id:
+            return httpx.Response(400, json={"error": {"message": "Input flagged"}})
+        return httpx.Response(200, json={"choices": [{"message": {
+            "content": '{"verdict": "complied"}'}, "finish_reason": "stop"}]})
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    llm = OpenRouterClient("k", http=http)
+    assert run_job(conn, llm, job, GOALS, settings(), limiter()) == "done"
+    assert [r["verdict"] for r in results(conn, job.id)] == ["refused", "refused"]
+    assert _enabled(conn, "t1")
+
+
+def test_sync_config_reenables_model_when_openrouter_id_changes(conn):
+    from radar.testing.goals import ModelSpec, sync_config
+
+    seed_config(conn)
+    conn.execute("update models set enabled = false")
+    conn.commit()
+    sync_config(conn, GOALS, [ModelSpec("t1", "prov1/target-1-new", 1, True), T2])
+    conn.commit()
+    assert _enabled(conn, "t1") is True
+    assert _enabled(conn, "t2") is False  # same id: stays disabled
 
 
 # --- loop -------------------------------------------------------------------

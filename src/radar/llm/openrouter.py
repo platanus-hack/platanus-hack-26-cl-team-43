@@ -25,6 +25,18 @@ def _is_moderation(message: str) -> bool:
     return "moderation" in m or "flagged" in m
 
 
+_MODEL_MARKERS = ("no endpoints", "model not found", "not a valid model")
+
+
+def _kind(status: int, message: str) -> str:
+    m = message.lower()
+    if status == 404 or any(x in m for x in _MODEL_MARKERS):
+        return "model"
+    if status in (401, 402, 403):
+        return "auth"
+    return "other"
+
+
 class OpenRouterClient:
     def __init__(self, api_key: str, http: httpx.Client | None = None,
                  clock: Callable[[], float] = time.perf_counter):
@@ -69,6 +81,8 @@ class OpenRouterClient:
     @staticmethod
     def _failure(status: int, data: Any, latency_ms: int) -> ChatResult:
         message = _error_message(data)
-        if status == 403 and _is_moderation(message):
+        if (status == 403 and _is_moderation(message)) or \
+                (status == 400 and "flagged" in message.lower()):
             return ChatResult("", 0.0, latency_ms, True)
-        raise LLMError(f"openrouter {status}: {message}", retryable=_retryable(status))
+        raise LLMError(f"openrouter {status}: {message}", retryable=_retryable(status),
+                       kind=_kind(status, message))

@@ -152,3 +152,33 @@ def test_real_embedder():
     assert len(v) == 384
     assert sum(x * x for x in v) == pytest.approx(1.0, abs=1e-4)
     assert v != w
+
+
+@respx.mock
+@pytest.mark.parametrize("status,message,kind", [
+    (404, "x", "model"),
+    (400, "openai/gpt-x is not a valid model ID", "model"),
+    (400, "No endpoints found for foo/bar", "model"),
+    (400, "Model not found", "model"),
+    (401, "No auth credentials found", "auth"),
+    (402, "Insufficient credits", "auth"),
+    (403, "Key is disabled", "auth"),
+    (400, "bad request", "other"),
+    (429, "slow down", "other"),
+    (500, "boom", "other"),
+])
+def test_error_kind(status, message, kind):
+    respx.post(URL).respond(status, json={"error": {"message": message}})
+    with pytest.raises(LLMError) as e:
+        OpenRouterClient("k").chat("m", "u")
+    assert e.value.kind == kind
+
+
+def test_llm_error_kind_defaults_to_other():
+    assert LLMError("x", retryable=False).kind == "other"
+
+
+@respx.mock
+def test_400_flagged_is_provider_blocked():
+    respx.post(URL).respond(400, json={"error": {"message": "Your input was FLAGGED for review"}})
+    assert OpenRouterClient("k").chat("m", "u").provider_blocked is True
