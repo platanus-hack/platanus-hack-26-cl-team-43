@@ -10,6 +10,17 @@ Platanus Hack 26: Santiago ft. Buk · Track: 🛡️ AI Security · team-43
 - Christian Rodrigo Rojas Rodriguez ([@Christian-Rojas-Rodriguez](https://github.com/Christian-Rojas-Rodriguez))
 - Federico Hörl ([@fede-h](https://github.com/fede-h))
 
+## Qué hay en este repo
+
+| Carpeta | Qué es | Autor | Cómo se levanta |
+|---|---|---|---|
+| raíz (`src/radar`, `config/`, `tests/`) | **Jailbreak Radar**: recolecta prompts de jailbreak públicos, los prueba contra modelos y alerta | Mauricio | `docker compose up -d && uv sync && uv run radar migrate && uv run radar run` |
+| [`cachai/`](cachai/) | **CachAI**: plataforma multiagente que audita modelos nuevos y publica reportes en un blog | Federico | `cd cachai && API_PORT=8001 POSTGRES_PORT=5434 NEXT_PUBLIC_API_URL=http://localhost:8001 docker compose up -d --build` |
+
+Las dos partes todavía corren por separado, cada una con su propia base de datos. Ambas usan el puerto 8000 por defecto; por eso CachAI se levanta con `API_PORT=8001`.
+
+Lo que sigue en este README describe el Jailbreak Radar. El de CachAI está en [`cachai/README.md`](cachai/README.md).
+
 
 Watches public sources (GitHub repos and code search, Hugging Face datasets, papers) for
 new LLM jailbreak prompts, extracts and deduplicates them, tests new ones against a set
