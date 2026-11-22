@@ -53,9 +53,9 @@ Requirements for the file you push:
   Goals are only the canary and the low-severity policy goals in `config/goals.yaml`.
 - Alerts and the dashboard feed never print prompt text on stage beyond the detail page; do not read it aloud.
 
-Dry run on a scratch branch (do this the day before, and again right before going on stage):
+Dry run on a scratch *repo* (the watchlist reads only a repo's default branch, so a branch is never seen). Do this the day before, and again right before going on stage):
 
-1. On a scratch repo or a scratch branch of the demo repo, push the candidate file.
+1. Create a separate public scratch repo, add it on `/sources` (see section 2), and push the candidate file to its default branch.
 2. Locally: `uv run radar poll github_watchlist` (prints `github_watchlist: N new raw items`),
    then `uv run radar run`, wait for the raw item to be processed (runs every minute) and tested.
 3. Open the candidate detail page and record in the table below which models it broke.
@@ -101,8 +101,7 @@ and the tester.
   (e.g. to 50.0) in the environment and restart the process; the queue resumes by itself.
 - **Collector error**: `/sources` shows the message in `last_error` for that collector.
   A 403 usually means a bad or rate-limited `GITHUB_TOKEN`. Fix the token, restart, poll again.
-- **Poll-now seems to do nothing**: if the job is already running, the request is skipped
-  silently. Wait ~10 s and click again.
+- **Poll-now seems to do nothing**: if the collector is already running, the click is skipped. The redirect still looks like success; the only trace is a WARNING in the server output ("maximum number of running instances reached"). Wait ~10 s and click again.
 - **Nothing is novel** (prompt already deduplicated): use a fresh repo or a lightly reworded template.
 
 ## 6. Deploy notes
@@ -119,7 +118,10 @@ docker run --rm --env-file .env -e PORT=8000 -p 8000:8000 jailbreak-radar
 - Set `PORT` to what the platform expects (the image defaults to 8000), and `BASE_URL` to the public URL.
 - Needs a long-lived process (Railway, Fly, a VM), not a serverless runtime.
 - Shutdown caveat: on SIGTERM the process may skip the graceful shutdown (the scheduler
-  and tester are stopped with `wait=False`). It is harmless; if a test job looks stuck after a restart, check the candidate status and retry.
+  and tester are stopped with `wait=False`). Jobs left `running` are reclaimed by `claim_next` only after 15 minutes, so that
+  candidate will not resume for up to 15 minutes. Rule: do not restart or redeploy within
+  15 minutes before the stage run. For rehearsals only, force it:
+  `update test_jobs set status='queued', locked_at=null where status='running';`
 - Repeat the whole stage script against the deployed instance before demo day.
 
 ## 7. Rehearsal timings
