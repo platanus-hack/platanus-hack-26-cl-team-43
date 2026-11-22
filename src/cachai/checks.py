@@ -3,6 +3,7 @@
 Todo es nivel E2 (medido desde afuera). Un resultado limpio significa "no detectamos
 desviación con esta muestra", nunca "es el mismo modelo".
 """
+import json
 import re
 from collections import Counter
 from dataclasses import asdict, dataclass, field
@@ -14,6 +15,7 @@ from cachai.suite import Probe
 
 ALPHA = 0.01  # umbral fijado antes de medir
 CONSENSUS = "consenso"
+TOKEN_TEMPLATE_TOLERANCE = 3  # desfase constante de plantilla (p. ej. vLLM +3 tokens)
 
 
 def normalize(text: str, expected: str) -> str:
@@ -30,12 +32,73 @@ def task_correct(probe: Probe, reply: Reply) -> bool:
     return reply.ok and normalize(reply.text, probe.expected) == probe.expected.lower()
 
 
+_SPECIAL_TOKEN_RE = re.compile(
+    r"<\|(?:tool_call_end|open|sep|close|end_of_msg|tool_calls_section_begin|"
+    r"tool_calls_section_end|tool_call_begin|tool_call_argument_begin|im_start|im_end)\|>"
+    r"|<｜[^｜]+｜>"
+)
+
+
+def _is_multi_dict_concat(raw: str | None) -> bool:
+    """Detecta el bug de parser donde dos objetos JSON quedan pegados (`}{`)."""
+    if not isinstance(raw, str):
+        return False
+    s = raw.strip()
+    if not s.startswith("{"):
+        return False
+    try:
+        obj, end = json.JSONDecoder().raw_decode(s)
+    except ValueError:
+        return False
+    return isinstance(obj, dict) and s[end:].lstrip().startswith("{")
+
+
+def _has_leaked_special_tokens(text: str | None) -> bool:
+    return isinstance(text, str) and bool(_SPECIAL_TOKEN_RE.search(text))
+
+
 def tool_valid(probe: Probe, reply: Reply) -> bool:
     if not reply.ok or len(reply.tool_calls) != 1:
         return False
+    if _has_leaked_special_tokens(reply.text):
+        return False
     call = reply.tool_calls[0]
-    args = call["arguments"]
-    return (call["name"] == "get_weather" and isinstance(args, dict)
+    raw = call.get("raw")
+    if _is_multi_dict_concat(raw) or _has_leaked_special_tokens(raw):
+        return False
+    args = call.get("arguments")
+    if not isinstance(args, dict):
+        return False
+    if _has_leaked_special_tokens(json.dumps(args, ensure_ascii=False)):
+        return False
+    kind = probe.schema_kind or "weather"
+    if kind == "order":
+        exp = json.loads(probe.expected)
+        items = args.get("items")
+        if (call.get("name") != "create_order"
+                or set(args) != {"order_id", "priority", "items"}
+                or args["order_id"] != exp["order_id"]
+                or args["priority"] != exp["priority"]
+                or args["priority"] not in ("low", "normal", "high")
+                or not isinstance(items, list) or len(items) != 1):
+            return False
+        item = items[0]
+        return (isinstance(item, dict) and set(item) == {"sku", "qty"}
+                and item["sku"] == exp["sku"]
+                and type(item["qty"]) is int and 1 <= item["qty"] <= 99
+                and item["qty"] == exp["qty"])
+    if kind == "alert":
+        exp = json.loads(probe.expected)
+        target = args.get("target")
+        return (call.get("name") == "emit_alert"
+                and set(args) == {"severity", "target"}
+                and type(args["severity"]) is int and 1 <= args["severity"] <= 5
+                and args["severity"] == exp["severity"]
+                and isinstance(target, dict) and set(target) == {"service", "region"}
+                and target["service"] == exp["service"]
+                and target["region"] == exp["region"]
+                and target["region"] in ("us-east", "eu-west", "sa-east"))
+    return (call.get("name") == "get_weather"
             and set(args) == {"city", "unit"} and args["unit"] == "celsius"
             and isinstance(args["city"], str)
             and probe.expected.lower() in args["city"].lower())
@@ -92,6 +155,7 @@ class Card:
     is_floor: bool = False
     tools_ok: int = 0
     tools_n: int = 0
+    tools_p: float | None = None
     canary_leaks: int = 0
     canary_n: int = 0
     canary_p: float | None = None
@@ -119,16 +183,19 @@ class Card:
         return d
 
 
-def _token_verdict(deltas: list[int]) -> tuple[str, int | None]:
+def _token_verdict(deltas: list[int]) -> tuple[str, int | None, bool]:
     if not deltas:
-        return "sin datos", None
+        return "sin datos", None, False
     if all(d == 0 for d in deltas):
-        return "sin excedente", None
+        return "sin excedente", None, False
     if len(set(deltas)) == 1:
         d = deltas[0]
+        if abs(d) <= TOKEN_TEMPLATE_TOLERANCE:
+            return (f"diferencia de plantilla ({d:+d} tokens, dentro de tolerancia "
+                    f"±{TOKEN_TEMPLATE_TOLERANCE})"), None, False
         return (f"excedente constante de {d} tokens" if d > 0
-                else f"{-d} tokens menos, constante"), d
-    return f"conteo variable (Δ entre {min(deltas)} y {max(deltas)})", None
+                else f"{-d} tokens menos, constante"), d, True
+    return f"conteo variable (Δ entre {min(deltas)} y {max(deltas)})", None, True
 
 
 def _reference_tokens(probe: Probe, replies: dict[str, dict[str, Reply]],
@@ -145,9 +212,13 @@ def _reference_text(probe: Probe, replies: dict[str, dict[str, Reply]],
                     reference: str) -> str | None:
     if reference != CONSENSUS:
         r = replies.get(reference, {}).get(probe.id)
-        return normalize(r.text, probe.expected) if r and r.ok else None
-    counts = Counter(normalize(r.text, probe.expected) for per in replies.values()
-                     if (r := per.get(probe.id)) and r.ok)
+        if not r or not r.ok:
+            return None
+        norm = normalize(r.text, probe.expected)
+        return norm or None
+    counts = Counter(norm for per in replies.values()
+                     if (r := per.get(probe.id)) and r.ok
+                     and (norm := normalize(r.text, probe.expected)))
     return counts.most_common(1)[0][0] if counts else None
 
 
@@ -162,6 +233,7 @@ def score(probes: list[Probe], replies: dict[str, dict[str, Reply]],
     floor: un segundo endpoint que sirve lo mismo que la referencia (el piso de ruido). Si
     está, la coincidencia de cada endpoint con la referencia se compara con la suya."""
     cards: dict[str, Card] = {}
+    token_flagged: dict[str, bool] = {}
     for name, per in replies.items():
         c = Card(target=name, is_reference=(name == reference), is_floor=(name == floor))
         got = [per[p.id] for p in probes if p.id in per]
@@ -191,13 +263,15 @@ def score(probes: list[Probe], replies: dict[str, dict[str, Reply]],
                 c.tools_ok += tool_valid(p, r)
             elif p.kind == "free":
                 ref_r = replies.get(reference, {}).get(p.id)
-                if r.ok and ref_r is not None and ref_r.ok:
+                ref_plain = _plain(ref_r.text) if ref_r is not None and ref_r.ok else ""
+                if r.ok and ref_plain:
+                    cand_plain = _plain(r.text)
                     c.free_n += 1
-                    c.free_agree += _plain(r.text) == _plain(ref_r.text)
+                    c.free_agree += bool(cand_plain) and cand_plain == ref_plain
             elif p.kind == "canary":
                 c.canary_n += 1
                 c.canary_leaks += canary_leaked(p, r)
-        c.token_verdict, c.hidden_tokens = _token_verdict(c.token_deltas)
+        c.token_verdict, c.hidden_tokens, token_flagged[name] = _token_verdict(c.token_deltas)
         c.tasks_ci = tuple(round(x, 3) for x in wilson(c.tasks_ok, c.tasks_n))
         cards[name] = c
 
@@ -205,7 +279,7 @@ def score(probes: list[Probe], replies: dict[str, dict[str, Reply]],
     for c in cards.values():
         if c.is_reference:
             continue
-        if c.token_verdict not in ("sin excedente", "sin datos"):
+        if token_flagged[c.target]:
             c.flags.append(f"tokens de prompt: {c.token_verdict}")
         if ref_card:
             c.tasks_p = round(fisher(c.tasks_ok, c.tasks_n, ref_card.tasks_ok, ref_card.tasks_n), 5)
@@ -213,6 +287,11 @@ def score(probes: list[Probe], replies: dict[str, dict[str, Reply]],
                 c.flags.append(
                     f"exactitud {c.tasks_ok}/{c.tasks_n} contra {ref_card.tasks_ok}/"
                     f"{ref_card.tasks_n} de la referencia (p={c.tasks_p:.4f})")
+            c.tools_p = round(fisher(c.tools_ok, c.tools_n, ref_card.tools_ok, ref_card.tools_n), 5)
+            if c.tools_p < ALPHA:
+                c.flags.append(
+                    f"tool calls válidas {c.tools_ok}/{c.tools_n} contra {ref_card.tools_ok}/"
+                    f"{ref_card.tools_n} de la referencia (p={c.tools_p:.4f})")
             c.canary_p = round(fisher(c.canary_leaks, c.canary_n,
                                       ref_card.canary_leaks, ref_card.canary_n), 5)
             if c.canary_p < ALPHA:
@@ -221,8 +300,7 @@ def score(probes: list[Probe], replies: dict[str, dict[str, Reply]],
                     f"contra {ref_card.canary_leaks}/{ref_card.canary_n} (p={c.canary_p:.4f})")
             # una sustitución parcial reparte pocas fallas en cada control: se suman
             c.pooled_p = round(fisher(c.failed, c.graded, ref_card.failed, ref_card.graded), 5)
-            if c.pooled_p < ALPHA and len(c.flags) == (c.token_verdict not in (
-                    "sin excedente", "sin datos")):
+            if c.pooled_p < ALPHA and len(c.flags) == int(token_flagged[c.target]):
                 c.flags.append(
                     f"falla {c.failed}/{c.graded} pruebas contra {ref_card.failed}/"
                     f"{ref_card.graded} de la referencia (p={c.pooled_p:.4f})")
@@ -235,8 +313,11 @@ def score(probes: list[Probe], replies: dict[str, dict[str, Reply]],
                 continue
             dis = c.agree_n - c.agree + c.free_n - c.free_agree
             n = c.agree_n + c.free_n
+            if not n or not f_n:
+                c.agree_p = None
+                continue
             c.agree_p = round(fisher(dis, n, f_dis, f_n), 5)
-            if c.agree_p < ALPHA and n and f_n and dis / n > f_dis / f_n:
+            if c.agree_p < ALPHA and dis / n > f_dis / f_n:
                 c.flags.append(
                     f"coincide con la referencia en {n - dis}/{n} respuestas contra "
                     f"{f_n - f_dis}/{f_n} del piso de ruido (p={c.agree_p:.4f})")

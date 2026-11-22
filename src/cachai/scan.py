@@ -28,7 +28,8 @@ def _run_target(target: Target, probes: list[Probe], http: httpx.Client, spend: 
         if auth_dead or not spend.left():
             break
         r = ask(target, p.id, p.as_messages(), http=http,
-                tools=list(p.tools) if p.tools else None, max_tokens=p.max_tokens)
+                tools=list(p.tools) if p.tools else None, max_tokens=p.max_tokens,
+                stream=p.stream)
         spend.spent += r.cost_usd
         out[p.id] = r
         if on_reply:

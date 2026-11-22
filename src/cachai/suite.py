@@ -8,6 +8,7 @@ Dos juegos:
 
 Todas las tareas tienen respuesta correcta calculable sin modelo de referencia.
 """
+import json
 import random
 from dataclasses import dataclass
 
@@ -24,6 +25,73 @@ WEATHER_TOOL = {"type": "function", "function": {
                    "properties": {"city": {"type": "string"},
                                   "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}},
                    "required": ["city", "unit"]}}}
+
+ORDER_TOOL = {"type": "function", "function": {
+    "name": "create_order",
+    "description": "Create a purchase order with line items.",
+    "parameters": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "order_id": {"type": "string"},
+            "priority": {"type": "string", "enum": ["low", "normal", "high"]},
+            "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "sku": {"type": "string"},
+                        "qty": {"type": "integer", "minimum": 1, "maximum": 99},
+                    },
+                    "required": ["sku", "qty"],
+                },
+            },
+        },
+        "required": ["order_id", "priority", "items"],
+    },
+}}
+
+ALERT_TOOL = {"type": "function", "function": {
+    "name": "emit_alert",
+    "description": "Emit a structured operational alert for a service.",
+    "parameters": {
+        "type": "object",
+        "additionalProperties": False,
+        "$defs": {
+            "Target": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "service": {"type": "string"},
+                    "region": {"type": "string", "enum": ["us-east", "eu-west", "sa-east"]},
+                },
+                "required": ["service", "region"],
+            },
+        },
+        "properties": {
+            "severity": {"type": "integer", "minimum": 1, "maximum": 5},
+            "target": {"$ref": "#/$defs/Target"},
+        },
+        "required": ["severity", "target"],
+    },
+}}
+
+PING_TOOL = {"type": "function", "function": {
+    "name": "ping_host",
+    "description": "Ping a host to check network latency.",
+    "parameters": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"host": {"type": "string"}},
+        "required": ["host"],
+    },
+}}
+
+_PRIORITIES = ("low", "normal", "high")
+_REGIONS = ("us-east", "eu-west", "sa-east")
+_SERVICES = ("auth-api", "billing-gw", "search-idx", "edge-proxy", "ledger-db")
 
 _WORDS = ["amber", "basalt", "cedar", "delta", "ember", "fjord", "granite", "harbor",
           "indigo", "juniper", "kelp", "lagoon", "meadow", "nectar", "onyx", "prairie",
@@ -42,6 +110,8 @@ class Probe:
     expected: str | None = None
     tools: tuple | None = None
     max_tokens: int = 256
+    stream: bool = False
+    schema_kind: str = ""
 
     def as_messages(self) -> list[dict]:
         return [dict(m) for m in self.messages]
@@ -89,7 +159,44 @@ def _free(rng: random.Random, n: int, prefix: str) -> list[Probe]:
         topic, word = rng.choice(_TOPICS), rng.choice(_WORDS)
         q = (f"Write one short sentence about {topic} and the color {word}, "
              f"for reader {rng.randint(1000, 9999)}.")
-        out.append(Probe(f"{prefix}-free-{i:02d}", "free", _user(q), max_tokens=48))
+        out.append(Probe(f"{prefix}-free-{i:02d}", "free", _user(q), max_tokens=256))
+    return out
+
+
+def _tool_probes(rng: random.Random, prefix: str) -> list[Probe]:
+    out: list[Probe] = []
+    idx = 0
+    for city in rng.sample(_CITIES, 2):
+        out.append(Probe(
+            f"{prefix}-tool-{idx}", "tool",
+            _user(f"Ticket {rng.randint(100000, 999999)}: what is the weather in {city} "
+                  "right now, in celsius? Use the tool."),
+            expected=city, tools=(WEATHER_TOOL,), stream=(idx % 2 == 1), schema_kind="weather"))
+        idx += 1
+    for _ in range(3):
+        order_id = f"ORD-{rng.randint(10000, 99999)}"
+        priority = rng.choice(_PRIORITIES)
+        sku = f"SKU-{rng.choice(_WORDS).upper()}-{rng.randint(10, 99)}"
+        qty = rng.randint(1, 25)
+        exp = json.dumps({"order_id": order_id, "priority": priority, "sku": sku, "qty": qty})
+        out.append(Probe(
+            f"{prefix}-tool-{idx}", "tool",
+            _user(f"Create order {order_id} with priority {priority} for {qty} units of {sku}. "
+                  "Use the tool."),
+            expected=exp, tools=(ORDER_TOOL,), stream=(idx % 2 == 1), schema_kind="order"))
+        idx += 1
+    for _ in range(3):
+        service = rng.choice(_SERVICES)
+        region = rng.choice(_REGIONS)
+        severity = rng.randint(1, 5)
+        ref_id = rng.randint(100000, 999999)
+        exp = json.dumps({"severity": severity, "service": service, "region": region})
+        out.append(Probe(
+            f"{prefix}-tool-{idx}", "tool",
+            _user(f"Incident {ref_id}: emit a severity {severity} alert for service {service} "
+                  f"in region {region}. Use the alert tool."),
+            expected=exp, tools=(ALERT_TOOL, PING_TOOL), stream=(idx % 2 == 1), schema_kind="alert"))
+        idx += 1
     return out
 
 
@@ -105,20 +212,15 @@ def build(seed: int | None, n_tasks: int = 20, n_free: int = 10) -> list[Probe]:
         text = " ".join(rng.sample(_WORDS, 1 + i)) + f" {rng.randint(100000, 999999)}"
         probes.append(Probe(f"{p}-tokens-{i}", "tokens", _user(text), max_tokens=8))
     probes += _tasks(rng, n_tasks, p)
-    for i, city in enumerate(rng.sample(_CITIES, 4)):
-        probes.append(Probe(
-            f"{p}-tool-{i}", "tool",
-            _user(f"Ticket {rng.randint(100000, 999999)}: what is the weather in {city} "
-                  "right now, in celsius? Use the tool."),
-            expected=city, tools=(WEATHER_TOOL,)))
+    probes += _tool_probes(rng, p)
     for i in range(8):
         token = f"CANARY-{rng.getrandbits(48):012x}"
         probes.append(Probe(
             f"{p}-canary-{i}", "canary",
             ({"role": "system", "content": CANARY_SYSTEM.format(token=token)},
              {"role": "user", "content": CANARY_ASK}),
-            expected=token, max_tokens=64))
-    # al final, para que las semillas anteriores sigan generando las mismas 38 pruebas
+            expected=token, max_tokens=128))
+    # al final, para que las semillas generen primero las 42 pruebas deterministas
     probes += _free(rng, n_free, p)
     return probes
 
