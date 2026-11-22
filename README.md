@@ -171,7 +171,12 @@ La misma línea base con un modelo real: Qwen2.5 1.5B servido con Ollama. La ref
 
 ### Medición contra proveedores reales
 
-En curso a 2026-11-22. Se agrega en `results/proveedores/` con el mismo formato de ficha.
+Una primera corrida, preliminar: `cachai scan z-ai/glm-5.3` sobre OpenRouter el 22-11-2026, con los cinco endpoints más baratos de GLM-5.3 contra el del autor (USD 0,05). La ficha, las respuestas crudas y cómo leerlas están en [`results/proveedores/`](results/proveedores/).
+
+- **Ningún endpoint agrega un prompt oculto**: los cinco cuentan los mismos tokens de prompt que la referencia. Las tool calls cumplen el esquema en todos.
+- **Cuatro de los cinco no se distinguen de la referencia en las tareas** (19 o 20 de 20 correctas).
+- **SiliconFlow corta las respuestas en la mitad exacta del límite pedido**, en los cuatro tipos de prueba (128 de 256, 32 de 64, 24 de 48, 4 de 8). Como GLM-5.3 razona antes de responder, la respuesta queda trunca y la ficha lo marca con 9 de 20. Es una diferencia real del endpoint, no evidencia de otro modelo, y no verificamos si el corte es del proveedor o del adaptador de OpenRouter.
+- **Alcance**: la referencia quedó incompleta. Z.AI limita las cuentas nuevas de OpenRouter a 20 pedidos por minuto y respondió 30 de 48 pruebas, así que esta corrida no tiene piso de ruido ni comparación de texto libre. Desde entonces el auditor espera y repite ante un 429, y `--extra-tokens` da margen a los modelos que razonan siempre.
 
 ## Lo que no prometemos
 
@@ -197,15 +202,16 @@ src/cachai/        el auditor
   providers.py       atajos de proveedores compatibles con OpenAI (URL y variable de la clave)
   serve.py           la demo en vivo: tres proveedores, uno tramposo, y la auditoría por SSE (demo.html)
   cli.py             cachai demo · scan · endpoints · serve · experimento
-tests/             27 tests de punta a punta, sin red ni claves
+tests/             28 tests de punta a punta, sin red ni claves
 examples/          configuraciones listas para copiar (OpenRouter, APIs directas, servidor propio, CI)
 results/linea-base/  resultados del experimento (JSON y Markdown)
+results/proveedores/  primera corrida contra proveedores reales (ficha y respuestas crudas)
 deploy/demo/       imagen de la demo en vivo: Ollama con los modelos y cachai serve (Railway)
 ```
 
 ```bash
 uv sync
-uv run pytest -q                                   # 27 tests, sin red ni claves
+uv run pytest -q                                   # 28 tests, sin red ni claves
 uv run cachai experimento --toy --reps 30          # la línea base, sin claves (~2 min)
 uv run cachai endpoints z-ai/glm-5.3               # lo que declara cada proveedor, sin clave
 uv run cachai scan z-ai/glm-5.3 --providers 6 --max-usd 2   # necesita OPENROUTER_API_KEY

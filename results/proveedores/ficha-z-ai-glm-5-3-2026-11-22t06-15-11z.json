@@ -1,0 +1,348 @@
+{
+  "modelo": "z-ai/glm-5.3",
+  "fecha_utc": "2026-11-22T06:15:11Z",
+  "juego": "ciego",
+  "semilla": 1410046408,
+  "referencia": "z-ai/fp8",
+  "alpha": 0.01,
+  "gasto_usd": 0.052402,
+  "declarado_en_openrouter": {
+    "endpoints": 48,
+    "sin_cuantizacion_declarada": 15,
+    "cuantizaciones": {
+      "fp4": 18,
+      "sin declarar": 15,
+      "fp8": 10,
+      "nvfp4": 5
+    },
+    "precio_salida_min": 1.4,
+    "precio_salida_max": 6.6000000000000005,
+    "precio_ratio": 4.7
+  },
+  "evidencia_sha256": "2e546343033e61e468fba3cb52f696d53a62f5b62767c937cb2fd7be71404b1d",
+  "endpoints": [
+    {
+      "target": "z-ai/fp8",
+      "n": 48,
+      "errors": 18,
+      "latency_p50_ms": 2451,
+      "cost_usd": 0.016196,
+      "token_deltas": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "token_verdict": "sin excedente",
+      "hidden_tokens": null,
+      "tasks_ok": 19,
+      "tasks_n": 20,
+      "tasks_ci": [
+        0.764,
+        0.991
+      ],
+      "tasks_p": null,
+      "agree": 20,
+      "agree_n": 20,
+      "free_agree": 0,
+      "free_n": 0,
+      "agree_p": null,
+      "is_floor": false,
+      "tools_ok": 4,
+      "tools_n": 4,
+      "canary_leaks": 0,
+      "canary_n": 8,
+      "canary_p": null,
+      "pooled_p": null,
+      "served_models": [
+        "z-ai/glm-5.3"
+      ],
+      "flags": [],
+      "is_reference": true,
+      "distinguible": false,
+      "cuantizacion_declarada": "fp8",
+      "precio_salida_usd_millon": 4.4,
+      "via": "openrouter"
+    },
+    {
+      "target": "wafer/us",
+      "n": 48,
+      "errors": 0,
+      "latency_p50_ms": 1298,
+      "cost_usd": 0.005718,
+      "token_deltas": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "token_verdict": "sin excedente",
+      "hidden_tokens": null,
+      "tasks_ok": 20,
+      "tasks_n": 20,
+      "tasks_ci": [
+        0.839,
+        1.0
+      ],
+      "tasks_p": 1.0,
+      "agree": 19,
+      "agree_n": 20,
+      "free_agree": 0,
+      "free_n": 0,
+      "agree_p": 1.0,
+      "is_floor": false,
+      "tools_ok": 4,
+      "tools_n": 4,
+      "canary_leaks": 4,
+      "canary_n": 8,
+      "canary_p": 0.07692,
+      "pooled_p": 0.35467,
+      "served_models": [
+        "z-ai/glm-5.3"
+      ],
+      "flags": [],
+      "is_reference": false,
+      "distinguible": false,
+      "cuantizacion_declarada": "fp4",
+      "precio_salida_usd_millon": 1.4,
+      "via": "openrouter"
+    },
+    {
+      "target": "wafer/fp4",
+      "n": 48,
+      "errors": 0,
+      "latency_p50_ms": 1150,
+      "cost_usd": 0.005778,
+      "token_deltas": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "token_verdict": "sin excedente",
+      "hidden_tokens": null,
+      "tasks_ok": 19,
+      "tasks_n": 20,
+      "tasks_ci": [
+        0.764,
+        0.991
+      ],
+      "tasks_p": 1.0,
+      "agree": 20,
+      "agree_n": 20,
+      "free_agree": 0,
+      "free_n": 0,
+      "agree_p": 1.0,
+      "is_floor": false,
+      "tools_ok": 4,
+      "tools_n": 4,
+      "canary_leaks": 3,
+      "canary_n": 8,
+      "canary_p": 0.2,
+      "pooled_p": 0.35467,
+      "served_models": [
+        "z-ai/glm-5.3"
+      ],
+      "flags": [],
+      "is_reference": false,
+      "distinguible": false,
+      "cuantizacion_declarada": "fp4",
+      "precio_salida_usd_millon": 1.4,
+      "via": "openrouter"
+    },
+    {
+      "target": "decart/fp4",
+      "n": 48,
+      "errors": 0,
+      "latency_p50_ms": 976,
+      "cost_usd": 0.008411,
+      "token_deltas": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "token_verdict": "sin excedente",
+      "hidden_tokens": null,
+      "tasks_ok": 19,
+      "tasks_n": 20,
+      "tasks_ci": [
+        0.764,
+        0.991
+      ],
+      "tasks_p": 1.0,
+      "agree": 18,
+      "agree_n": 20,
+      "free_agree": 0,
+      "free_n": 0,
+      "agree_p": 1.0,
+      "is_floor": false,
+      "tools_ok": 4,
+      "tools_n": 4,
+      "canary_leaks": 0,
+      "canary_n": 8,
+      "canary_p": 1.0,
+      "pooled_p": 1.0,
+      "served_models": [
+        "z-ai/glm-5.3"
+      ],
+      "flags": [],
+      "is_reference": false,
+      "distinguible": false,
+      "cuantizacion_declarada": "fp4",
+      "precio_salida_usd_millon": 1.81,
+      "via": "openrouter"
+    },
+    {
+      "target": "siliconflow/fp8",
+      "n": 48,
+      "errors": 0,
+      "latency_p50_ms": 1290,
+      "cost_usd": 0.006754,
+      "token_deltas": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "token_verdict": "sin excedente",
+      "hidden_tokens": null,
+      "tasks_ok": 9,
+      "tasks_n": 20,
+      "tasks_ci": [
+        0.258,
+        0.658
+      ],
+      "tasks_p": 0.00125,
+      "agree": 9,
+      "agree_n": 20,
+      "free_agree": 0,
+      "free_n": 0,
+      "agree_p": 1.0,
+      "is_floor": false,
+      "tools_ok": 4,
+      "tools_n": 4,
+      "canary_leaks": 0,
+      "canary_n": 8,
+      "canary_p": 1.0,
+      "pooled_p": 0.00265,
+      "served_models": [
+        "z-ai/glm-5.3"
+      ],
+      "flags": [
+        "exactitud 9/20 contra 19/20 de la referencia (p=0.0013)"
+      ],
+      "is_reference": false,
+      "distinguible": true,
+      "cuantizacion_declarada": "fp8",
+      "precio_salida_usd_millon": 1.9,
+      "via": "openrouter"
+    },
+    {
+      "target": "novita/fp8",
+      "n": 48,
+      "errors": 0,
+      "latency_p50_ms": 1611,
+      "cost_usd": 0.009096,
+      "token_deltas": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "token_verdict": "sin excedente",
+      "hidden_tokens": null,
+      "tasks_ok": 20,
+      "tasks_n": 20,
+      "tasks_ci": [
+        0.839,
+        1.0
+      ],
+      "tasks_p": 1.0,
+      "agree": 19,
+      "agree_n": 20,
+      "free_agree": 0,
+      "free_n": 0,
+      "agree_p": 1.0,
+      "is_floor": false,
+      "tools_ok": 4,
+      "tools_n": 4,
+      "canary_leaks": 0,
+      "canary_n": 8,
+      "canary_p": 1.0,
+      "pooled_p": 1.0,
+      "served_models": [
+        "z-ai/glm-5.3"
+      ],
+      "flags": [],
+      "is_reference": false,
+      "distinguible": false,
+      "cuantizacion_declarada": "fp8",
+      "precio_salida_usd_millon": 1.9800000000000002,
+      "via": "openrouter"
+    },
+    {
+      "target": "z-ai/fp8 (piso)",
+      "n": 48,
+      "errors": 44,
+      "latency_p50_ms": 1631,
+      "cost_usd": 0.000448,
+      "token_deltas": [
+        0,
+        0,
+        0
+      ],
+      "token_verdict": "sin excedente",
+      "hidden_tokens": null,
+      "tasks_ok": 0,
+      "tasks_n": 20,
+      "tasks_ci": [
+        0.0,
+        0.161
+      ],
+      "tasks_p": 0.0,
+      "agree": 0,
+      "agree_n": 0,
+      "free_agree": 0,
+      "free_n": 0,
+      "agree_p": null,
+      "is_floor": true,
+      "tools_ok": 0,
+      "tools_n": 4,
+      "canary_leaks": 0,
+      "canary_n": 8,
+      "canary_p": 1.0,
+      "pooled_p": 0.0,
+      "served_models": [
+        "z-ai/glm-5.3"
+      ],
+      "flags": [
+        "exactitud 0/20 contra 19/20 de la referencia (p=0.0000)"
+      ],
+      "is_reference": false,
+      "distinguible": true,
+      "cuantizacion_declarada": "fp8",
+      "precio_salida_usd_millon": 4.4,
+      "via": "openrouter"
+    }
+  ],
+  "limites": [
+    "Todo lo medido es nivel E2 (caja negra). «Sin desviación detectada» no es «es el mismo modelo».",
+    "No se certifica privacidad: desde afuera no se puede probar que un proveedor no mire ni guarde datos.",
+    "«Distinguible de la referencia» no es una acusación: puede ser plantilla, parser o cuantización.",
+    "La referencia también es un endpoint: si está cuantizada, se mide equivalencia con ella, no con los pesos.",
+    "Una sustitución en una fracción chica del tráfico puede no verse con esta muestra."
+  ]
+}
