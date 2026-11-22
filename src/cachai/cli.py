@@ -167,6 +167,8 @@ def cmd_demo(args) -> None:
     """Un mundo en memoria: el modelo de juguete, un proveedor honesto y dos tramposos."""
     import warnings
 
+    # starlette avisa que su TestClient pasará a httpx2; la demo no depende de eso
+    warnings.filterwarnings("ignore", message=r".*starlette\.testclient.*")
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     from fastapi.testclient import TestClient
 
@@ -189,7 +191,10 @@ def cmd_demo(args) -> None:
           "proveedor honesto,\nuno que agrega un prompt oculto y uno que responde con un "
           "modelo más chico con el mismo nombre.\n")
     _audit("toy-large", targets, "referencia", router, args)
-    print("\nSiguiente paso: cachai scan con tus endpoints (ver examples/ en el repo).")
+    print("\nSiguiente paso: auditar tus endpoints. Para tener el comando instalado:\n"
+          "  uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43\n"
+          "  cachai scan z-ai/glm-5.3            # necesita OPENROUTER_API_KEY\n"
+          "Más ejemplos: https://github.com/platanus-hack/platanus-hack-26-cl-team-43/tree/main/examples")
 
 
 def cmd_toy(args) -> None:
