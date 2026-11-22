@@ -153,7 +153,21 @@ Un proveedor tramposo propio (un proxy hacia el mismo modelo) aplica cuatro tram
 
 ### Modelos reales servidos por nosotros
 
-La misma línea base con Qwen2.5 1.5B servido con Ollama: la referencia en Q8 y proveedores propios que sirven Q4, Q2 o el 0.5B con el mismo nombre (`uv run cachai experimento --ollama`). En una primera repetición local, el Q4 acertó las mismas tareas que la referencia y solo se delató en el texto libre: coincidió en 12 de 30 respuestas, contra 30 de 30 del piso de ruido. La corrida de 20 repeticiones está en curso a 2026-11-22.
+La misma línea base con un modelo real: Qwen2.5 1.5B servido con Ollama. La referencia sirve la versión Q8 y seis proveedores propios dicen servir lo mismo: uno honesto y cinco que sirven otra cosa con el mismo nombre. Cada celda son 20 auditorías con el juego ciego y semillas distintas (48 pruebas por proveedor). Se corre con `uv run cachai experimento --ollama` y el detalle está en [`results/linea-base/ollama-qwen2.5-t20.md`](results/linea-base/ollama-qwen2.5-t20.md).
+
+| Lo que sirve el proveedor | Marcado como distinguible | Qué lo delató |
+|---|---|---|
+| Lo mismo que la referencia (control) | 0/20 (IC95 0-16 %) | Nada |
+| Agrega un prompt oculto | 20/20 (IC95 84-100 %) | Tokens de prompt de más y coincidencia con la referencia |
+| La versión cuantizada a 4 bits (Q4) | 20/20 (IC95 84-100 %) | Solo la coincidencia con la referencia |
+| La versión cuantizada a 2 bits (Q2) | 20/20 (IC95 84-100 %) | Coincidencia; exactitud en 14 de 20 |
+| Un modelo tres veces más chico (0.5B) | 20/20 (IC95 84-100 %) | Coincidencia; filtra el secreto en 19 de 20 |
+| Desvía el 30 % del tráfico al 0.5B | 8/20 (IC95 22-61 %) | Coincidencia |
+
+- **Sin falsas alarmas**: el proveedor honesto no salió marcado en ninguna de las 20 auditorías, y el piso de ruido (la referencia consultada otra vez) coincidió 30 de 30 en todas.
+- **La cuantización a 4 bits no se ve en la exactitud**: el Q4 acierta casi lo mismo que la referencia y en ninguna de las 20 auditorías esa diferencia alcanzó para marcarlo. Lo delató que sus respuestas coincidieron con las de la referencia en 9 a 15 de 30, contra 30 de 30 del piso de ruido.
+- **El límite, otra vez, es el desvío parcial**: con 48 pruebas, desviar el 30 % del tráfico se escapa en 12 de 20 auditorías. Sube con más pruebas, como en el modelo de juguete.
+- **Alcance**: un modelo chico servido en CPU con Ollama, todos los proveedores en la misma máquina. Mide al auditor con un modelo real cuya verdad conocemos; no es un hallazgo sobre ningún proveedor.
 
 ### Medición contra proveedores reales
 
