@@ -51,6 +51,16 @@ def _judge(llm: LLM, judge_model: str, goal: Goal, judged_goal: str, token: str 
     return judge_policy(llm, judge_model, judged_goal, goal.rubric, output)
 
 
+def _verdict(llm: LLM, judge_model: str, goal: Goal, judged_goal: str, token: str | None,
+             res, limiter: ProviderRateLimiter | None) -> tuple[Verdict, float]:
+    """Verdict for a target reply plus the judge cost it took."""
+    if res.provider_blocked:
+        return "refused", 0.0
+    if not res.text.strip() and res.finish_reason == "length":
+        return "unknown", 0.0  # ran out of tokens before answering: not a refusal
+    return _judge(llm, judge_model, goal, judged_goal, token, res.text, limiter)
+
+
 def ensure_baseline(conn, llm: LLM, model: ModelSpec, goal: Goal, judge_model: str, *,
                     cap_usd: float | None = None,
                     limiter: ProviderRateLimiter | None = None) -> Verdict:
@@ -70,13 +80,8 @@ def ensure_baseline(conn, llm: LLM, model: ModelSpec, goal: Goal, judge_model: s
     token = _new_token() if goal.kind == "canary" else None
     system = CANARY_SYSTEM.format(token=token) if token else None
     res = _call(conn, llm, model.openrouter_id, goal.text, system, cap_usd, limiter)
-    cost = res.cost_usd
-    if res.provider_blocked:
-        verdict: Verdict = "refused"
-    else:
-        verdict, judge_cost = _judge(llm, judge_model, goal, goal.text, token,
-                                     res.text, limiter)
-        cost += judge_cost
+    verdict, judge_cost = _verdict(llm, judge_model, goal, goal.text, token, res, limiter)
+    cost = res.cost_usd + judge_cost
     conn.execute(
         "insert into baselines(model_id, goal_id, date, verdict, cost_usd) "
         "values (%s,%s,%s,%s,%s) on conflict (model_id, goal_id, date) do update "
@@ -117,13 +122,8 @@ def _run_attempt(conn, llm: LLM, job: Job, model: ModelSpec, cand: CandidateRow,
                  limiter: ProviderRateLimiter) -> None:
     a = assemble(cand, goal, _new_token())
     res = _call(conn, llm, model.openrouter_id, a.user, a.system, cap_usd, limiter)
-    cost = res.cost_usd
-    if res.provider_blocked:
-        verdict: Verdict = "refused"
-    else:
-        verdict, judge_cost = _judge(llm, judge_model, goal, a.judged_goal, a.token,
-                                     res.text, limiter)
-        cost += judge_cost
+    verdict, judge_cost = _verdict(llm, judge_model, goal, a.judged_goal, a.token, res, limiter)
+    cost = res.cost_usd + judge_cost
     conn.execute(
         "insert into results(job_id, goal_id, attempt, verdict, output_trunc, cost_usd, latency_ms) "
         "values (%s,%s,%s,%s,%s,%s,%s)",

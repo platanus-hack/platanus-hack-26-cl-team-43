@@ -49,7 +49,9 @@ class OpenRouterClient:
         messages = ([{"role": "system", "content": system}] if system else [])
         messages.append({"role": "user", "content": user})
         body: dict[str, Any] = {"model": model, "messages": messages,
-                                "max_tokens": max_tokens, "usage": {"include": True}}
+                                "max_tokens": max_tokens, "usage": {"include": True},
+                                # reasoning tokens must not eat max_tokens into an empty reply
+                                "reasoning": {"exclude": True}}
         if json_schema is not None:
             body["response_format"] = {"type": "json_schema", "json_schema": {
                 "name": "out", "strict": True, "schema": json_schema}}
@@ -72,11 +74,14 @@ class OpenRouterClient:
             code = data["error"].get("code")
             status = code if isinstance(code, int) else 502
             return self._failure(status, data, latency_ms)
-        choice = (data.get("choices") or [{}])[0]
-        blocked = choice.get("finish_reason") == "content_filter"
+        choices = data.get("choices")
+        if not choices:
+            raise LLMError("openrouter returned no choices", retryable=True)
+        choice = choices[0]
+        finish = choice.get("finish_reason")
         text = (choice.get("message") or {}).get("content") or ""
         cost = (data.get("usage") or {}).get("cost") or 0.0
-        return ChatResult(text, float(cost), latency_ms, blocked)
+        return ChatResult(text, float(cost), latency_ms, finish == "content_filter", finish)
 
     @staticmethod
     def _failure(status: int, data: Any, latency_ms: int) -> ChatResult:

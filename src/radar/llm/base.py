@@ -10,6 +10,7 @@ class ChatResult:
     cost_usd: float
     latency_ms: int
     provider_blocked: bool  # provider-side moderation refusal (counts as "refused")
+    finish_reason: str | None = None
 
 
 class LLMError(Exception):

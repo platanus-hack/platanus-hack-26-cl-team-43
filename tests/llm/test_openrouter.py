@@ -27,6 +27,7 @@ def test_chat_parses_text_and_cost():
     import json
     body = json.loads(req.content)
     assert body == {"model": "m/x", "max_tokens": 50, "usage": {"include": True},
+                    "reasoning": {"exclude": True},
                     "messages": [{"role": "system", "content": "s"},
                                  {"role": "user", "content": "u"}]}
 
@@ -182,3 +183,26 @@ def test_llm_error_kind_defaults_to_other():
 def test_400_flagged_is_provider_blocked():
     respx.post(URL).respond(400, json={"error": {"message": "Your input was FLAGGED for review"}})
     assert OpenRouterClient("k").chat("m", "u").provider_blocked is True
+
+
+@respx.mock
+@pytest.mark.parametrize("payload", [{"choices": []}, {}])
+def test_empty_choices_is_retryable(payload):
+    respx.post(URL).respond(200, json=payload)
+    with pytest.raises(LLMError) as e:
+        OpenRouterClient("k").chat("m", "u")
+    assert e.value.retryable is True
+
+
+@respx.mock
+def test_finish_reason_is_returned():
+    respx.post(URL).respond(200, json=_ok("", finish="length"))
+    assert OpenRouterClient("k").chat("m", "u").finish_reason == "length"
+
+
+@respx.mock
+def test_request_body_excludes_reasoning():
+    route = respx.post(URL).respond(200, json=_ok())
+    OpenRouterClient("k").chat("m", "u", json_schema={"type": "object"})
+    import json
+    assert json.loads(route.calls[0].request.content)["reasoning"] == {"exclude": True}

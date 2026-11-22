@@ -385,6 +385,29 @@ def test_400_flagged_from_openrouter_is_refused(conn):
     assert _enabled(conn, "t1")
 
 
+def test_length_truncated_empty_output_is_unknown_without_judge(conn):
+    seed_config(conn)
+    cid = seed_candidate(conn)
+    job = make_job(conn, cid)
+    out = ChatResult("", cost_usd=0.01, latency_ms=7, provider_blocked=False,
+                     finish_reason="length")
+    llm = FakeLLM({T1.openrouter_id: out, JUDGE: judge})
+    assert run_job(conn, llm, job, GOALS, settings(), limiter()) == "done"
+    assert [r["verdict"] for r in results(conn, job.id)] == ["unknown", "unknown"]
+    assert not any(c["model"] == JUDGE for c in llm.calls)
+
+
+def test_empty_output_with_stop_is_judged_as_before(conn):
+    seed_config(conn)
+    cid = seed_candidate(conn)
+    job = make_job(conn, cid)
+    out = ChatResult("", cost_usd=0.0, latency_ms=7, provider_blocked=False,
+                     finish_reason="stop")
+    llm = FakeLLM({T1.openrouter_id: out, JUDGE: judge})
+    run_job(conn, llm, job, GOALS, settings(), limiter())
+    assert [r["verdict"] for r in results(conn, job.id)] == ["refused", "refused"]
+
+
 def test_sync_config_reenables_model_when_openrouter_id_changes(conn):
     from radar.testing.goals import ModelSpec, sync_config
 
