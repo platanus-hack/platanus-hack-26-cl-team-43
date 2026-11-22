@@ -12,7 +12,7 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 
-from cachai import checks, endpoints, ficha, providers, scan, sesion, suite
+from cachai import checks, endpoints, ficha, providers, salida, scan, sesion, suite
 from cachai.client import Target
 
 
@@ -78,20 +78,27 @@ def _load_config(args) -> None:
 
 
 def _print_declared(model: str, d: dict) -> None:
-    print(f"{model}: {d['endpoints']} endpoints, {d['sin_cuantizacion_declarada']} sin "
-          f"cuantización declarada, precio de salida USD {d['precio_salida_min']:.2f}"
-          f"–{d['precio_salida_max']:.2f} por millón ({d['precio_ratio']}×)")
+    salida.title(f"{model}: lo que declaran los proveedores")
+    salida.fields([
+        ("endpoints", f"{d['endpoints']}, {d['sin_cuantizacion_declarada']} sin cuantización declarada"),
+        ("precio de salida", f"USD {d['precio_salida_min']:.2f} a {d['precio_salida_max']:.2f} "
+                             f"por millón de tokens ({d['precio_ratio']}×)"),
+    ])
 
 
 def cmd_endpoints(args) -> None:
     with httpx.Client(timeout=30) as http:
         eps = endpoints.list_endpoints(args.model, http)
     _print_declared(args.model, endpoints.declared_summary(eps))
-    for t in sorted(endpoints.to_targets(args.model, eps, ""),
-                    key=lambda t: t.price_out or 0):
-        price = f"{t.price_out:8.2f}" if t.price_out is not None else "       ?"
-        print(f"  {price}  {t.quantization or 'sin declarar':<13} {t.name}"
-              f"{'  (first-party)' if t.first_party else ''}")
+    rows = []
+    for t in sorted(endpoints.to_targets(args.model, eps, ""), key=lambda t: t.price_out or 0):
+        rows.append([
+            salida.paint(t.name, salida.BOLD),
+            t.quantization or salida.paint("sin declarar", salida.DIM),
+            f"{t.price_out:.2f}" if t.price_out is not None else "?",
+            "autor del modelo" if t.first_party else ""])
+    print()
+    salida.table(["Endpoint", "Cuantización\ndeclarada", "USD por millón\nde salida", ""], rows)
 
 
 def cmd_scan(args) -> None:
@@ -139,7 +146,7 @@ def _require_account() -> dict:
         print("aviso: no se pudo hablar con el servidor de cuentas; la ficha queda solo "
               "en este equipo", file=sys.stderr)
     elif me.get("email"):
-        print(f"cuenta: {me['email']}")
+        salida.fields([("cuenta", me["email"])])
     return cred
 
 
@@ -157,13 +164,19 @@ def _audit(model: str, targets: list[Target], reference: str, http: httpx.Client
     seed = None if args.public else (
         args.seed if args.seed is not None else secrets.randbelow(2**32))
     probes = suite.build(seed, n_tasks=args.tasks)
-    print(f"{len(targets)} endpoints × {len(probes)} pruebas · referencia: {reference} · "
-          + ("juego público" if seed is None else f"juego ciego, semilla {seed}"))
+    salida.title(f"Auditoría de {model}")
+    salida.fields([
+        ("endpoints", f"{len(targets) - (1 if floor else 0)}, con {len(probes)} pruebas a cada uno"),
+        ("referencia", reference + (" (se consulta dos veces: la segunda mide el ruido)"
+                                    if floor else "")),
+        ("juego", "público, de prompts fijos" if seed is None else f"ciego, semilla {seed}"),
+    ])
+    print()
+    progress = salida.Progress(len(targets) * len(probes))
     replies, spend = scan.run(
         targets, probes, http=http, max_usd=args.max_usd,
-        extra_tokens=args.extra_tokens,
-        on_reply=lambda r: print("." if r.ok else "x", end="", flush=True))
-    print()
+        extra_tokens=args.extra_tokens, on_reply=lambda r: progress.step(r.ok))
+    progress.close()
     cards = checks.score(probes, replies, reference, floor)
     f = ficha.build(model, targets, cards, replies, reference=reference,
                     suite="publico" if seed is None else "ciego", seed=seed,
@@ -177,23 +190,26 @@ def _audit(model: str, targets: list[Target], reference: str, http: httpx.Client
     (out / f"{stem}.evidencia.jsonl").write_text("\n".join(
         json.dumps(r.to_dict(), ensure_ascii=False, sort_keys=True)
         for per in replies.values() for r in per.values()) + "\n")
-    print(md[md.index("## Medido"):md.index("## Qué no afirma")])
-    print(f"ficha: {out / (stem + '.md')}  ·  gasto: USD {spend.spent:.4f}")
+    salida.results(f)
+    summary = [("ficha", str(out / (stem + ".md"))),
+               ("gasto", f"USD {spend.spent:.4f}"),
+               ("duración", f"{round(time.time() - t0)} s")]
     cred = getattr(args, "cuenta", None)
     if cred and not getattr(args, "no_subir", False):
         with httpx.Client(timeout=20) as web:
             panel = sesion.upload(cred, f, web, seconds=round(time.time() - t0))
-        print(f"panel: {panel}" if panel else
-              "aviso: no se pudo subir la ficha al panel; quedó guardada en este equipo")
+        summary.append(("panel", panel or "no se pudo subir la ficha; quedó en este equipo"))
+    print()
+    salida.fields(summary)
     return f
 
 
 def cmd_login(args) -> None:
     with httpx.Client(timeout=15) as http:
         cred = sesion.login(http, args.server, browser=not args.no_browser)
-    who = f" como {cred['email']}" if cred.get("email") else ""
-    print(f"Listo: este equipo quedó conectado{who}.\n"
-          f"Tus auditorías se van a ver en {cred['servidor']}/panel")
+    print("\n" + salida.paint("Listo: este equipo quedó conectado.", salida.BOLD, salida.GREEN))
+    salida.fields(([("cuenta", cred["email"])] if cred.get("email") else [])
+                  + [("panel", f"{cred['servidor']}/panel")])
 
 
 def cmd_logout(args) -> None:
@@ -210,9 +226,10 @@ def cmd_cuenta(args) -> None:
         me = sesion.check(cred, http)
     if me is None:
         sys.exit(f"no se pudo hablar con {cred['servidor']}")
-    print(f"cuenta: {me.get('email') or me['id']}\n"
-          f"auditorías guardadas: {me['auditorias']}  ·  gasto medido: USD {me['gasto_usd']:.4f}\n"
-          f"panel: {me['panel']}")
+    salida.fields([("cuenta", me.get("email") or me["id"]),
+                   ("auditorías guardadas", str(me["auditorias"])),
+                   ("gasto medido", f"USD {me['gasto_usd']:.4f}"),
+                   ("panel", me["panel"])], indent=0)
 
 
 def cmd_demo(args) -> None:
@@ -239,15 +256,22 @@ def cmd_demo(args) -> None:
     router.local["toy"] = toy
     targets = [Target("referencia", "toy-large", base_url=up)] + [
         Target(name, "toy-large", base_url=f"http://{name}/v1") for name in apps]
-    print("demo sin claves ni red: el modelo de juguete servido por una referencia, un "
-          "proveedor honesto,\nuno que agrega un prompt oculto y uno que responde con un "
-          "modelo más chico con el mismo nombre.\n")
+    print("Demo sin claves ni red. Un modelo de juguete servido por cuatro endpoints:\n")
+    salida.fields([
+        ("referencia", "el modelo tal cual, contra el que se compara"),
+        ("honesto", "sirve lo mismo que la referencia"),
+        ("prompt-oculto", "agrega un system prompt delante de cada pedido"),
+        ("modelo-chico", "responde con un modelo más chico con el mismo nombre"),
+    ])
     _audit("toy-large", targets, "referencia", router, args)
-    print("\nSiguiente paso: auditar tus endpoints. Para tener el comando instalado:\n"
-          "  uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43\n"
-          "  cachai login                        # una vez: conecta tu cuenta\n"
-          "  cachai scan z-ai/glm-5.3            # necesita OPENROUTER_API_KEY\n"
-          "Más ejemplos: https://github.com/platanus-hack/platanus-hack-26-cl-team-43/tree/main/examples")
+    salida.title("Siguiente paso: auditar tus endpoints")
+    print("  uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43")
+    salida.fields([
+        ("cachai login", "una vez: conecta tu cuenta"),
+        ("cachai scan z-ai/glm-5.3", "necesita OPENROUTER_API_KEY"),
+    ], dim=False)
+    print("\n  Más ejemplos: "
+          "https://github.com/platanus-hack/platanus-hack-26-cl-team-43/tree/main/examples")
 
 
 def cmd_toy(args) -> None:
@@ -308,8 +332,9 @@ def cmd_experimento(args) -> None:
                          max_usd=args.max_usd, timeout=args.timeout,
                          log=lambda m: print(m, file=sys.stderr))
     j, m = experiment.write(res, Path(args.out), stem)
-    print(m.read_text())
-    print(f"resultados en {j} y {m}")
+    salida.markdown(m.read_text())
+    print()
+    salida.fields([("resultados", f"{j} y {m}")])
 
 
 SCAN_DEFAULTS = {"tasks": 20, "max_usd": 2.0, "out": "audit/fichas"}

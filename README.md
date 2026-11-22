@@ -243,8 +243,9 @@ src/cachai/        el auditor
   cuentas.py         el servidor de cuentas: sesión de Clerk verificada por JWKS, claves del CLI, fichas y el panel (panel.html, cli.html)
   db.py              las tablas (SQLAlchemy): usuarios, claves, auditorías y mediciones por endpoint
   migrations/        migraciones de Alembic; el servidor las aplica al arrancar
+  salida.py          lo que se ve en la terminal: tablas alineadas, color y barra de avance, sin dependencias
   cli.py             cachai demo · login · scan · cuenta · endpoints · serve · experimento
-tests/             69 tests de punta a punta, sin red ni claves
+tests/             71 tests de punta a punta, sin red ni claves
 examples/          configuraciones listas para copiar (OpenRouter, APIs directas, servidor propio, CI)
 results/linea-base/  resultados del experimento con el juguete y con Qwen2.5 (JSON y Markdown)
 results/proveedores/  auditoría de GLM-5.3 en OpenRouter (fichas, respuestas crudas y cómo leerlas)
@@ -253,7 +254,7 @@ deploy/demo/       imagen de la demo en vivo: Ollama con los modelos y cachai se
 
 ```bash
 uv sync
-uv run pytest -q                                   # 69 tests, sin red ni claves
+uv run pytest -q                                   # 71 tests, sin red ni claves
 uv run cachai experimento --toy --reps 30          # la línea base, sin claves (~2 min)
 uv run cachai endpoints z-ai/glm-5.3               # lo que declara cada proveedor, sin clave
 uv run cachai experimento --ollama --reps 20       # la línea base con Qwen2.5 (necesita Ollama con los modelos)
