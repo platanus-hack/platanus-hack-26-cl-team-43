@@ -174,3 +174,13 @@ def test_non_retryable_error_keeps_prompts_from_earlier_chunks(conn, monkeypatch
                                   new.append)
     assert n == 1 and processed(conn, rid)
     assert len(new) == 1
+
+
+def test_watchlist_items_processed_before_older_items(conn):
+    old_hf = insert_raw(conn, source="hf_dataset", text="old hf", fetched_at=T0)
+    wl = insert_raw(conn, source="github_watchlist", text="fresh push",
+                    fetched_at=datetime(2026, 11, 5, tzinfo=UTC))
+    n = process_pending_raw_items(conn, fake_llm_echo(), FakeEmbedder(default=vec(1)), "x",
+                                  lambda _: None, limit=1)
+    assert n == 1
+    assert processed(conn, wl) and not processed(conn, old_hf)

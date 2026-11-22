@@ -20,7 +20,9 @@ def _mark_processed(conn: psycopg.Connection, raw_item_id: int) -> None:
 def process_pending_raw_items(conn: psycopg.Connection, llm: LLM, embedder: Embedder,
                               model: str, on_new_candidate: Callable[[int], None],
                               limit: int = 50) -> int:
-    """Extract + dedupe unprocessed raw items, oldest first, one transaction each.
+    """Extract + dedupe unprocessed raw items, one transaction each.
+
+    Watchlist items go first (fresh pushes must not starve behind backlog), then oldest.
 
     Returns the number of items marked processed. A retryable or auth LLM error rolls
     back the current item (left unprocessed) and stops the batch. Other non-retryable
@@ -28,7 +30,7 @@ def process_pending_raw_items(conn: psycopg.Connection, llm: LLM, embedder: Embe
     """
     ids = [r["id"] for r in conn.execute(
         "select id from raw_items where processed_at is null "
-        "order by fetched_at, id limit %s", (limit,))]
+        "order by (source = 'github_watchlist') desc, fetched_at, id limit %s", (limit,))]
     conn.commit()
     done = 0
     for raw_id in ids:

@@ -1,4 +1,5 @@
 import httpx
+import pytest
 import respx
 
 from radar.collectors.github_client import GitHubClient
@@ -111,10 +112,7 @@ def test_client_follows_redirects_for_renamed_repo(conn):
 
 
 @respx.mock
-def test_contents_500_raises_and_runner_keeps_old_cursor(conn):
-    import pytest
-
-    from radar.collectors.github_client import GitHubError
+def test_contents_500_skips_repo_and_runner_keeps_its_old_cursor(conn, caplog):
     from radar.collectors.runner import load_cursor, run_collector, save_cursor
 
     wl = _make(conn)
@@ -125,11 +123,11 @@ def test_contents_500_raises_and_runner_keeps_old_cursor(conn):
         {"path": "a.md", "type": "blob", "size": 1}, {"path": "b.md", "type": "blob", "size": 1}]})
     respx.get(f"{API}/repos/a/b/contents/a.md").respond(200, text="AAA")
     respx.get(f"{API}/repos/a/b/contents/b.md").respond(500)
-    with pytest.raises(GitHubError):
-        GitHubWatchlist(GitHubClient("tok"), conn).poll({})
-    assert run_collector(conn, wl) == 0
+    with caplog.at_level("WARNING"):
+        assert run_collector(conn, wl) == 0
     assert load_cursor(conn, "github_watchlist") == {}
     assert conn.execute("select count(*) as n from raw_items").fetchone()["n"] == 0
+    assert any("a/b" in r.message and r.levelname == "WARNING" for r in caplog.records)
 
 
 @respx.mock
@@ -168,3 +166,62 @@ def test_truncated_tree_logs_warning(conn, caplog):
         items, _ = wl.poll({})
     assert len(items) == 1
     assert any("a/b" in r.message and r.levelname == "WARNING" for r in caplog.records)
+
+
+@respx.mock
+@pytest.mark.parametrize("status", ["auto", "from_paper"])
+def test_auto_repo_first_sight_records_sha_and_emits_nothing(conn, status):
+    wl = _make(conn, [("a/b", status)])
+    respx.get(f"{API}/repos/a/b/commits").respond(200, json=_commit("h1"),
+                                                   headers={"etag": '"e1"'})
+    tree = respx.get(f"{API}/repos/a/b/git/trees/h1")
+    items, cursor = wl.poll({})
+    assert items == []
+    assert cursor == {"a/b": {"sha": "h1", "etag": '"e1"'}}
+    assert not tree.called
+
+
+@respx.mock
+def test_seed_repo_first_sight_emits_files(conn):
+    wl = _make(conn, [("a/b", "seed")])
+    respx.get(f"{API}/repos/a/b/commits").respond(200, json=_commit("h1"))
+    respx.get(f"{API}/repos/a/b/git/trees/h1").respond(200, json={"tree": [
+        {"path": "p.mkd", "type": "blob", "size": 1},
+        {"path": "q.markdown", "type": "blob", "size": 1}]})
+    respx.get(f"{API}/repos/a/b/contents/p.mkd").respond(200, text="PPP")
+    respx.get(f"{API}/repos/a/b/contents/q.markdown").respond(200, text="QQQ")
+    items, cursor = wl.poll({})
+    assert sorted(i.content_text for i in items) == ["PPP", "QQQ"]
+    assert cursor["a/b"]["sha"] == "h1"
+
+
+@respx.mock
+def test_rate_limit_midway_keeps_progress(conn):
+    wl = _make(conn, [("a/a", "seed"), ("a/b", "seed"), ("a/c", "seed")])
+    respx.get(f"{API}/repos/a/a/commits").respond(200, json=_commit("s2"))
+    respx.get(f"{API}/repos/a/a/compare/s1...s2").respond(200, json={"files": [
+        {"filename": "p.md", "changes": 1, "patch": "@@\n+new line"}]})
+    respx.get(f"{API}/repos/a/b/commits").respond(
+        403, headers={"x-ratelimit-remaining": "0"}, json={"message": "rate limit"})
+    c = respx.get(f"{API}/repos/a/c/commits")
+    old = {"a/a": {"sha": "s1", "etag": None}, "a/b": {"sha": "b1", "etag": '"eb"'},
+           "a/c": {"sha": "c1", "etag": '"ec"'}}
+    items, cursor = wl.poll(old)
+    assert [i.content_text for i in items] == ["new line"]
+    assert cursor == {"a/a": {"sha": "s2", "etag": None}, "a/b": old["a/b"], "a/c": old["a/c"]}
+    assert not c.called
+
+
+@respx.mock
+def test_500_on_one_repo_does_not_block_others(conn, caplog):
+    wl = _make(conn, [("a/a", "seed"), ("a/b", "seed")])
+    respx.get(f"{API}/repos/a/a/commits").respond(500)
+    respx.get(f"{API}/repos/a/b/commits").respond(200, json=_commit("s2"))
+    respx.get(f"{API}/repos/a/b/compare/s1...s2").respond(200, json={"files": [
+        {"filename": "p.md", "changes": 1, "patch": "@@\n+new line"}]})
+    old = {"a/a": {"sha": "x1", "etag": None}, "a/b": {"sha": "s1", "etag": None}}
+    with caplog.at_level("WARNING"):
+        items, cursor = wl.poll(old)
+    assert [i.content_text for i in items] == ["new line"]
+    assert cursor == {"a/a": old["a/a"], "a/b": {"sha": "s2", "etag": None}}
+    assert any("a/a" in r.message and r.levelname == "WARNING" for r in caplog.records)

@@ -2,12 +2,14 @@ import logging
 from datetime import timedelta
 
 from radar.collectors.base import Cursor, RawItem
-from radar.collectors.github_client import GitHubClient, GitHubError
+from radar.collectors.github_client import GitHubClient, GitHubError, GitHubRateLimited
 
 log = logging.getLogger(__name__)
 
 SOURCE = "github_watchlist"
-TEXT_EXTS = (".md", ".txt", ".json", ".yaml", ".yml", ".csv")
+TEXT_EXTS = (".md", ".mkd", ".markdown", ".txt", ".json", ".yaml", ".yml", ".csv")
+# only seed repos get their whole tree read on first sight; others start from their head
+FULL_FIRST_SIGHT = ("seed",)
 MAX_BYTES = 384 * 1024
 
 
@@ -22,6 +24,10 @@ def _added_lines(patch: str) -> str:
     )
 
 
+class _GitHubAuthError(GitHubError):
+    """Token problem: global, so it fails the whole poll instead of one repo."""
+
+
 class GitHubWatchlist:
     name = "github_watchlist"
     interval = timedelta(minutes=10)
@@ -31,44 +37,69 @@ class GitHubWatchlist:
         self.conn = conn
 
     def poll(self, cursor: Cursor) -> tuple[list[RawItem], Cursor]:
+        """Per repo: its cursor entry only advances when all its items were collected.
+
+        A failing repo keeps its old entry (WARNING); a rate limit stops the run, keeping
+        the progress of repos already done and the old entries of the rest.
+        """
         rows = self.conn.execute(
-            "select full_name from watch_repos where status <> 'muted' order by full_name"
+            "select full_name, status from watch_repos where status <> 'muted' "
+            "order by full_name"
         ).fetchall()
         items: list[RawItem] = []
         new_cursor: Cursor = {}
-        for row in rows:
+        for i, row in enumerate(rows):
             full = row["full_name"]
             state = cursor.get(full) or {}
-            resp = self.client.get(
-                f"/repos/{full}/commits", params={"per_page": 1}, etag=state.get("etag")
-            )
-            if resp.status == 304:
-                new_cursor[full] = state
-                continue
-            if resp.status in (401, 403):
-                raise GitHubError(f"GitHub {resp.status} on /repos/{full}/commits", resp.status)
-            if resp.status != 200 or not resp.json:
-                # 409 = empty repo, 404 = gone: skip silently, keep any old state
-                if state:
-                    new_cursor[full] = state
-                continue
-            head = resp.json[0]
-            sha = head["sha"]
-            author = (head.get("author") or {}).get("login")
-            old = state.get("sha")
-            if old == sha:
-                pass
-            elif old:
-                items += self._diff_items(full, old, sha, author)
-            else:
-                items += self._first_sight_items(full, sha, author)
-            new_cursor[full] = {"sha": sha, "etag": resp.etag}
+            try:
+                repo_items, repo_state = self._poll_repo(full, row["status"], state)
+            except GitHubRateLimited:
+                log.warning("github_watchlist rate limited at %s; stopping this run", full)
+                for rest in rows[i:]:
+                    if cursor.get(rest["full_name"]):
+                        new_cursor[rest["full_name"]] = cursor[rest["full_name"]]
+                break
+            except _GitHubAuthError:
+                raise
+            except GitHubError as e:
+                log.warning("github_watchlist: skipping %s this run: %s", full, e)
+                repo_items, repo_state = [], state
+            items += repo_items
+            if repo_state:
+                new_cursor[full] = repo_state
         return items, new_cursor
 
-    def _diff_items(self, full, old, new, author) -> list[RawItem]:
+    def _poll_repo(self, full: str, status: str, state: dict) -> tuple[list[RawItem], dict]:
+        resp = self.client.get(
+            f"/repos/{full}/commits", params={"per_page": 1}, etag=state.get("etag")
+        )
+        if resp.status == 304:
+            return [], state
+        if resp.status in (401, 403):
+            raise _GitHubAuthError(f"GitHub {resp.status} on /repos/{full}/commits",
+                                   resp.status)
+        if resp.status != 200 or not resp.json:
+            # 409 = empty repo, 404 = gone: skip silently, keep any old state
+            return [], state
+        head = resp.json[0]
+        sha = head["sha"]
+        author = (head.get("author") or {}).get("login")
+        old = state.get("sha")
+        full_tree = status in FULL_FIRST_SIGHT
+        if old == sha:
+            items = []
+        elif old:
+            items = self._diff_items(full, old, sha, author, full_tree)
+        elif full_tree:
+            items = self._first_sight_items(full, sha, author)
+        else:
+            items = []  # auto/from_paper: record the head, emit only later changes
+        return items, {"sha": sha, "etag": resp.etag}
+
+    def _diff_items(self, full, old, new, author, full_tree=True) -> list[RawItem]:
         resp = self.client.get(f"/repos/{full}/compare/{old}...{new}")
         if resp.status == 404:  # old sha gone (force-push): treat as first sight
-            return self._first_sight_items(full, new, author)
+            return self._first_sight_items(full, new, author) if full_tree else []
         if resp.status != 200:
             raise GitHubError(f"GitHub {resp.status} on compare for {full}", resp.status)
         files = (resp.json or {}).get("files", [])
