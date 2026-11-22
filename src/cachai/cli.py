@@ -143,6 +143,7 @@ def _audit(model: str, targets: list[Target], reference: str, http: httpx.Client
           + ("juego público" if seed is None else f"juego ciego, semilla {seed}"))
     replies, spend = scan.run(
         targets, probes, http=http, max_usd=args.max_usd,
+        extra_tokens=args.extra_tokens,
         on_reply=lambda r: print("." if r.ok else "x", end="", flush=True))
     print()
     cards = checks.score(probes, replies, reference, floor)
@@ -271,6 +272,9 @@ def _audit_options(p) -> None:
     p.add_argument("--max-usd", type=float, default=SCAN_DEFAULTS["max_usd"],
                    help="tope de gasto de la auditoría en USD")
     p.add_argument("--timeout", type=float, default=120)
+    p.add_argument("--extra-tokens", type=int, default=0,
+                   help="tokens de salida de más por prueba, para modelos que razonan "
+                        "siempre y gastan el límite antes de responder")
     p.add_argument("--out", default=SCAN_DEFAULTS["out"])
 
 
