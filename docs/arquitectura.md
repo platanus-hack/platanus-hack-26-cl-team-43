@@ -33,24 +33,25 @@ El adversario es el proveedor. Controla el servidor, ve cada petición y puede c
 
 - **Caja negra.** Solo hay acceso a la API, como cualquier comprador. Sin pesos ni GPU propia.
 - **Referencia.** Es el endpoint first-party si existe; si no, una referencia elegida o el consenso de los endpoints. La referencia también es un endpoint: se mide equivalencia con ella, no con los pesos.
-- **Costo.** 52 pruebas por endpoint, más una segunda pasada a la referencia como piso de ruido, y un tope de gasto por auditoría (`--max-usd`, 2 USD por defecto).
-- **No determinismo.** Temperatura 0 y semilla fija reducen la variación, pero no la eliminan entre hardware distinto.
+- **Costo y tiempo.** 52 pruebas por endpoint, más una segunda pasada a la referencia como piso de ruido, y un tope de gasto por auditoría (`--max-usd`, 2 USD por defecto). Auditar cinco endpoints de GLM-5.3 costó USD 0,16 y tardó 7 minutos, porque el endpoint del autor limita las cuentas nuevas a 20 pedidos por minuto.
+- **No determinismo.** Temperatura 0 y semilla fija reducen la variación, pero no la eliminan entre hardware distinto, y hay modelos que no repiten ni sus propias respuestas: GLM-5.3, que razona siempre, coincidió consigo mismo en 0 de 10 frases. Por eso la coincidencia se compara contra un piso de ruido y no contra un 100 % ideal; con un modelo así, ese control no tiene potencia.
 - **Ética.** Solo se audita con uso normal de la API desde una cuenta propia. El proveedor tramposo es un proxy nuestro; nunca se ataca a terceros.
 
 ### 1.3 Supuestos
 
 | # | Supuesto | Estado y cómo se verifica |
 |---|---|---|
-| S1 | Con el proveedor fijado (`provider.only`, sin fallback), OpenRouter devuelve los `prompt_tokens` nativos de ese proveedor. | **Supuesto.** Una llamada real por proveedor, comparando el conteo con el tokenizer público. |
-| S2 | Dos endpoints honestos del mismo modelo, a temperatura 0, no se distinguen con p < 0,01 en 48 pruebas. | **Medido solo con el juguete** (el control honesto nunca se marcó: 0/90). Con proveedores reales se mide el piso de ruido con un proxy honesto hacia el mismo endpoint (`cachai experimento` sin `--toy`). |
-| S3 | Distintas plantillas de chat cambian el conteo de tokens en una cantidad chica y constante. | **Probable.** Si es así, un excedente legítimo se confundiría con A1: hay que calibrar la diferencia esperada por proveedor antes de marcar (§5, R2). |
+| S1 | Con el proveedor fijado (`provider.only`, sin fallback), OpenRouter devuelve los `prompt_tokens` nativos de ese proveedor. | **Probable.** En la auditoría de GLM-5.3, los cinco endpoints contaron los mismos tokens de prompt que el del autor en los seis mensajes. Falta compararlo con el tokenizer público. |
+| S2 | Dos endpoints honestos del mismo modelo, a temperatura 0, no se distinguen con p < 0,01 en una auditoría. | **Medido con proveedores propios**: el control honesto nunca se marcó con el juguete (0/90) ni con Qwen2.5 (0/20). **Sin medir** entre dos proveedores honestos con hardware distinto: el piso de ruido es la misma referencia en otra llamada. |
+| S3 | Distintas plantillas de chat cambian el conteo de tokens en una cantidad chica y constante. | **Supuesto.** El auditor tolera una diferencia constante de hasta 3 tokens (`checks.TOKEN_TEMPLATE_TOLERANCE`). El margen no está calibrado por proveedor (§5, R2); en GLM-5.3 la diferencia fue cero en los cinco endpoints. |
 | S4 | El endpoint first-party sirve el modelo declarado. | **Supuesto.** Si no hay first-party o es dudoso, la referencia pasa a ser el consenso. |
 | S5 | El proveedor no distingue una auditoría por la cuenta o la clave. | **Probable** a través de OpenRouter, que media la llamada. En APIs directas el proveedor ve la clave: se audita con la clave del propio comprador. |
 
 ### 1.4 Casos difíciles
 
 - **Sustitución parcial**: cada control ve pocas fallas. Se suman en una prueba combinada y se reporta cuántas tareas harían falta.
-- **Modelos con razonamiento**: pueden agotar `max_tokens` antes de responder. Se pide excluir el razonamiento en OpenRouter, pero una respuesta vacía hoy cuenta como tarea fallida. La referencia sufre lo mismo, así que no crea una diferencia por sí sola; igual se verifica con una llamada real antes de publicar fichas.
+- **Modelos con razonamiento**: pueden agotar `max_tokens` antes de responder, y algunos no dejan apagarlo (GLM-5.3 responde «Reasoning is mandatory»). `--extra-tokens` suma margen a cada prueba, salvo a las de conteo. Una respuesta vacía cuenta como tarea fallida, pero no como coincidencia con la referencia. Pasó de verdad: un endpoint que corta en la mitad del límite pedido salió con 9 de 20 tareas sin margen y con 19 de 20 con margen.
+- **Límites de pedidos**: el endpoint del autor puede limitar a quien audita (20 pedidos por minuto para cuentas nuevas en GLM-5.3). Un 429 no dice nada del modelo: el auditor espera y repite la misma prueba, hasta ocho veces.
 - **Respuestas con formato**: «12,345», «**12345**» o «12345.» son la misma respuesta. Se normaliza antes de comparar.
 - **Proveedores caídos**: un error no detiene la auditoría; se registra como dato de confiabilidad.
 
@@ -70,16 +71,16 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 
 **Auditor** (`src/cachai/`)
 1. **Lo declarado** (`endpoints.py`): lee de la API pública de OpenRouter la cuantización y el precio de cada endpoint del modelo, y elige cuáles auditar (el first-party más los más baratos, o los que se pidan).
-2. **Juego de pruebas** (`suite.py`): con una semilla, genera 52 pruebas: 6 mensajes mínimos para contar tokens, 20 tareas (suma, producto, ordenar, repetir), 8 tool calls con tres esquemas estrictos (la mitad en streaming), 8 canarios (un secreto en el system prompt y un pedido de revelarlo) y 10 frases cortas de texto libre. Las de texto libre van al final, así una semilla anterior genera las mismas 38 primeras. Sin semilla genera el juego público, siempre igual.
-3. **Cliente** (`client.py`): una llamada por prueba, con el proveedor fijado (`provider.only`, `allow_fallbacks: false`), temperatura 0 y semilla 7. **Nunca lanza**: un error vuelve dentro de la respuesta y se clasifica (clave inválida, sin crédito, falla del proveedor).
-4. **Ejecución** (`scan.py`): los endpoints se auditan en paralelo (hasta cuatro a la vez), con un tope de gasto compartido. Una clave inválida detiene ese endpoint en vez de reintentar.
-5. **Controles** (`checks.py`): de respuestas crudas a una medición por endpoint. Tokens: excedente constante o variable frente a la referencia. Tareas: exactitud con intervalo de Wilson y coincidencia con la referencia. Coincidencia: cuántas respuestas (tareas y texto libre) son idénticas a las de la referencia, comparado con Fisher contra lo que coincide el piso de ruido (la misma referencia en otra llamada); así el no determinismo del servidor no se cuenta como trampa. Tool calls: validez estricta. Canario: un juez determinista (el secreto aparece literal en la respuesta o no). Cada comparación con la referencia es un **test exacto de Fisher a dos colas** con α = 0,01 fijado antes de medir; si ningún control individual dispara, una prueba combinada suma todas las fallas.
+2. **Juego de pruebas** (`suite.py`): con una semilla, genera 52 pruebas: 6 mensajes mínimos para contar tokens, 20 tareas (suma, producto, ordenar, repetir), 8 tool calls con tres esquemas estrictos (la mitad en streaming), 8 canarios (un secreto en el system prompt y un pedido de revelarlo) y 10 frases cortas de texto libre. Sin semilla genera el juego público, siempre igual. Una semilla reproduce la auditoría solo con la misma versión del juego: las fichas anteriores al juego de 52 pruebas se repiten fijando el commit.
+3. **Cliente** (`client.py`): una llamada por prueba, con el proveedor fijado (`provider.only`, `allow_fallbacks: false`), temperatura 0 y semilla 7, normal o en streaming. **Nunca lanza**: un error vuelve dentro de la respuesta y se clasifica (clave inválida, sin crédito, falla del proveedor).
+4. **Ejecución** (`scan.py`): los endpoints se auditan en paralelo (hasta cuatro a la vez), con un tope de gasto compartido. Una clave inválida detiene ese endpoint en vez de reintentar; un 429 se espera y se repite.
+5. **Controles** (`checks.py`): de respuestas crudas a una medición por endpoint. Tokens: excedente constante o variable frente a la referencia, con una tolerancia de 3 tokens constantes por la plantilla. Tareas: exactitud con intervalo de Wilson y coincidencia con la referencia. Coincidencia: cuántas respuestas (tareas y texto libre) son idénticas a las de la referencia, comparado con Fisher contra lo que coincide el piso de ruido (la misma referencia en otra llamada); así el no determinismo del servidor no se cuenta como trampa. Tool calls: validez estricta de nombre, claves, tipos y valores en tres esquemas, comparada con la referencia. Canario: un juez determinista (el secreto aparece literal en la respuesta o no). Cada comparación con la referencia es un **test exacto de Fisher a dos colas** con α = 0,01 fijado antes de medir; si ningún control individual dispara, una prueba combinada suma todas las fallas.
 6. **Ficha** (`ficha.py`): JSON y Markdown con lo declarado (E1), lo medido (E2), el motivo de cada marca, los límites, la semilla y el SHA-256 de las respuestas crudas, que se guardan en JSONL.
 
 **Laboratorio** (`villain.py`, `toy.py`, `experiment.py`)
 - `villain.py`: proveedor tramposo propio, un proxy compatible con la API de OpenAI que reenvía a un upstream real o al juguete. Puede inyectar un system prompt, desviar una fracción del tráfico a un modelo más barato (reescribiendo el nombre del modelo en la respuesta) y portarse bien cuando reconoce una auditoría: por los prompts exactos del juego público o por las plantillas del ciego.
 - `toy.py`: modelo de juguete con reglas fijas (`toy-large` correcto, `toy-small` con fallas conocidas), para probar sin claves.
-- `experiment.py`: la línea base. Una referencia y cinco proxies hacia el mismo upstream (uno honesto y cuatro tramposos), auditados con el juego fijo y con el ciego, R veces con semillas distintas. Corre en memoria (TestClient) con el juguete o contra OpenRouter con un tope de gasto.
+- `experiment.py`: la línea base. Una referencia y varios proxies hacia el mismo upstream (uno honesto y el resto tramposos), auditados con el juego fijo y con el ciego, R veces con semillas distintas. Corre en memoria (TestClient) con el juguete, contra Ollama con Qwen2.5 (la referencia en Q8 y proveedores que sirven Q4, Q2 o el 0.5B) o contra OpenRouter con un tope de gasto.
 
 ## 3. Decisiones y alternativas descartadas
 
@@ -117,11 +118,12 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 | # | Riesgo | Mitigación |
 |---|---|---|
 | R1 | **Comparaciones múltiples**: hasta tres pruebas de Fisher y el control de tokens por endpoint, sobre varios endpoints, inflan las falsas alarmas por encima de α. | El control honesto mide la tasa real (M3). La ficha reporta cada p-valor y no acusa. Si M3 da más de lo esperado, se corrige por Bonferroni. |
-| R2 | **Tokens de plantilla**: un proveedor honesto con otra plantilla de chat deja un excedente constante y se confunde con un prompt oculto. | Calibrar la diferencia esperada por proveedor con mensajes de largos distintos y marcar solo excedentes por encima de ella. **Pendiente** antes de publicar fichas reales. |
+| R2 | **Tokens de plantilla**: un proveedor honesto con otra plantilla de chat deja un excedente constante y se confunde con un prompt oculto. | Se tolera una diferencia constante de hasta 3 tokens. Es un margen supuesto, no calibrado por proveedor; en la auditoría de GLM-5.3 no hizo falta (diferencia cero en los cinco endpoints). Calibrarlo con mensajes de largos distintos sigue **pendiente**. |
 | R3 | **Evasión por plantillas** (A6). | Medida y declarada. Auditar con una muestra del tráfico real del comprador (§7). |
 | R4 | **Potencia insuficiente** para sustituciones chicas. | Reportar la muestra; `--tasks 80` detectó el 30 % en 30/30. El costo de la auditoría crece con la potencia y se muestra antes. |
 | R5 | **Referencia comprometida o cuantizada.** | Usar el consenso como alternativa y decir siempre contra qué se comparó. |
 | R6 | **El proveedor falsea el `usage`** (A7). | Queda la prueba de comportamiento; está en los límites de la ficha. |
+| R7 | **Modelos no deterministas a temperatura 0**: el control de coincidencia, que es el que delata una cuantización, pierde potencia. | El piso de ruido evita las falsas alarmas (GLM-5.3: 0 de 10, nadie marcado). La ficha lo deja a la vista. Recuperar la potencia exige comparar distribuciones (§7). |
 
 ## 6. Hallazgos
 
@@ -139,9 +141,34 @@ Qué controles dispararon con 20 tareas: el prompt oculto, por el excedente cons
 
 **Una lección del propio experimento.** La primera corrida con 80 tareas mostró que el benchmark fijo detectaba al tramposo. Era un error del laboratorio: el tramposo memorizaba solo las 20 tareas del juego público por defecto y hacía trampa en las otras 60. Se corrigió (memoriza el juego fijo completo, de cualquier tamaño) y hay un test que lo comprueba. Sin el control de evasión, ese error habría pasado por un resultado favorable al benchmark fijo.
 
+Repetida con el juego de 52 pruebas, la línea base da el mismo patrón: control 0/30, prompt oculto y desvío total 30/30, desvío del 30 % 12/30 y evasión por plantillas 0/30 (`results/linea-base/juguete-t20-52-pruebas.md`).
+
+**Modelo real servido por nosotros** (`results/linea-base/ollama-qwen2.5-t20.md`, Qwen2.5 1.5B en Ollama, 20 auditorías por caso, juego de 48 pruebas):
+
+| Lo que sirve el proveedor | Marcado | Qué lo delató |
+|---|---|---|
+| Lo mismo que la referencia (control) | 0/20 (IC95 0-16 %) | Nada |
+| Prompt oculto | 20/20 (IC95 84-100 %) | Tokens de prompt de más y coincidencia |
+| Cuantización a 4 bits | 20/20 | Solo la coincidencia: 9 a 15 de 30 contra 30 de 30 del piso |
+| Cuantización a 2 bits | 20/20 | Coincidencia; exactitud en 14 de 20 |
+| Modelo tres veces más chico | 20/20 | Coincidencia; filtra el secreto en 19 de 20 |
+| Desvío del 30 % al modelo chico | 8/20 (IC95 22-61 %) | Coincidencia |
+
+La cuantización a 4 bits es el caso que justifica el control de coincidencia: acierta casi lo mismo que la referencia y la exactitud nunca la marcó.
+
+**Proveedores reales** (`results/proveedores/`, GLM-5.3 en OpenRouter, una auditoría de cinco endpoints contra el del autor, 364 respuestas sin errores):
+
+- Ningún endpoint agrega un prompt oculto (diferencia de tokens cero en los cinco) y ninguno se distingue de la referencia.
+- El endpoint del autor, SiliconFlow y Novita devuelven el objeto anidado de una tool call como texto con JSON adentro (5 de 8 válidas); los dos de Wafer y Decart lo devuelven como objeto (8 de 8). La referencia es la que falla, así que nadie queda marcado (p = 0,2).
+- El piso de ruido de texto libre fue 0 de 10: el modelo no repite sus propias frases. Sin el piso, los cinco endpoints habrían salido marcados.
+- SiliconFlow corta en la mitad del límite de tokens pedido. Sin margen, eso truncó sus respuestas y lo dejó en 9 de 20 tareas; con margen, 19 de 20.
+
+**Lo que enseñó la primera auditoría real.** La primera corrida salió rota por tres motivos que el juguete no podía mostrar: el límite de pedidos del autor dejó la referencia a medias, el razonamiento obligatorio gastó el límite de tokens y las respuestas vacías contaban como coincidencia. De ahí salieron el reintento ante un 429, `--extra-tokens` y la regla de no contar respuestas vacías. Las dos corridas están publicadas.
+
 ## 7. Lo que sigue
 
 1. **Auditar con tráfico real del comprador.** Una muestra chica (1 a 5 %) de sus propias peticiones, mezclada y sin marca, se duplica contra la referencia y se compara la coincidencia. Una petición real no se distingue de una auditoría porque es la misma cosa. Cierra A6 en gran parte; no del todo, porque el proveedor podría desviar solo el tráfico que considera de bajo riesgo.
-2. **Calibración de tokens por proveedor** (R2) y **piso de ruido real** (M3) antes de publicar fichas.
-3. **Monitoreo continuo**: auditorías periódicas con semillas nuevas y alertas cuando un endpoint cambia de veredicto.
-4. **E3**: incorporar atestaciones de TEE donde existan, con su propia etiqueta.
+2. **Calibración de tokens por proveedor** (R2) y **piso de ruido entre proveedores honestos con hardware distinto** (S2).
+3. **Un control de coincidencia que sirva con modelos no deterministas**: comparar distribuciones de varias muestras por prueba en vez de una respuesta exacta, como hace *Model Equality Testing*.
+4. **Monitoreo continuo**: auditorías periódicas con semillas nuevas y alertas cuando un endpoint cambia de veredicto.
+5. **E3**: incorporar atestaciones de TEE donde existan, con su propia etiqueta.

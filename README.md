@@ -8,7 +8,7 @@ Platanus Hack 26: Santiago ft. Buk · Track: 🛡️ AI Security · team-43
 - Christian Rodrigo Rojas Rodriguez ([@Christian-Rojas-Rodriguez](https://github.com/Christian-Rojas-Rodriguez))
 - Federico Hörl ([@fede-h](https://github.com/fede-h))
 
-**¿Cachai qué modelo te están sirviendo?** Las evaluaciones de seguridad de un modelo se hacen sobre un modelo y una configuración concretos. Cuando ese modelo lo sirve un tercero, nadie comprueba que lo que responde siga siendo lo que se evaluó. Cachai lo audita desde afuera: le manda a cada endpoint pruebas generadas en el momento, que el proveedor no puede reconocer, compara las respuestas con una referencia y escribe una ficha que separa lo que el proveedor declara de lo que se midió.
+**¿Cachai qué modelo te están sirviendo?** Las evaluaciones de seguridad de un modelo se hacen sobre un modelo y una configuración concretos. Cuando ese modelo lo sirve un tercero, nadie comprueba que lo que responde siga siendo lo que se evaluó. Cachai lo audita desde afuera: le manda a cada endpoint pruebas generadas en el momento, que el proveedor no puede memorizar de antemano, compara las respuestas con una referencia y escribe una ficha que separa lo que el proveedor declara de lo que se midió.
 
 ## Pruébalo en un minuto
 
@@ -20,6 +20,7 @@ uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 cach
 uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43   # o pipx install
 cachai demo                                          # sin claves: un proveedor honesto y dos tramposos de juguete
 cachai scan z-ai/glm-5.3                             # los proveedores de un modelo en OpenRouter (OPENROUTER_API_KEY)
+cachai scan z-ai/glm-5.3 --extra-tokens 512          # si el modelo razona siempre, con margen de tokens para que alcance a responder
 cachai scan -e deepseek:deepseek-chat -e together:deepseek-ai/DeepSeek-V3   # APIs directas
 cachai scan                                          # lee ./cachai.toml
 ```
@@ -47,13 +48,13 @@ Cachai solo necesita lo mismo que cualquier cliente: una API compatible con la d
 | Dónde | Cómo | Ejemplo |
 |---|---|---|
 | **OpenRouter** | Lee los endpoints del modelo, fija cada proveedor sin fallback y los compara con el del autor | `cachai scan z-ai/glm-5.3` |
-| **Proveedores de inferencia** | Atajos para Together, Fireworks, DeepInfra, Groq, Cerebras, SambaNova, Novita, Hyperbolic y Nebius | `-e together:MODELO` |
+| **Proveedores de inferencia** | Atajos para Together, Fireworks, DeepInfra, Groq, Cerebras, SambaNova, Novita, Hyperbolic, Nebius y 50x | `-e together:MODELO` |
 | **La API del autor del modelo** | Como referencia: DeepSeek, Moonshot (Kimi), Z.ai (GLM), Mistral | `-e deepseek:deepseek-chat` |
 | **Servidores propios** | Ollama, vLLM, SGLang, LM Studio, llama.cpp: para comprobar que una cuantización o una plantilla nueva no cambió el comportamiento | `-e ollama:qwen2.5:7b` |
 | **Cualquier otra API compatible con OpenAI** | Un gateway interno, el proveedor contratado, un endpoint en Railway o Modal | `-e prod=https://.../v1,PROD_API_KEY,modelo` |
 | **CI** | Auditoría periódica que falla si un endpoint se vuelve distinguible | [`examples/github-actions/cachai.yml`](examples/github-actions/cachai.yml) |
 
-Lo probamos de punta a punta con el modelo de juguete y con Qwen2.5 servido por nosotros en Ollama; OpenRouter es el modo por defecto. Los atajos de los demás proveedores usan su API pública compatible con OpenAI; la ficha registra contra qué URL se midió.
+Lo probamos de punta a punta con el modelo de juguete, con Qwen2.5 servido por nosotros en Ollama y con cinco endpoints de GLM-5.3 en OpenRouter, que es el modo por defecto. Los atajos de los demás proveedores usan su API pública compatible con OpenAI y no los corrimos todos; la ficha registra contra qué URL se midió.
 
 ## El problema
 
@@ -103,14 +104,20 @@ Qué mide en cada endpoint (52 pruebas por auditoría):
 
 | Control | Qué delata | Cómo |
 |---|---|---|
-| Tokens de prompt de sobra | Un prompt oculto | 6 mensajes mínimos; un excedente constante frente a la referencia es la firma de un prefijo agregado |
+| Tokens de prompt de sobra | Un prompt oculto | 6 mensajes mínimos; un excedente constante frente a la referencia es la firma de un prefijo agregado. Se tolera una diferencia constante de hasta 3 tokens, por la plantilla de chat |
 | Exactitud y coincidencia con la referencia | Un modelo sustituido o degradado | 20 tareas con respuesta calculable (sumas, productos, ordenar, repetir), a temperatura 0 |
 | Coincidencia del texto libre | Una cuantización o un modelo distinto que acierta igual | 10 frases cortas a temperatura 0. Se compara con lo que coincide la referencia consigo misma en otra llamada (el piso de ruido), no con un 100 % ideal |
-| Tool calls válidas | Un parser o una plantilla distintos | 8 llamadas a tres herramientas con esquema estricto, la mitad en streaming |
+| Tool calls válidas | Un parser o una plantilla distintos | 8 llamadas a tres herramientas con esquema estricto (objetos anidados, enteros con rango, `$ref`), la mitad en streaming. Se valida nombre, claves, tipos y valores |
 | Canario | Que el endpoint filtre el secreto del system prompt | 8 secretos distintos y un juez determinista: el secreto aparece literal en la respuesta o no |
 | Confiabilidad | Un endpoint inestable | Errores y latencia mediana de cada endpoint durante la corrida |
 
 Cada comparación con la referencia es un test exacto de Fisher con un umbral fijado antes de medir (p < 0,01). El veredicto es «distinguible de la referencia» o «sin desviación detectada», con la muestra, el p-valor y los límites de lo que se afirma.
+
+Tres reglas salieron de auditar proveedores reales y evitan marcar a alguien por un artefacto:
+
+- **Un límite de pedidos no es una falla del modelo.** Ante un error 429, el auditor espera y repite la misma prueba.
+- **Una respuesta vacía no cuenta como coincidencia.** Si el modelo gastó el límite de tokens razonando y no respondió, dos respuestas vacías no son «la misma respuesta». `--extra-tokens` da margen a los modelos que razonan siempre.
+- **El piso de ruido manda.** Si la referencia no coincide consigo misma, el control de coincidencia no marca a nadie.
 
 ## Arquitectura
 
@@ -122,11 +129,11 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 
 1. **Lo declarado** (`endpoints.py`). Lee de la API pública de OpenRouter la cuantización y el precio de cada endpoint del modelo, y elige cuáles auditar.
 2. **Juego ciego** (`suite.py`). Con una semilla nueva genera las 52 pruebas. Sin semilla genera el juego público, siempre igual, que sirve de comparación.
-3. **Las mismas pruebas a todos** (`client.py`, `scan.py`). Las manda a cada endpoint fijado (`provider.only`, sin fallback) y a una referencia, a temperatura 0, en paralelo y con un tope de gasto. La referencia se consulta dos veces: la segunda es el piso de ruido. Un error no detiene la auditoría: se registra como dato de confiabilidad.
-4. **Controles** (`checks.py`). Convierte las respuestas crudas en una medición por endpoint y la compara con la referencia. Si ningún control individual dispara, una prueba combinada suma todas las fallas.
+3. **Las mismas pruebas a todos** (`client.py`, `scan.py`). Las manda a cada endpoint fijado (`provider.only`, sin fallback) y a una referencia, a temperatura 0, en paralelo y con un tope de gasto. La referencia se consulta dos veces: la segunda es el piso de ruido. Un error no detiene la auditoría: se registra como dato de confiabilidad, salvo el límite de pedidos (429), que se espera y se repite.
+4. **Controles** (`checks.py`). Convierte las respuestas crudas en una medición por endpoint y la compara con la referencia: tokens de prompt, exactitud, tool calls, canario y coincidencia contra el piso de ruido. Si ningún control individual dispara, una prueba combinada suma todas las fallas.
 5. **Ficha** (`ficha.py`). JSON y Markdown con lo declarado, lo medido, el motivo de cada marca, los límites, la semilla y el SHA-256 de las respuestas crudas, que se guardan aparte.
 
-**El laboratorio** (`cachai experimento`) responde otra pregunta: ¿el auditor detecta lo que dice detectar? No se puede saber la verdad sobre un tercero, y atacarlo no es ético, así que el auditor se mide contra un proveedor tramposo propio (`villain.py`): un proxy que inyecta un prompt, desvía una fracción del tráfico a un modelo más barato y se porta bien cuando reconoce una auditoría. Una referencia y cinco proxies hacia el mismo modelo (uno honesto, como control de falsas alarmas, y cuatro tramposos) se auditan con el juego fijo y con el ciego. Corre sin claves contra un modelo de juguete (`toy.py`) o contra OpenRouter.
+**El laboratorio** (`cachai experimento`) responde otra pregunta: ¿el auditor detecta lo que dice detectar? No se puede saber la verdad sobre un tercero, y atacarlo no es ético, así que el auditor se mide contra un proveedor tramposo propio (`villain.py`): un proxy que inyecta un prompt, desvía una fracción del tráfico a un modelo más barato y se porta bien cuando reconoce una auditoría. Una referencia y varios proxies hacia el mismo modelo (uno honesto, como control de falsas alarmas, y el resto tramposos) se auditan con el juego fijo y con el ciego. Corre sin claves contra un modelo de juguete (`toy.py`), contra un modelo real servido por nosotros con Ollama (Qwen2.5 en Q8, con proveedores que sirven Q4, Q2 o un modelo más chico) o contra OpenRouter.
 
 **La referencia** es el endpoint del autor del modelo cuando existe (si no, uno que se elige con `--reference`), consultado por la misma ruta que los demás. Así la comparación aísla al proveedor, sin GPU propia. Es una referencia más débil que correr el modelo original y la ficha lo dice.
 
@@ -196,6 +203,7 @@ La misma línea base con un modelo real: Qwen2.5 1.5B servido con Ollama. La ref
 - «Distinguible de la referencia» no es una acusación: puede deberse a la plantilla, al parser o a la cuantización.
 - La referencia también es un endpoint. Si está cuantizada, medimos equivalencia con ella, no con los pesos.
 - Un proveedor que conozca el generador de pruebas puede evadirlo (lo medimos arriba).
+- Con un modelo que no es determinista a temperatura 0, el control de coincidencia no tiene potencia. Pasó con GLM-5.3: no detectar una cuantización ahí no dice que no exista.
 
 ## Cómo está hecho
 
@@ -203,20 +211,20 @@ La misma línea base con un modelo real: Qwen2.5 1.5B servido con Ollama. La ref
 src/cachai/        el auditor
   endpoints.py       lo que declara cada endpoint en OpenRouter (E1) y cuáles auditar
   suite.py           juego público (fijo) y ciego (con semilla): 52 pruebas (42 con respuesta calculable y 10 de texto libre)
-  client.py          una llamada a un endpoint: proveedor fijado, temperatura 0, nunca lanza
-  scan.py            corre las pruebas en paralelo por endpoint, con tope de gasto
+  client.py          una llamada a un endpoint (normal o en streaming): proveedor fijado, temperatura 0, nunca lanza
+  scan.py            corre las pruebas en paralelo por endpoint, con tope de gasto y reintento ante un 429
   checks.py          controles deterministas, Fisher exacto, Wilson y el veredicto por endpoint
   ficha.py           la ficha en JSON y Markdown, con límites y SHA-256 de la evidencia
-  villain.py         proveedor tramposo propio para la demo: prompt oculto, desvío, evasión
+  villain.py         proveedor tramposo propio: prompt oculto, desvío a otro modelo, evasión
   toy.py             modelo de juguete con reglas fijas, para probar sin claves
-  experiment.py      experimento de línea base: benchmark fijo contra juego ciego
+  experiment.py      experimento de línea base: benchmark fijo contra juego ciego, con el juguete, Ollama u OpenRouter
   providers.py       atajos de proveedores compatibles con OpenAI (URL y variable de la clave)
   serve.py           la demo en vivo: tres proveedores, uno tramposo, y la auditoría por SSE (demo.html)
   cli.py             cachai demo · scan · endpoints · serve · experimento
 tests/             59 tests de punta a punta, sin red ni claves
 examples/          configuraciones listas para copiar (OpenRouter, APIs directas, servidor propio, CI)
-results/linea-base/  resultados del experimento (JSON y Markdown)
-results/proveedores/  primera corrida contra proveedores reales (ficha y respuestas crudas)
+results/linea-base/  resultados del experimento con el juguete y con Qwen2.5 (JSON y Markdown)
+results/proveedores/  auditoría de GLM-5.3 en OpenRouter (fichas, respuestas crudas y cómo leerlas)
 deploy/demo/       imagen de la demo en vivo: Ollama con los modelos y cachai serve (Railway)
 ```
 
@@ -225,6 +233,7 @@ uv sync
 uv run pytest -q                                   # 59 tests, sin red ni claves
 uv run cachai experimento --toy --reps 30          # la línea base, sin claves (~2 min)
 uv run cachai endpoints z-ai/glm-5.3               # lo que declara cada proveedor, sin clave
+uv run cachai experimento --ollama --reps 20       # la línea base con Qwen2.5 (necesita Ollama con los modelos)
 uv run cachai scan z-ai/glm-5.3 --providers 6 --max-usd 2   # necesita OPENROUTER_API_KEY
 ```
 
