@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from radar.testing.assemble import CANARY_SYSTEM, CandidateRow, assemble
+import pytest
 from radar.testing.assemble import testability as check_testable
 from radar.testing.goals import Goal, ModelSpec, load_goals, load_models, sync_config
 
@@ -18,7 +19,7 @@ def cand(**kw) -> CandidateRow:
         goal_slot="{GOAL}",
         embedded_goal=None,
         embedded_goal_severity=None,
-        template_severity=None,
+        template_severity="low",
     )
     base.update(kw)
     return CandidateRow(**base)
@@ -31,6 +32,32 @@ def test_template_severity_high_is_untested():
 def test_high_embedded_goal_is_untested():
     c = cand(goal_slot=None, embedded_goal="x", embedded_goal_severity="high")
     assert check_testable(c) == "high-severity embedded goal"
+
+
+def test_slot_with_high_embedded_goal_is_untested():
+    c = cand(embedded_goal="x", embedded_goal_severity="high")
+    assert check_testable(c) == "high-severity embedded goal"
+
+
+def test_null_template_severity_fails_closed():
+    assert check_testable(cand(template_severity=None)) == "harmful template content"
+
+
+def test_embedded_goal_without_severity_fails_closed():
+    assert check_testable(cand(embedded_goal="x", embedded_goal_severity=None)) == (
+        "high-severity embedded goal"
+    )
+    c = cand(embedded_goal="x", embedded_goal_severity="weird")
+    assert check_testable(c) == "high-severity embedded goal"
+
+
+def test_assemble_refuses_untestable():
+    with pytest.raises(ValueError, match="harmful template content"):
+        assemble(cand(template_severity="high"), POLICY, "tok")
+
+
+def test_slot_missing_from_text_is_untested():
+    assert check_testable(cand(text="no placeholder here")) == "no goal to test"
 
 
 def test_multi_turn_is_untested():
@@ -104,7 +131,7 @@ def test_embedded_goal_policy_sent_as_is():
 
 def test_from_row():
     row = dict(id=3, text="t", format="single_turn", goal_slot=None, embedded_goal=None,
-               embedded_goal_severity=None, template_severity=None, extra="ignored")
+               embedded_goal_severity=None, template_severity="low", extra="ignored")
     assert CandidateRow.from_row(row).id == 3
 
 

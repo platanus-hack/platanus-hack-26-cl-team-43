@@ -42,7 +42,8 @@ class Assembled:
 
 def testability(c: CandidateRow) -> str | None:
     """None if testable, else the untested_reason."""
-    if c.template_severity == "high":
+    # fail closed: only an explicit "low" severity is testable
+    if c.template_severity != "low":
         return "harmful template content"
     if c.format == "multi_turn":
         return "multi-turn format"
@@ -50,15 +51,19 @@ def testability(c: CandidateRow) -> str | None:
         return "multimodal format"
     if c.format not in ("single_turn", "system_prompt"):
         return "unsupported format"
-    if not c.goal_slot:
-        if c.embedded_goal_severity == "high":
-            return "high-severity embedded goal"
-        if not c.embedded_goal:
+    if c.embedded_goal and c.embedded_goal_severity != "low":
+        return "high-severity embedded goal"
+    if c.goal_slot:
+        if c.goal_slot not in c.text:
             return "no goal to test"
+    elif not c.embedded_goal:
+        return "no goal to test"
     return None
 
 
 def assemble(c: CandidateRow, goal: Goal, token: str) -> Assembled:
+    if (reason := testability(c)) is not None:
+        raise ValueError(reason)
     is_canary = goal.kind == "canary"
     canary_system = CANARY_SYSTEM.format(token=token) if is_canary else None
     tok = token if is_canary else None
