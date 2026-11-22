@@ -27,7 +27,7 @@ def test_allowed_emails_comma_separated(monkeypatch):
     env = dict(
         DATABASE_URL="d", GITHUB_TOKEN="g", OPENROUTER_API_KEY="o",
         EXTRACTOR_MODEL="e", JUDGE_MODEL="j", EMAIL_FROM="f",
-        SECRET_KEY="s", BASE_URL="b", ALLOWED_EMAILS="a@x.com, b@y.com",
+        SECRET_KEY="ssssssssssssssssssssssssssssssss", BASE_URL="b", ALLOWED_EMAILS="a@x.com, b@y.com",
     )
     for k, v in env.items():
         monkeypatch.setenv(k, v)
