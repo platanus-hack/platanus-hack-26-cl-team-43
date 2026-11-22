@@ -34,3 +34,5 @@ packages = ["src/radar"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not slow'"
+markers = ["slow: downloads/uses the real embedding model"]
