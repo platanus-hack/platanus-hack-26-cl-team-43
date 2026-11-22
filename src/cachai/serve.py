@@ -10,9 +10,13 @@ desvía el tramposo. Expone:
 
 Cualquiera puede auditar las mismas URLs con el CLI desde su máquina. El tramposo es nuestro
 y solo se audita a sí mismo.
+
+Con DATABASE_URL definida suma las cuentas (cachai.cuentas): sesión con Clerk, `cachai login`,
+las fichas que sube cada quien y el panel en /panel. Sin esa variable, la demo corre igual.
 """
 import asyncio
 import json
+import logging
 import os
 import random
 import secrets
@@ -40,6 +44,23 @@ TRAPS = {
                       "label": "agrega un system prompt oculto delante de cada pedido"},
 }
 PROVIDERS = ("oficial", "a", "b")
+log = logging.getLogger("cachai.serve")
+
+
+def _accounts(app: FastAPI, database_url: str, verify, public_url: str) -> bool:
+    """Monta las cuentas. Si la base falla, la demo sigue viva sin ellas."""
+    try:
+        from cachai import cuentas, db
+
+        frontend_api = os.environ.get("CLERK_FRONTEND_API", "https://clerk.jjato.com")
+        db.upgrade(database_url)
+        _, sessions = db.connect(database_url)
+        verify = verify or cuentas.clerk_verifier(frontend_api, {public_url})
+        app.include_router(cuentas.router(sessions, verify, public_url, frontend_api))
+        return True
+    except Exception:
+        log.exception("las cuentas no arrancaron; la demo sigue sin ellas")
+        return False
 
 
 def quick_probes(seed: int) -> list:
@@ -57,8 +78,15 @@ def quick_probes(seed: int) -> list:
     return out
 
 
-def create_app(self_url: str | None = None) -> FastAPI:
+def create_app(self_url: str | None = None, database_url: str | None = None,
+               verify=None) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    database_url = database_url or os.environ.get("DATABASE_URL")
+    public_url = os.environ.get("CACHAI_PUBLIC_URL", "https://cachai.jjato.com").rstrip("/")
+    if not (database_url and _accounts(app, database_url, verify, public_url)):
+        @app.get("/api/config")
+        def config():
+            return {"cuentas": False}
     upstream = httpx.AsyncClient(timeout=300)
     state = {"cheater": random.choice("ab"), "trap": "cuantizado", "round": 1}
     audit_lock = threading.Lock()

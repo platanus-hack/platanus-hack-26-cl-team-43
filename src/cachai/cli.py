@@ -5,13 +5,14 @@ import logging
 import os
 import secrets
 import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
 
-from cachai import checks, endpoints, ficha, providers, scan, suite
+from cachai import checks, endpoints, ficha, providers, scan, sesion, suite
 from cachai.client import Target
 
 
@@ -98,6 +99,7 @@ def cmd_scan(args) -> None:
     if not args.model and not args.direct:
         sys.exit("decí qué auditar: cachai scan MODELO, --endpoint, o un cachai.toml "
                  "(ver examples/). Para probar sin claves: cachai demo")
+    args.cuenta = _require_account()
     targets: list[Target] = []
     declared = None
     use_openrouter = not args.no_openrouter and bool(args.model) and (
@@ -126,9 +128,25 @@ def cmd_scan(args) -> None:
         sys.exit(2)
 
 
+def _require_account() -> dict:
+    """Auditar endpoints reales pide una cuenta: `cachai login`. La demo de juguete no."""
+    cred = sesion.load()
+    if cred is None:
+        sys.exit(sesion.LOGIN_HINT)
+    with httpx.Client(timeout=10) as http:
+        me = sesion.check(cred, http)
+    if me is None:
+        print("aviso: no se pudo hablar con el servidor de cuentas; la ficha queda solo "
+              "en este equipo", file=sys.stderr)
+    elif me.get("email"):
+        print(f"cuenta: {me['email']}")
+    return cred
+
+
 def _audit(model: str, targets: list[Target], reference: str, http: httpx.Client, args,
            declared: dict | None = None) -> dict:
     """Corre las pruebas, puntúa, escribe la ficha y muestra lo medido."""
+    t0 = time.time()
     floor = None
     if reference != checks.CONSENSUS and not args.no_floor:
         # el piso de ruido: la misma referencia por segunda vez; lo que coincide consigo
@@ -161,7 +179,40 @@ def _audit(model: str, targets: list[Target], reference: str, http: httpx.Client
         for per in replies.values() for r in per.values()) + "\n")
     print(md[md.index("## Medido"):md.index("## Qué no afirma")])
     print(f"ficha: {out / (stem + '.md')}  ·  gasto: USD {spend.spent:.4f}")
+    cred = getattr(args, "cuenta", None)
+    if cred and not getattr(args, "no_subir", False):
+        with httpx.Client(timeout=20) as web:
+            panel = sesion.upload(cred, f, web, seconds=round(time.time() - t0))
+        print(f"panel: {panel}" if panel else
+              "aviso: no se pudo subir la ficha al panel; quedó guardada en este equipo")
     return f
+
+
+def cmd_login(args) -> None:
+    with httpx.Client(timeout=15) as http:
+        cred = sesion.login(http, args.server, browser=not args.no_browser)
+    who = f" como {cred['email']}" if cred.get("email") else ""
+    print(f"Listo: este equipo quedó conectado{who}.\n"
+          f"Tus auditorías se van a ver en {cred['servidor']}/panel")
+
+
+def cmd_logout(args) -> None:
+    with httpx.Client(timeout=10) as http:
+        had = sesion.logout(http)
+    print("Sesión cerrada en este equipo." if had else "No había una sesión en este equipo.")
+
+
+def cmd_cuenta(args) -> None:
+    cred = sesion.load()
+    if cred is None:
+        sys.exit("No hay una sesión en este equipo. Corré `cachai login`")
+    with httpx.Client(timeout=10) as http:
+        me = sesion.check(cred, http)
+    if me is None:
+        sys.exit(f"no se pudo hablar con {cred['servidor']}")
+    print(f"cuenta: {me.get('email') or me['id']}\n"
+          f"auditorías guardadas: {me['auditorias']}  ·  gasto medido: USD {me['gasto_usd']:.4f}\n"
+          f"panel: {me['panel']}")
 
 
 def cmd_demo(args) -> None:
@@ -194,6 +245,7 @@ def cmd_demo(args) -> None:
     _audit("toy-large", targets, "referencia", router, args)
     print("\nSiguiente paso: auditar tus endpoints. Para tener el comando instalado:\n"
           "  uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43\n"
+          "  cachai login                        # una vez: conecta tu cuenta\n"
           "  cachai scan z-ai/glm-5.3            # necesita OPENROUTER_API_KEY\n"
           "Más ejemplos: https://github.com/platanus-hack/platanus-hack-26-cl-team-43/tree/main/examples")
 
@@ -308,8 +360,21 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--reference", help="nombre del endpoint de referencia, o 'consenso'")
     p.add_argument("--strict", action="store_true",
                    help="sale con código 2 si algún endpoint es distinguible (para CI)")
+    p.add_argument("--no-subir", action="store_true",
+                   help="no manda la ficha al panel de tu cuenta (queda solo en este equipo)")
     _audit_options(p)
     p.set_defaults(fn=cmd_scan)
+
+    p = sub.add_parser("login", help="conecta este equipo con tu cuenta (se abre el navegador)")
+    p.add_argument("--server", default=None, help="otro servidor de cuentas")
+    p.add_argument("--no-browser", action="store_true", help="solo muestra el enlace")
+    p.set_defaults(fn=cmd_login)
+
+    p = sub.add_parser("logout", help="cierra la sesión de este equipo y revoca su clave")
+    p.set_defaults(fn=cmd_logout)
+
+    p = sub.add_parser("cuenta", help="quién sos, cuántas auditorías llevás y el enlace al panel")
+    p.set_defaults(fn=cmd_cuenta)
 
     p = sub.add_parser("demo", help="prueba en 10 segundos, sin claves: auditor contra "
                        "un proveedor honesto y dos tramposos de juguete")

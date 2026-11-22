@@ -10,8 +10,17 @@ dependencies = [
     "python-dotenv>=1.0",
 ]
 
+[project.optional-dependencies]
+# lo que necesita `cachai serve` para las cuentas y el panel; el CLI no lo instala
+servidor = [
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "psycopg[binary]>=3.2",
+    "pyjwt[crypto]>=2.8",
+]
+
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "cachai[servidor]"]
 
 [project.scripts]
 cachai = "cachai.cli:main"

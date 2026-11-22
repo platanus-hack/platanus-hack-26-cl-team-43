@@ -12,6 +12,6 @@ RUN (ollama serve > /tmp/serve.log 2>&1 &) && sleep 5 \
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
-RUN uv sync --frozen --no-dev --python 3.12
+RUN uv sync --frozen --no-dev --extra servidor --python 3.12
 COPY deploy/demo/run.sh ./
 ENTRYPOINT ["/bin/bash", "/app/run.sh"]

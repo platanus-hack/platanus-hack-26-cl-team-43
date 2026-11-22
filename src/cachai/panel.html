@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel · Cachai</title>
+<meta name="description" content="Lo que mediste con Cachai: tus proveedores, tus modelos y tu uso.">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#111112;--alto:#19191b;--tinta:#f1f0ec;--tenue:#a3a29c;--apagado:#77766f;--linea:rgba(241,240,236,.14);--alerta:#f06363;--bien:#7fd1a3;
+--disp:"Inter Tight","Helvetica Neue",Arial,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--tinta);font-family:var(--disp);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+code,.mono{font-family:var(--mono)}
+[hidden]{display:none!important}
+.col{max-width:1120px;margin:0 auto;padding:0 clamp(16px,4vw,48px)}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;height:68px;border-bottom:1px solid var(--linea)}
+.logo{font-weight:700;font-size:22px;letter-spacing:-.04em;text-decoration:none}
+nav{display:flex;align-items:center;gap:clamp(12px,2.4vw,24px);min-width:0}
+nav a{color:var(--tenue);text-decoration:none;font-size:15px;white-space:nowrap}
+nav a:hover{color:var(--tinta)}
+.quien{color:var(--apagado);font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:26ch}
+h1{font-size:clamp(32px,5.2vw,60px);line-height:1.02;letter-spacing:-.045em;font-weight:600;margin:clamp(36px,7vw,72px) 0 18px;max-width:17ch;text-wrap:balance}
+h2{font-size:clamp(22px,2.6vw,30px);letter-spacing:-.03em;font-weight:600;margin:0 0 6px}
+.texto{color:var(--tenue);font-size:clamp(16px,1.4vw,19px);max-width:60ch;margin:0;text-wrap:pretty}
+.sub{color:var(--tenue);margin:0 0 20px;max-width:64ch}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 22px;border-radius:999px;font:600 15px/1 var(--disp);border:1px solid var(--linea);background:none;color:var(--tinta);cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.primario{background:var(--tinta);color:var(--bg);border-color:var(--tinta)}
+.btn.chico{height:34px;padding:0 14px;font-size:14px;font-weight:500}
+.btn.peligro{color:var(--alerta);border-color:rgba(240,99,99,.5)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:focus-visible,a:focus-visible{outline:2px solid var(--tinta);outline-offset:3px}
+.acciones{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+section{padding:clamp(32px,5vw,56px) 0;border-top:1px solid var(--linea)}
+#v-entrar,#v-vacio{padding-bottom:clamp(40px,6vw,72px)}
+.cifras{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:clamp(28px,4vw,44px) 0 clamp(36px,5vw,56px)}
+.cifra{border:1px solid var(--linea);border-radius:18px;background:var(--alto);padding:20px 22px;min-width:0}
+.cifra b{display:block;font-size:clamp(32px,4vw,46px);line-height:1.05;letter-spacing:-.04em;font-weight:600;font-variant-numeric:tabular-nums}
+.cifra span{display:block;margin-top:8px;color:var(--tenue);font-size:15px;line-height:1.35}
+.cifra.mal b{color:var(--alerta)}
+.uso{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:clamp(20px,3vw,40px);align-items:end}
+.grafica{border:1px solid var(--linea);border-radius:18px;background:var(--alto);padding:20px 22px 14px}
+.grafica svg{display:block;width:100%;height:auto;overflow:visible}
+.grafica .eje{display:flex;justify-content:space-between;margin-top:8px;color:var(--apagado);font-size:13.5px}
+.datos{margin:0;display:grid;gap:14px}
+.datos div{display:flex;justify-content:space-between;gap:16px;padding-bottom:14px;border-bottom:1px solid var(--linea)}
+.datos dt{color:var(--tenue)}
+.datos dd{margin:0;font-family:var(--mono);font-size:15px;text-align:right}
+.tabla{width:100%;border-collapse:collapse;font-size:15px}
+.tabla th{text-align:left;font-weight:500;color:var(--tenue);padding:0 14px 12px 0;border-bottom:1px solid var(--linea);white-space:nowrap;vertical-align:bottom}
+.tabla td{padding:14px 14px 14px 0;border-bottom:1px solid var(--linea);vertical-align:top}
+.tabla th:last-child,.tabla td:last-child{padding-right:0}
+.tabla .n{font-family:var(--mono);font-size:14px;white-space:nowrap}
+.tabla .nombre{font-weight:600;letter-spacing:-.01em;overflow-wrap:anywhere}
+.tabla .det{display:block;margin-top:2px;color:var(--apagado);font:400 13px/1.45 var(--mono);overflow-wrap:anywhere}
+.mal{color:var(--alerta)}
+.bien{color:var(--bien)}
+.apagado{color:var(--apagado)}
+.lista{list-style:none;margin:0;padding:0}
+.lista li{display:grid;grid-template-columns:minmax(0,9.5rem) minmax(0,1fr) auto;gap:8px 20px;align-items:start;padding:16px 0;border-bottom:1px solid var(--linea)}
+.lista .cuando{color:var(--tenue);font-size:15px}
+.lista .que{min-width:0}
+.lista .modelo{font-weight:600;overflow-wrap:anywhere}
+.lista .meta{color:var(--apagado);font-size:14px;white-space:nowrap;text-align:right}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{display:inline-flex;align-items:center;min-height:26px;padding:2px 10px;border-radius:999px;border:1px solid var(--linea);font:400 12.5px/1.3 var(--mono);color:var(--tenue);overflow-wrap:anywhere}
+.chip.mal{color:var(--alerta);border-color:rgba(240,99,99,.5)}
+.chip.ref{color:var(--apagado);border-style:dashed}
+.motivo{margin:8px 0 0;color:var(--tenue);font-size:14px}
+.equipos li{grid-template-columns:minmax(0,1fr) auto;align-items:center}
+.codigo{position:relative;border:1px solid var(--linea);border-radius:14px;background:var(--alto);margin-top:20px;max-width:760px}
+.codigo pre{margin:0;padding:18px;overflow-x:auto;font:400 13px/1.8 var(--mono);white-space:pre}
+.codigo .c{color:var(--apagado)}
+.aviso{color:var(--alerta);font-size:15px;min-height:22px;margin:16px 0 0}
+footer{padding:28px 0 40px;border-top:1px solid var(--linea);font-size:14px;color:var(--apagado)}
+@media (max-width:900px){.cifras{grid-template-columns:repeat(2,minmax(0,1fr))}.uso{grid-template-columns:1fr}}
+@media (max-width:760px){
+  .quien{display:none}
+  .tabla .ocultable{display:none}
+  .tabla{table-layout:fixed;font-size:14px}
+  .tabla th{white-space:normal;line-height:1.3}
+  .tabla th:first-child{width:36%}
+  .tabla th,.tabla td{padding-right:10px}
+  .tabla .nombre,.tabla .det{overflow-wrap:break-word}
+  .lista li{grid-template-columns:minmax(0,1fr) auto}
+  .lista .que{grid-column:1/-1;grid-row:2}
+}
+@media (max-width:420px){.cifra{padding:16px}.cifra span{font-size:14px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="col">
+<header>
+  <a class="logo" href="https://cachai-ai.vercel.app">cachai</a>
+  <nav>
+    <a href="/">Demo en vivo</a>
+    <span class="quien" id="quien"></span>
+    <button class="btn chico" type="button" id="salir" hidden>Salir</button>
+  </nav>
+</header>
+
+<main>
+<div id="v-espera"><p class="texto" style="margin-top:clamp(36px,7vw,72px)">Cargando tu panel…</p></div>
+
+<div id="v-entrar" hidden>
+  <h1>Lo que mediste, en un solo lugar.</h1>
+  <p class="texto">Cada auditoría que corres con Cachai queda guardada en tu cuenta: qué proveedor se distinguió de la referencia, con qué modelo y cuánto gastaste en medirlo.</p>
+  <div class="acciones">
+    <a class="btn primario" id="entrar" href="#">Entrar</a>
+    <a class="btn" href="/">Ver la demo en vivo</a>
+  </div>
+</div>
+
+<div id="v-vacio" hidden>
+  <h1>Todavía no hay auditorías.</h1>
+  <p class="texto">Conecta tu terminal una vez y cada <code>cachai scan</code> va a aparecer aquí. También puedes correr una auditoría en la demo en vivo: con la sesión abierta, queda guardada en este panel.</p>
+  <div class="codigo"><pre><span class="c"># instalar, conectar tu cuenta y auditar</span>
+uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43
+cachai login
+cachai scan z-ai/glm-5.3 --extra-tokens 512</pre></div>
+  <div class="acciones"><a class="btn primario" href="/">Auditar en la demo en vivo</a></div>
+</div>
+
+<div id="v-panel" hidden>
+  <h1>Lo que mediste.</h1>
+  <p class="texto" id="resumen"></p>
+  <div class="cifras" id="cifras"></div>
+
+  <section>
+    <h2>Uso de Cachai</h2>
+    <p class="sub">Auditorías por día en los últimos 30 días.</p>
+    <div class="uso">
+      <div class="grafica"><div id="grafica"></div><div class="eje"><span id="eje-a"></span><span id="eje-b"></span></div></div>
+      <dl class="datos" id="datos"></dl>
+    </div>
+  </section>
+
+  <section>
+    <h2>Proveedores</h2>
+    <p class="sub">Lo que respondió cada proveedor, sumando todas tus auditorías. «Se distinguió» cuenta las veces que sus respuestas no pasaron por las de la referencia, con el umbral fijado antes de medir.</p>
+    <table class="tabla" id="proveedores"></table>
+  </section>
+
+  <section>
+    <h2>Modelos</h2>
+    <p class="sub">Los modelos que auditaste y cuántos de sus endpoints se distinguieron.</p>
+    <table class="tabla" id="modelos"></table>
+  </section>
+
+  <section>
+    <h2>Auditorías recientes</h2>
+    <p class="sub">En rojo, los endpoints que se distinguieron de la referencia. Con línea punteada, la referencia.</p>
+    <ul class="lista" id="auditorias"></ul>
+  </section>
+</div>
+
+<section id="v-equipos" hidden>
+  <h2>Equipos conectados</h2>
+  <p class="sub">Cada <code>cachai login</code> crea una clave para ese equipo. Si revocas una, ese equipo tiene que volver a conectarse.</p>
+  <ul class="lista equipos" id="equipos"></ul>
+</section>
+<p class="aviso" id="aviso" role="status"></p>
+</main>
+</div>
+<footer><div class="col">Cachai · Platanus Hack 26 · <a href="https://github.com/platanus-hack/platanus-hack-26-cl-team-43">código en GitHub</a></div></footer>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var clerk = null;
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function ver(id){ ['v-espera','v-entrar','v-vacio','v-panel'].forEach(function(v){ $(v).hidden = v !== id; }); }
+  function num(n){ return Number(n || 0).toLocaleString('es-CL'); }
+  function usd(n){ n = Number(n || 0); return 'USD ' + n.toLocaleString('es-CL', {minimumFractionDigits: n < 10 ? 2 : 0, maximumFractionDigits: n < 1 ? 4 : 2}); }
+  function fecha(iso, hora){
+    if (!iso) return '—';
+    var d = new Date(iso), o = {day:'numeric', month:'short'};
+    if (hora) { o.hour = '2-digit'; o.minute = '2-digit'; }
+    return d.toLocaleString('es', o);
+  }
+  function parte(k, n){ return n ? '<span class="n">' + num(k) + '/' + num(n) + '</span>' : '<span class="apagado">sin datos</span>'; }
+  function origen(o){ return o === 'web' ? 'demo web' : 'terminal'; }
+
+  function api(path, opt){
+    opt = opt || {};
+    return clerk.session.getToken().then(function(t){
+      opt.headers = {'Authorization': 'Bearer ' + t};
+      if (opt.body) opt.headers['Content-Type'] = 'application/json';
+      return fetch(path, opt);
+    }).then(function(r){
+      return r.json().then(function(d){ if (!r.ok) throw new Error(d.detail || ('error ' + r.status)); return d; });
+    });
+  }
+
+  function grafica(dias){
+    var W = 600, H = 150, n = dias.length, paso = W / n, max = Math.max.apply(null, dias.map(function(d){ return d.auditorias; }).concat([1]));
+    var barras = dias.map(function(d, i){
+      var h = d.auditorias ? Math.max(4, (H - 8) * d.auditorias / max) : 2;
+      return '<rect x="' + (i * paso + 2).toFixed(1) + '" y="' + (H - h).toFixed(1) + '" width="' + (paso - 4).toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2" fill="' + (d.auditorias ? '#f1f0ec' : 'rgba(241,240,236,.16)') + '"><title>' + esc(fecha(d.dia + 'T12:00:00Z')) + ': ' + d.auditorias + (d.auditorias === 1 ? ' auditoría' : ' auditorías') + '</title></rect>';
+    }).join('');
+    $('grafica').innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Auditorías por día, últimos 30 días, máximo ' + max + ' en un día">' + barras + '</svg>';
+    $('eje-a').textContent = fecha(dias[0].dia + 'T12:00:00Z');
+    $('eje-b').textContent = 'hoy';
+  }
+
+  function pintar(p){
+    var u = p.uso;
+    if (!u.auditorias) { ver('v-vacio'); return; }
+    ver('v-panel');
+    $('resumen').textContent = (u.auditorias === 1 ? 'Una auditoría' : num(u.auditorias) + ' auditorías') + ' sobre ' +
+      (u.modelos === 1 ? 'un modelo' : num(u.modelos) + ' modelos') + ' y ' + (u.endpoints === 1 ? 'un endpoint' : num(u.endpoints) + ' endpoints') +
+      '. La última, el ' + fecha(u.ultima, true) + '.';
+    $('cifras').innerHTML =
+      '<div class="cifra"><b>' + num(u.auditorias) + '</b><span>' + (u.auditorias === 1 ? 'auditoría' : 'auditorías') + '</span></div>' +
+      '<div class="cifra"><b>' + num(u.proveedores) + '</b><span>' + (u.proveedores === 1 ? 'proveedor medido' : 'proveedores medidos') + '</span></div>' +
+      '<div class="cifra' + (u.distinguibles ? ' mal' : '') + '"><b>' + num(u.distinguibles) + '</b><span>' + (u.distinguibles === 1 ? 'vez que un endpoint se distinguió' : 'veces que un endpoint se distinguió') + '</span></div>' +
+      '<div class="cifra"><b>' + usd(u.gasto_usd).replace('USD ', '') + '</b><span>dólares gastados en medir</span></div>';
+    grafica(u.por_dia);
+    var o = u.por_origen || {};
+    $('datos').innerHTML =
+      '<div><dt>Desde la terminal</dt><dd>' + num(o.cli) + '</dd></div>' +
+      '<div><dt>Desde la demo web</dt><dd>' + num(o.web) + '</dd></div>' +
+      '<div><dt>Pruebas enviadas</dt><dd>' + num(u.pruebas) + '</dd></div>' +
+      '<div><dt>Endpoints medidos</dt><dd>' + num(u.endpoints) + '</dd></div>';
+
+    function dist(g){
+      if (!g.auditado) return '<span class="apagado">solo referencia</span>';
+      return '<span class="n ' + (g.distinguible ? 'mal' : 'bien') + '">' + num(g.distinguible) + ' de ' + num(g.auditado) + '</span>';
+    }
+    $('proveedores').innerHTML = '<thead><tr><th>Proveedor</th><th>Se distinguió</th><th>Tareas correctas</th><th class="ocultable">Igual a la referencia</th><th>Tool calls válidas</th><th class="ocultable">Latencia</th><th class="ocultable">Última</th></tr></thead><tbody>' +
+      p.proveedores.map(function(g){
+        return '<tr><td><span class="nombre">' + esc(g.proveedor) + '</span><span class="det">' + esc(g.endpoints.join(' · ')) + '</span></td>' +
+          '<td>' + dist(g) + '</td><td>' + parte(g.tareas_ok, g.tareas_n) + '</td>' +
+          '<td class="ocultable">' + parte(g.iguales, g.iguales_n) + '</td><td>' + parte(g.tools_ok, g.tools_n) + '</td>' +
+          '<td class="ocultable n">' + (g.latencia_p50_ms ? num(g.latencia_p50_ms) + ' ms' : '—') + '</td>' +
+          '<td class="ocultable">' + esc(fecha(g.ultima)) + '</td></tr>';
+      }).join('') + '</tbody>';
+    $('modelos').innerHTML = '<thead><tr><th>Modelo</th><th>Auditorías</th><th>Se distinguió</th><th class="ocultable">Endpoints</th><th class="ocultable">Costo medido</th><th class="ocultable">Última</th></tr></thead><tbody>' +
+      p.modelos.map(function(g){
+        return '<tr><td><span class="nombre mono">' + esc(g.modelo) + '</span><span class="det">' + esc(g.proveedores.join(' · ')) + '</span></td>' +
+          '<td class="n">' + num(g.auditorias) + '</td><td>' + dist(g) + '</td>' +
+          '<td class="ocultable n">' + num(g.endpoints.length) + '</td><td class="ocultable n">' + usd(g.costo_usd) + '</td>' +
+          '<td class="ocultable">' + esc(fecha(g.ultima)) + '</td></tr>';
+      }).join('') + '</tbody>';
+    $('auditorias').innerHTML = p.auditorias.map(function(a){
+      var motivos = a.endpoints.filter(function(e){ return e.distinguible && e.motivos && e.motivos.length; })
+        .map(function(e){ return '<p class="motivo"><span class="mono mal">' + esc(e.endpoint) + '</span>: ' + esc(e.motivos.join('; ')) + '.</p>'; }).join('');
+      return '<li><span class="cuando">' + esc(fecha(a.medida_en, true)) + '</span>' +
+        '<div class="que"><span class="modelo mono">' + esc(a.modelo) + '</span><div class="chips">' +
+        a.endpoints.map(function(e){ return '<span class="chip' + (e.distinguible ? ' mal' : e.rol === 'referencia' ? ' ref' : '') + '">' + esc(e.endpoint) + '</span>'; }).join('') +
+        '</div>' + motivos + '</div>' +
+        '<span class="meta">' + origen(a.origen) + ' · ' + usd(a.gasto_usd) + '</span></li>';
+    }).join('');
+  }
+
+  function equipos(){
+    return api('/api/claves').then(function(d){
+      $('v-equipos').hidden = false;
+      $('equipos').innerHTML = d.claves.length ? d.claves.map(function(k){
+        return '<li><div><span class="modelo">' + esc(k.nombre) + '</span><span class="det" style="display:block;color:var(--apagado);font-size:14px">conectado el ' + esc(fecha(k.creada_en)) + (k.usada_en ? ' · último uso el ' + esc(fecha(k.usada_en, true)) : ' · sin usar') + '</span></div>' +
+          '<button class="btn chico" type="button" data-clave="' + k.id + '">Revocar</button></li>';
+      }).join('') : '<li><span class="apagado">Ningún equipo conectado. Corre <code>cachai login</code> en tu terminal.</span></li>';
+    });
+  }
+  $('equipos').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-clave]'); if (!b) return;
+    if (!b.classList.contains('peligro')) {  // primer clic: pide confirmar en el mismo botón
+      b.classList.add('peligro'); b.textContent = 'Confirmar';
+      setTimeout(function(){ if (b.isConnected) { b.classList.remove('peligro'); b.textContent = 'Revocar'; } }, 4000);
+      return;
+    }
+    b.disabled = true;
+    api('/api/claves/' + b.dataset.clave, {method: 'DELETE'}).then(equipos, function(err){ $('aviso').textContent = 'No se pudo revocar: ' + err.message; });
+  });
+
+  function clerkListo(cfg){
+    return new Promise(function(ok, mal){
+      var s = document.createElement('script');
+      s.src = cfg.clerk_js; s.async = true; s.crossOrigin = 'anonymous';
+      s.setAttribute('data-clerk-publishable-key', cfg.clerk_pk);
+      s.onload = function(){ window.Clerk.load().then(function(){ ok(window.Clerk); }, mal); };
+      s.onerror = function(){ mal(new Error('no cargó el inicio de sesión')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  fetch('/api/config').then(function(r){ return r.json(); }).then(function(cfg){
+    $('entrar').href = cfg.entrar + '?redirect_url=' + encodeURIComponent(location.href);
+    return clerkListo(cfg);
+  }).then(function(c){
+    clerk = c;
+    if (!clerk.user) { ver('v-entrar'); return; }
+    var correo = clerk.user.primaryEmailAddress ? clerk.user.primaryEmailAddress.emailAddress : '';
+    $('quien').textContent = correo;
+    $('salir').hidden = false;
+    $('salir').addEventListener('click', function(){ clerk.signOut().then(function(){ location.reload(); }); });
+    return api('/api/yo', {method: 'POST', body: JSON.stringify({email: correo, nombre: clerk.user.fullName || ''})})
+      .then(function(){ return api('/api/panel'); }).then(pintar).then(equipos);
+  }).catch(function(err){
+    ver('v-entrar');
+    $('aviso').textContent = 'No se pudo cargar el panel: ' + (err && err.message ? err.message : err);
+  });
+})();
+</script>
+</body>
+</html>

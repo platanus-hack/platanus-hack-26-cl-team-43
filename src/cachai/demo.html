@@ -21,6 +21,13 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;he
 .logo{font-weight:700;font-size:22px;letter-spacing:-.04em;text-decoration:none}
 .vivo{display:inline-flex;align-items:center;gap:8px;font:500 12.5px/1 var(--mono);color:var(--tenue)}
 .vivo i{width:8px;height:8px;border-radius:50%;background:var(--alerta);box-shadow:0 0 0 4px rgba(240,99,99,.18)}
+[hidden]{display:none!important}
+.barra-sup{display:flex;align-items:center;gap:clamp(12px,2.4vw,24px);min-width:0}
+.barra-sup a{color:var(--tenue);text-decoration:none;font-size:15px;white-space:nowrap}
+.barra-sup a:hover{color:var(--tinta)}
+.guardado{font-size:15px;color:var(--tenue);margin:14px 0 0;min-height:22px}
+.guardado a{color:var(--tinta)}
+@media (max-width:520px){.vivo{display:none}}
 h1{font-size:clamp(32px,5.2vw,60px);line-height:1.02;letter-spacing:-.045em;font-weight:600;margin:clamp(36px,7vw,72px) 0 18px;max-width:17ch;text-wrap:balance}
 .texto{color:var(--tenue);font-size:clamp(16px,1.4vw,19px);max-width:60ch;margin:0;text-wrap:pretty}
 .texto b{color:var(--tinta);font-weight:500}
@@ -74,7 +81,10 @@ footer{padding:28px 0 40px;border-top:1px solid var(--linea);font-size:13.5px;co
 <div class="col">
 <header>
   <a class="logo" href="https://cachai-ai.vercel.app">cachai</a>
-  <span class="vivo"><i></i>demo en vivo</span>
+  <div class="barra-sup">
+    <span class="vivo"><i></i>demo en vivo</span>
+    <a id="cuenta" href="/panel" hidden>Entrar</a>
+  </div>
 </header>
 
 <h1>Dos proveedores dicen servir el mismo modelo. Uno hace trampa.</h1>
@@ -94,12 +104,13 @@ footer{padding:28px 0 40px;border-top:1px solid var(--linea);font-size:13.5px;co
   <strong id="revela-t"></strong>
   <span class="texto" id="revela-d"></span>
 </div>
+<p class="guardado" id="guardado" role="status"></p>
 
 <section class="tuyo">
   <h3>Audítalo desde tu máquina.</h3>
   <p class="texto">Son APIs reales. Cachai se corre con un comando, sin instalar nada más que <code>uv</code>, contra estas mismas URLs.</p>
   <div class="codigo"><pre id="cmd"></pre><button class="copiar" type="button" data-copia="cmd" aria-label="Copiar el comando"><svg class="cp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 5.5v-1.4a1.6 1.6 0 0 0-1.6-1.6H4.1a1.6 1.6 0 0 0-1.6 1.6v4.8a1.6 1.6 0 0 0 1.6 1.6h1.4"/></svg><svg class="ok" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg></button></div>
-  <p class="nota">Aquí la auditoría es rápida (unas 24 pruebas, sin tool calls, porque los modelos corren en CPU). El comando corre las 48 pruebas completas. El proveedor tramposo es nuestro y solo se audita a sí mismo.</p>
+  <p class="nota">Aquí la auditoría es rápida (unas 24 pruebas, sin tool calls, porque los modelos corren en CPU). El comando corre las 52 pruebas completas y pide conectar tu cuenta una vez, con <code>cachai login</code>. El proveedor tramposo es nuestro y solo se audita a sí mismo.</p>
 </section>
 </div>
 <footer><div class="col">Cachai · Platanus Hack 26 · <a href="https://github.com/platanus-hack/platanus-hack-26-cl-team-43">código en GitHub</a></div></footer>
@@ -125,8 +136,10 @@ footer{padding:28px 0 40px;border-top:1px solid var(--linea);font-size:13.5px;co
       '<ul class="motivos" id="mot-' + p[0] + '"></ul></article>';
   }).join('');
 
-  $('cmd').innerHTML = '<span class="c"># las 48 pruebas completas contra los mismos tres endpoints</span>\n' +
-    'uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 \\\n  cachai scan qwen2.5-1.5b-instruct --no-openrouter \\\n' +
+  $('cmd').innerHTML = '<span class="c"># instalar y conectar tu cuenta, una sola vez</span>\n' +
+    'uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43\ncachai login\n' +
+    '<span class="c"># las 52 pruebas completas contra los mismos tres endpoints</span>\n' +
+    'cachai scan qwen2.5-1.5b-instruct --no-openrouter \\\n' +
     '  -e oficial=' + esc(base) + '/oficial/v1 \\\n  -e A=' + esc(base) + '/a/v1 \\\n  -e B=' + esc(base) + '/b/v1';
 
   // copiar
@@ -147,7 +160,7 @@ footer{padding:28px 0 40px;border-top:1px solid var(--linea);font-size:13.5px;co
       $('cif-' + p[0]).innerHTML = ''; $('mot-' + p[0]).innerHTML = '';
       var i = $('ins-' + p[0]); i.className = 'insignia'; i.textContent = p[0] === 'oficial' ? 'referencia' : 'sin auditar';
     });
-    $('revela').classList.remove('on'); $('error').textContent = '';
+    $('revela').classList.remove('on'); $('error').textContent = ''; $('guardado').textContent = '';
   }
 
   function pintarEstado(s){
@@ -167,6 +180,30 @@ footer{padding:28px 0 40px;border-top:1px solid var(--linea);font-size:13.5px;co
     marcar();
   }
   function marcar(){ [].forEach.call($('trampas').children, function(b){ b.setAttribute('aria-pressed', b.dataset.trampa === trampaSel ? 'true' : 'false'); }); }
+
+  // cuentas: con la sesión abierta, la auditoría queda guardada en el panel
+  var clerk = null, cuentas = false;
+  fetch('/api/config').then(function(r){ return r.json(); }).then(function(cfg){
+    if (!cfg.cuentas) return;
+    cuentas = true; $('cuenta').hidden = false;
+    var s = document.createElement('script');
+    s.src = cfg.clerk_js; s.async = true; s.crossOrigin = 'anonymous';
+    s.setAttribute('data-clerk-publishable-key', cfg.clerk_pk);
+    s.onload = function(){ window.Clerk.load().then(function(){
+      if (window.Clerk.user) { clerk = window.Clerk; $('cuenta').textContent = 'Mi panel'; }
+    }); };
+    document.head.appendChild(s);
+  }).catch(function(){});
+  function guardar(d){
+    if (!cuentas) return;
+    if (!clerk) { $('guardado').innerHTML = '<a href="/panel">Entra con tu cuenta</a> y tus auditorías quedan guardadas en tu panel.'; return; }
+    clerk.session.getToken().then(function(t){
+      return fetch('/api/fichas', {method: 'POST', headers: {'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json'},
+        body: JSON.stringify({ficha: d.ficha, segundos: d.segundos})});
+    }).then(function(r){
+      $('guardado').innerHTML = r.ok ? 'Guardada en <a href="/panel">tu panel</a>.' : 'No se pudo guardar esta auditoría en tu panel.';
+    }, function(){ $('guardado').textContent = 'No se pudo guardar esta auditoría en tu panel.'; });
+  }
 
   function cargar(){ return fetch('/api/estado').then(function(r){ return r.json(); }).then(function(s){ pintarEstado(s); return s; }); }
   cargar();
@@ -226,6 +263,7 @@ footer{padding:28px 0 40px;border-top:1px solid var(--linea);font-size:13.5px;co
       $('revela-d').textContent = 'Su trampa: ' + d.trampa_label + '. Auditoría de ' + d.segundos + ' s, juego ciego con semilla ' + d.ficha.semilla + ', umbral p < 0,01.';
       $('revela').classList.add('on');
       terminado = true;
+      guardar(d);
     });
     es.addEventListener('error', function(ev){
       if (ev.data) { $('error').textContent = 'Falló la auditoría: ' + JSON.parse(ev.data).mensaje; terminado = true; }

@@ -36,7 +36,7 @@ Los controles son deterministas, sin juez LLM: la respuesta auditada no puede in
 
 El villano es un proveedor tramposo propio: un proxy que agrega un prompt oculto, desvía parte del tráfico a un modelo más barato y se porta bien cuando reconoce los prompts de una auditoría pública. La auditoría de prompts fijos no lo marca; la auditoría ciega de Cachai sí. En el experimento de línea base, el benchmark fijo no lo detecta en ninguna de 120 auditorías con trampa; el juego ciego lo marca en todas, salvo el desvío parcial cuando las tareas son pocas.
 
-La [demo en vivo](https://demo-production-8abb87fe.up.railway.app) sirve Qwen2.5 1.5B desde tres APIs con el mismo nombre. En cada ronda una hace trampa al azar y la auditoría la encuentra antes de revelar cuál era.
+La [demo en vivo](https://cachai.jjato.com) sirve Qwen2.5 1.5B desde tres APIs con el mismo nombre. En cada ronda una hace trampa al azar y la auditoría la encuentra antes de revelar cuál era.
 
 ## Qué medimos
 

@@ -67,7 +67,7 @@ El adversario es el proveedor. Controla el servidor, ve cada petición y puede c
 
 ## 2. Arquitectura
 
-Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, que mide al auditor contra proveedores tramposos propios; y la **ficha**, que publica lo medido con su evidencia.
+Son cuatro piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, que mide al auditor contra proveedores tramposos propios; la **ficha**, que publica lo medido con su evidencia; y las **cuentas**, que guardan el historial de cada persona y lo muestran en un panel.
 
 **Auditor** (`src/cachai/`)
 1. **Lo declarado** (`endpoints.py`): lee de la API pública de OpenRouter la cuantización y el precio de cada endpoint del modelo, y elige cuáles auditar (el first-party más los más baratos, o los que se pidan).
@@ -81,6 +81,14 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 - `villain.py`: proveedor tramposo propio, un proxy compatible con la API de OpenAI que reenvía a un upstream real o al juguete. Puede inyectar un system prompt, desviar una fracción del tráfico a un modelo más barato (reescribiendo el nombre del modelo en la respuesta) y portarse bien cuando reconoce una auditoría: por los prompts exactos del juego público o por las plantillas del ciego.
 - `toy.py`: modelo de juguete con reglas fijas (`toy-large` correcto, `toy-small` con fallas conocidas), para probar sin claves.
 - `experiment.py`: la línea base. Una referencia y varios proxies hacia el mismo upstream (uno honesto y el resto tramposos), auditados con el juego fijo y con el ciego, R veces con semillas distintas. Corre en memoria (TestClient) con el juguete, contra Ollama con Qwen2.5 (la referencia en Q8 y proveedores que sirven Q4, Q2 o el 0.5B) o contra OpenRouter con un tope de gasto.
+
+**Cuentas y panel** (`sesion.py`, `cuentas.py`, `db.py`, `migrations/`)
+- **Identidad:** el inicio de sesión es de Clerk. El servidor verifica el token de sesión con las claves públicas de la instancia (JWKS) y comprueba el emisor y el origen que lo pidió, así que no guarda ningún secreto de Clerk. El identificador del usuario es el `sub` del token.
+- **`cachai login`:** el CLI inventa un verificador y abre la página con su SHA-256 (el desafío) y un código corto que se ve igual en la terminal y en el navegador. La persona lo autoriza con su sesión y el CLI canjea el verificador, una sola vez, por una clave `cachai_…`. La clave no pasa por la URL ni por el historial del navegador; el servidor guarda solo su SHA-256 y el equipo la guarda con permisos 0600.
+- **Qué se sube:** después de cada `cachai scan`, la ficha (conteos por endpoint y el SHA-256 de la evidencia). Las claves de los proveedores y las respuestas crudas no salen del equipo. Subir dos veces la misma ficha no la duplica.
+- **Base de datos:** Postgres en Railway, con SQLAlchemy y migraciones de Alembic que el servidor aplica al arrancar. Cinco tablas: `usuarios`, `claves`, `autorizaciones_cli`, `auditorias` (la ficha completa en JSONB) y `mediciones` (una fila por endpoint y auditoría, que es lo que suma el panel). Cada consulta filtra por el usuario de la sesión.
+- **Degradación:** si la base no responde al arrancar, la demo en vivo sigue sin cuentas; si el servidor de cuentas no responde durante un `scan`, la auditoría corre igual y la ficha queda en local.
+- **Límite:** la ficha la calcula el cliente, así que el panel muestra lo que ese cliente dice haber medido. Sirve para llevar el historial propio, no como prueba ante terceros; para eso está la evidencia con su SHA-256.
 
 ## 3. Decisiones y alternativas descartadas
 
@@ -100,7 +108,7 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 
 | Medición | Qué es | Métrica y estado |
 |---|---|---|
-| **M1. Tests** | 59 tests de punta a punta en memoria, sin red ni claves (`tests/`) | Todos pasan antes de cada cambio. **Medido**: 59/59. |
+| **M1. Tests** | 68 tests de punta a punta en memoria, sin red ni claves (`tests/`) | Todos pasan antes de cada cambio. **Medido**: 68/68. |
 | **M2. Línea base con el juguete** | Benchmark fijo contra juego ciego, cinco proveedores (uno honesto), 30 repeticiones por celda, 20 y 80 tareas | Detección por trampa con IC95 de Wilson; falsas alarmas del honesto. **Medido** (§6). |
 | **M3. Modelos reales servidos por nosotros** | Qwen2.5 1.5B servido con Ollama: Q8 como referencia y piso de ruido, y proveedores propios que sirven Q4, Q2, el 0.5B, un prompt oculto o un desvío del 30 %, más uno honesto (`cachai experimento --ollama`, 20 repeticiones) | Falsas alarmas del honesto ≤ 1/20 para aceptar α = 0,01; detección por trampa con IC95. **Medido**: honesto 0/20; prompt oculto, Q4, Q2 y 0.5B 20/20 cada uno; desvío del 30 % 8/20 (IC95 22-61 %); piso de ruido 30/30 en las 20. El Q4 se marcó solo por coincidencia: su exactitud no alcanzó a distinguirse de la referencia ([tabla](../results/linea-base/ollama-qwen2.5-t20.md)). |
 | **M4. Proveedores reales** | `cachai scan` sobre los endpoints de un modelo con varios proveedores | Fichas con su evidencia en `results/proveedores/`. **Medido** en una auditoría de GLM-5.3 (cinco endpoints contra el del autor, 364 respuestas sin errores): sin prompt oculto, ninguno distinguible, y tres de seis endpoints devuelven un objeto anidado de una tool call como texto. El texto libre no tiene potencia con ese modelo (piso de ruido 0 de 10). |

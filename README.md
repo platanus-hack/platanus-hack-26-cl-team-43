@@ -18,7 +18,8 @@ uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 cach
 
 # o instalado como comando
 uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43   # o pipx install
-cachai demo                                          # sin claves: un proveedor honesto y dos tramposos de juguete
+cachai demo                                          # sin claves ni cuenta: un proveedor honesto y dos tramposos de juguete
+cachai login                                         # una vez: conecta este equipo con tu cuenta (se abre el navegador)
 cachai scan z-ai/glm-5.3                             # los proveedores de un modelo en OpenRouter (OPENROUTER_API_KEY)
 cachai scan z-ai/glm-5.3 --extra-tokens 512          # si el modelo razona siempre, con margen de tokens para que alcance a responder
 cachai scan -e deepseek:deepseek-chat -e together:deepseek-ai/DeepSeek-V3   # APIs directas
@@ -27,16 +28,32 @@ cachai scan                                          # lee ./cachai.toml
 
 `cachai demo` audita en memoria a un proveedor honesto, a uno que agrega un prompt oculto y a uno que responde con un modelo más chico con el mismo nombre, y marca a los dos tramposos. Más casos (servidor propio, autor contra revendedores, auditoría semanal en GitHub Actions) en [`examples/`](examples/).
 
+### Tu cuenta y el panel
+
+Auditar endpoints reales pide una cuenta gratuita; la demo de juguete no. `cachai login` muestra un enlace y un código, abre el navegador y, cuando autorizas el equipo con tu sesión, guarda una clave en `~/.config/cachai/credenciales.json`. Desde ahí cada `cachai scan` sube su ficha a **[cachai.jjato.com/panel](https://cachai.jjato.com/panel)**, donde ves:
+
+- **Tu uso de Cachai:** auditorías por día, pruebas enviadas, gasto y desde dónde se corrieron (terminal o demo web).
+- **Tus proveedores:** cuántas veces se distinguió cada uno de la referencia, tareas correctas, coincidencia con la referencia, tool calls válidas y latencia.
+- **Tus modelos:** qué modelos auditaste, con cuántos endpoints y cuántos se distinguieron.
+- **Tus equipos conectados**, con un botón para revocar la clave de cualquiera.
+
+```bash
+cachai login       # conecta este equipo
+cachai cuenta      # quién eres, cuántas auditorías llevas y el enlace al panel
+cachai logout      # cierra la sesión y revoca la clave de este equipo
+```
+
+Al servidor solo viaja la ficha (los conteos por endpoint y el SHA-256 de la evidencia). Las claves de tus proveedores y las respuestas crudas se quedan en tu equipo; con `--no-subir` tampoco viaja la ficha. En CI, la clave va en la variable `CACHAI_API_KEY`. Si el servidor de cuentas no responde, la auditoría corre igual y la ficha queda en local.
+
 ### La demo en vivo
 
-**[demo-production-8abb87fe.up.railway.app](https://demo-production-8abb87fe.up.railway.app)**: tres APIs que dicen servir Qwen2.5 1.5B (`/oficial/v1`, `/a/v1` y `/b/v1`). En cada ronda, A o B hace trampa al azar: sirve la versión cuantizada a 4 bits, un modelo tres veces más chico o agrega un prompt oculto, siempre con el mismo nombre. «Auditar con Cachai» corre 24 pruebas ciegas contra las tres, muestra la ficha y recién al final revela quién era el tramposo.
+**[cachai.jjato.com](https://cachai.jjato.com)**: tres APIs que dicen servir Qwen2.5 1.5B (`/oficial/v1`, `/a/v1` y `/b/v1`). En cada ronda, A o B hace trampa al azar: sirve la versión cuantizada a 4 bits, un modelo tres veces más chico o agrega un prompt oculto, siempre con el mismo nombre. «Auditar con Cachai» corre 24 pruebas ciegas contra las tres, muestra la ficha y recién al final revela quién era el tramposo. Con la sesión abierta, esa auditoría también queda en tu panel.
 
 Las URLs son APIs reales, así que también se auditan desde cualquier máquina:
 
 ```bash
-D=https://demo-production-8abb87fe.up.railway.app
-uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 cachai scan qwen2.5-1.5b-instruct \
-  --no-openrouter -e oficial=$D/oficial/v1 -e A=$D/a/v1 -e B=$D/b/v1
+D=https://cachai.jjato.com
+cachai scan qwen2.5-1.5b-instruct --no-openrouter -e oficial=$D/oficial/v1 -e A=$D/a/v1 -e B=$D/b/v1
 ```
 
 Corre en CPU, con los modelos servidos por nosotros en Ollama; el tramposo es nuestro y solo se audita a sí mismo. Para levantarla en local: `cachai serve` con un Ollama que tenga los tres modelos ([`deploy/demo/`](deploy/demo/)).
@@ -220,17 +237,21 @@ src/cachai/        el auditor
   experiment.py      experimento de línea base: benchmark fijo contra juego ciego, con el juguete, Ollama u OpenRouter
   providers.py       atajos de proveedores compatibles con OpenAI (URL y variable de la clave)
   serve.py           la demo en vivo: tres proveedores, uno tramposo, y la auditoría por SSE (demo.html)
-  cli.py             cachai demo · scan · endpoints · serve · experimento
-tests/             59 tests de punta a punta, sin red ni claves
+  sesion.py          la cuenta desde el CLI: login por el navegador, credenciales y subida de fichas
+  cuentas.py         el servidor de cuentas: sesión de Clerk verificada por JWKS, claves del CLI, fichas y el panel (panel.html, cli.html)
+  db.py              las tablas (SQLAlchemy): usuarios, claves, auditorías y mediciones por endpoint
+  migrations/        migraciones de Alembic; el servidor las aplica al arrancar
+  cli.py             cachai demo · login · scan · cuenta · endpoints · serve · experimento
+tests/             68 tests de punta a punta, sin red ni claves
 examples/          configuraciones listas para copiar (OpenRouter, APIs directas, servidor propio, CI)
 results/linea-base/  resultados del experimento con el juguete y con Qwen2.5 (JSON y Markdown)
 results/proveedores/  auditoría de GLM-5.3 en OpenRouter (fichas, respuestas crudas y cómo leerlas)
-deploy/demo/       imagen de la demo en vivo: Ollama con los modelos y cachai serve (Railway)
+deploy/demo/       imagen de la demo en vivo: Ollama con los modelos y cachai serve (Railway, con Postgres para las cuentas)
 ```
 
 ```bash
 uv sync
-uv run pytest -q                                   # 59 tests, sin red ni claves
+uv run pytest -q                                   # 68 tests, sin red ni claves
 uv run cachai experimento --toy --reps 30          # la línea base, sin claves (~2 min)
 uv run cachai endpoints z-ai/glm-5.3               # lo que declara cada proveedor, sin clave
 uv run cachai experimento --ollama --reps 20       # la línea base con Qwen2.5 (necesita Ollama con los modelos)

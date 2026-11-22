@@ -183,7 +183,7 @@ footer .equipo{display:flex;flex-wrap:wrap;gap:4px 16px}
     <h1>¿Cachai qué modelo te están sirviendo?</h1>
     <p class="texto">El modelo que evaluaste y el que te responde pueden no ser el mismo. Cachai audita desde afuera cada endpoint y marca los que se apartan de la referencia.</p>
     <div class="acciones">
-      <a class="btn primario" href="https://demo-production-8abb87fe.up.railway.app">Demo en vivo</a>
+      <a class="btn primario" href="https://cachai.jjato.com">Demo en vivo</a>
       <a class="btn" href="#uso">Empezar</a>
       <a class="btn" href="https://github.com/platanus-hack/platanus-hack-26-cl-team-43/tree/main/examples">Ejemplos</a>
     </div>
@@ -348,10 +348,12 @@ uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43
 cachai demo</pre>
         <pre class="codigo" id="p-openrouter" role="tabpanel" aria-labelledby="t-openrouter" hidden><span class="c"># sin clave: qué declara cada proveedor (cuantización y precio)</span>
 cachai endpoints z-ai/glm-5.3
+<span class="c"># una vez: conecta tu cuenta; cada auditoría queda en tu panel</span>
+cachai login
 <span class="c"># los 6 más baratos contra el del autor; necesita OPENROUTER_API_KEY</span>
 cachai scan z-ai/glm-5.3 --providers 6 --max-usd 2
 <span class="c"># la ficha queda en audit/fichas/ (JSON, Markdown y respuestas crudas con su SHA-256)</span></pre>
-        <pre class="codigo" id="p-directo" role="tabpanel" aria-labelledby="t-directo" hidden><span class="c"># el primero es la referencia; cada clave se lee de su variable (DEEPSEEK_API_KEY, TOGETHER_API_KEY…)</span>
+        <pre class="codigo" id="p-directo" role="tabpanel" aria-labelledby="t-directo" hidden><span class="c"># una vez: cachai login. El primero es la referencia; cada clave se lee de su variable (DEEPSEEK_API_KEY, TOGETHER_API_KEY…)</span>
 cachai scan -e deepseek:deepseek-chat -e together:deepseek-ai/DeepSeek-V3
 <span class="c"># tu propio servidor o cualquier API compatible con OpenAI</span>
 cachai scan -e ollama:qwen2.5:7b -e prod=https://mi-gateway/v1,PROD_API_KEY,qwen2.5-7b</pre>
@@ -420,7 +422,7 @@ uv run cachai experimento --toy --reps 30</pre>
       </div>
       <div class="acciones izq">
         <a class="btn primario" href="https://github.com/platanus-hack/platanus-hack-26-cl-team-43"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.6l1.9 4 4.4.6-3.2 3 .8 4.3L8 11.4l-3.9 2.1.8-4.3-3.2-3 4.4-.6z"/></svg>Estrella en GitHub</a>
-        <a class="btn" href="https://demo-production-8abb87fe.up.railway.app">Demo en vivo</a>
+        <a class="btn" href="https://cachai.jjato.com">Demo en vivo</a>
         <a class="btn" href="https://github.com/platanus-hack/platanus-hack-26-cl-team-43/blob/main/project-description.md">Descripción del proyecto</a>
       </div>
     </div>

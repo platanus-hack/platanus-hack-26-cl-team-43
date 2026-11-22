@@ -15,6 +15,8 @@ jobs:
       - name: Auditar
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # la clave de tu cuenta: la que `cachai login` deja en ~/.config/cachai/credenciales.json
+          CACHAI_API_KEY: ${{ secrets.CACHAI_API_KEY }}
         run: |
           uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 \
             cachai scan z-ai/glm-5.3 --providers 4 --max-usd 1 --out fichas --strict
