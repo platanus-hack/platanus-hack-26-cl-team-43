@@ -4,13 +4,15 @@ Todos se corren igual: `cachai scan -c <archivo>`, o se copia el archivo como `c
 
 Si todavía no se instaló: `uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43` (o `pipx install` con la misma URL).
 
+`cachai scan` pide una cuenta gratuita: corre `cachai login` una vez y cada auditoría queda en tu panel, en [cachai.jjato.com/panel](https://cachai.jjato.com/panel). `cachai demo` no la pide. Con `--no-subir` la ficha queda solo en tu equipo.
+
 | Archivo | Para qué | Claves |
 |---|---|---|
 | (ninguno) `cachai demo` | Ver cómo funciona en 10 segundos: un proveedor honesto y dos tramposos de juguete | Ninguna |
 | [`openrouter.toml`](openrouter.toml) | Auditar los proveedores de un modelo abierto en OpenRouter contra el del autor | `OPENROUTER_API_KEY` |
 | [`autor-contra-revendedores.toml`](autor-contra-revendedores.toml) | Comparar la API del autor con las de proveedores que lo revenden, directo y sin OpenRouter | La de cada proveedor |
 | [`servidor-propio.toml`](servidor-propio.toml) | Comprobar que tu vLLM, SGLang u Ollama (o una cuantización nueva) responde igual que la referencia antes de pasar a producción | Opcional |
-| [`github-actions/cachai.yml`](github-actions/cachai.yml) | Auditoría semanal automática; el job falla si un endpoint sale distinguible (`--strict`) | `OPENROUTER_API_KEY` como secreto |
+| [`github-actions/cachai.yml`](github-actions/cachai.yml) | Auditoría semanal automática; el job falla si un endpoint sale distinguible (`--strict`) | `OPENROUTER_API_KEY` y `CACHAI_API_KEY` como secretos |
 
 ## Lo mismo sin archivo
 
@@ -64,4 +66,4 @@ La referencia es contra qué se compara. Lo mejor es la API del autor del modelo
 
 ## Qué cuesta
 
-Una auditoría manda 48 pruebas cortas a cada endpoint y a la referencia dos veces. Con un modelo de precio medio son centavos de dólar por endpoint; `--max-usd` corta la auditoría si se pasa del tope (2 USD por defecto) y la ficha registra lo gastado. Contra servidores propios el costo es solo el cómputo.
+Una auditoría manda 52 pruebas cortas a cada endpoint y a la referencia dos veces. Con un modelo de precio medio son centavos de dólar por endpoint; `--max-usd` corta la auditoría si se pasa del tope (2 USD por defecto) y la ficha registra lo gastado. Contra servidores propios el costo es solo el cómputo.

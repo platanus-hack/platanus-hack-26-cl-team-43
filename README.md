@@ -140,7 +140,7 @@ Tres reglas salieron de auditar proveedores reales y evitan marcar a alguien por
 
 ![Arquitectura de Cachai](docs/arquitectura.png)
 
-Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, que mide al auditor contra proveedores tramposos propios; y la **ficha**, que publica lo medido con su evidencia.
+Son cuatro piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, que mide al auditor contra proveedores tramposos propios; la **ficha**, que publica lo medido con su evidencia; y las **cuentas**, que guardan el historial de cada persona y lo muestran en un panel.
 
 **El auditor** (`cachai scan`) recorre cinco pasos:
 
@@ -153,6 +153,8 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 **El laboratorio** (`cachai experimento`) responde otra pregunta: ¿el auditor detecta lo que dice detectar? No se puede saber la verdad sobre un tercero, y atacarlo no es ético, así que el auditor se mide contra un proveedor tramposo propio (`villain.py`): un proxy que inyecta un prompt, desvía una fracción del tráfico a un modelo más barato y se porta bien cuando reconoce una auditoría. Una referencia y varios proxies hacia el mismo modelo (uno honesto, como control de falsas alarmas, y el resto tramposos) se auditan con el juego fijo y con el ciego. Corre sin claves contra un modelo de juguete (`toy.py`), contra un modelo real servido por nosotros con Ollama (Qwen2.5 en Q8, con proveedores que sirven Q4, Q2 o un modelo más chico) o contra OpenRouter.
 
 **La referencia** es el endpoint del autor del modelo cuando existe (si no, uno que se elige con `--reference`), consultado por la misma ruta que los demás. Así la comparación aísla al proveedor, sin GPU propia. Es una referencia más débil que correr el modelo original y la ficha lo dice.
+
+**Las cuentas** (`cachai login`, [cachai.jjato.com/panel](https://cachai.jjato.com/panel)) guardan la ficha de cada auditoría. El inicio de sesión es de Clerk y el servidor lo verifica con las claves públicas de la instancia, sin guardar ningún secreto. `cachai login` no pasa la clave por el navegador: el CLI inventa un verificador, la persona autoriza su huella con la sesión abierta y el CLI la canjea una sola vez. Los datos van a Postgres (SQLAlchemy y Alembic): usuarios, claves, auditorías y una fila de mediciones por endpoint, que es lo que suma el panel.
 
 Las decisiones, con las alternativas descartadas y su porqué, están en [`docs/arquitectura.md`](docs/arquitectura.md#3-decisiones-y-alternativas-descartadas).
 

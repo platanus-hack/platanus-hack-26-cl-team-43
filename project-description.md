@@ -30,7 +30,11 @@ La auditoría corre del lado de quien usa el modelo y no la financia quien lo si
 - **Confiabilidad:** errores y latencia.
 - **Lo declarado:** cuantización y precio, tal como los publica cada proveedor.
 
-Los controles son deterministas, sin juez LLM: la respuesta auditada no puede inyectar al auditor. Las pruebas se generan con una semilla nueva en cada auditoría, así un proveedor no puede reconocerlas de antemano. La semilla queda en la ficha junto con el hash de las respuestas crudas, para que cualquiera pueda volver a correr la misma auditoría.
+Los controles son deterministas, sin juez LLM: la respuesta auditada no puede inyectar al auditor. Las pruebas se generan con una semilla nueva en cada auditoría, así un proveedor no puede memorizarlas de antemano. La semilla queda en la ficha junto con el hash de las respuestas crudas, para que cualquiera pueda volver a correr la misma auditoría.
+
+## Cuenta y panel
+
+Auditar endpoints reales pide una cuenta gratuita. `cachai login` conecta la terminal con la cuenta desde el navegador, y cada auditoría queda guardada en un [panel](https://cachai.jjato.com/panel) con el uso por día, cuántas veces se distinguió cada proveedor y qué modelos se auditaron. Al servidor viaja solo la ficha: las claves de los proveedores y las respuestas crudas se quedan en el equipo de quien audita.
 
 ## Qué muestra la demo
 
@@ -53,5 +57,6 @@ La [demo en vivo](https://cachai.jjato.com) sirve Qwen2.5 1.5B desde tres APIs c
 ## Qué hay en el repo
 
 - **Auditor** (`src/cachai/`): el comando `cachai`, los controles, la ficha y el proveedor tramposo de la demo.
+- **Cuentas y panel** (`src/cachai/cuentas.py`, `db.py`, `sesion.py`): inicio de sesión con Clerk, Postgres con migraciones y el panel de cada cuenta.
 - **Experimento de línea base** (`results/linea-base/`): benchmark de prompts fijos contra el juego ciego.
 - **Diseño** (`docs/arquitectura.md`): modelo de amenaza, decisiones, medición y riesgos.

@@ -24,11 +24,14 @@ desviación detectada**, que no significa "es el mismo modelo".
 ```bash
 uv sync
 uv run cachai endpoints z-ai/glm-5.3          # sin clave: qué declara cada proveedor
+uv run cachai login                           # una vez: conecta este equipo con tu cuenta
 uv run cachai scan deepseek/deepseek-v4.1-flash --providers 6 --max-usd 2
 uv run cachai scan deepseek/deepseek-v4.1-flash --only wafer/us,sail-research/fp4 \
   --direct 50x=https://api.ai.50x.energy/v1,FIFTYX_API_KEY,deepseek-ai/DeepSeek-V4.1-Flash-1017
 ```
 
+- `scan` pide una cuenta (`cachai login`, una vez) y sube la ficha al panel; con
+  `--no-subir` queda solo en local.
 - `scan` necesita `OPENROUTER_API_KEY` en `.env`. La referencia es el proveedor
   first-party si está en la lista; si no, `--reference NOMBRE` o `consenso`.
 - Por defecto el juego de pruebas es ciego: se genera con una semilla que queda en la
@@ -85,14 +88,18 @@ Resultados en `results/linea-base/` y su lectura en [`arquitectura.md`](arquitec
 
 ## Estado (22-nov)
 
-- Corre de punta a punta contra el juguete y el tramposo; 27 tests (`uv run pytest -q`).
-- `cachai endpoints` está probado contra la API real de OpenRouter.
-- **Nunca corrió contra proveedores reales**: no había clave en `.env`. Falta confirmar
-  con una llamada que OpenRouter devuelve `prompt_tokens` nativos con el proveedor
-  fijado, que `provider.only` acepta el `tag` del endpoint y que los modelos con
-  razonamiento responden dentro de `max_tokens`.
+- 69 tests de punta a punta, sin red ni claves (`uv run pytest -q`).
+- Corrió contra proveedores reales: cinco endpoints de GLM-5.3 en OpenRouter contra el del
+  autor, 364 respuestas sin errores. La ficha y su lectura están en
+  [`results/proveedores/`](../results/proveedores/).
+- Corrió 20 veces por caso contra Qwen2.5 servido por nosotros en Ollama
+  ([`results/linea-base/`](../results/linea-base/)).
+- `cachai scan` pide una cuenta (`cachai login`) y sube la ficha al panel de
+  [cachai.jjato.com](https://cachai.jjato.com/panel); `cachai demo` no la pide.
 - Un proveedor que además falsee el `usage` no deja excedente de tokens; ahí solo queda
   la prueba de comportamiento.
 - Una sustitución del 30 % con 20 tareas no siempre se detecta por exactitud sola; por
   eso hay una prueba que suma todos los controles. Medido con el juguete: 6/30 con 20
   tareas y 30/30 con `--tasks 80`.
+- Con un modelo que no es determinista a temperatura 0 (pasó con GLM-5.3), el control de
+  coincidencia no tiene potencia.
