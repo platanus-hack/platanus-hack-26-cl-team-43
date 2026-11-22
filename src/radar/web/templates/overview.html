@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Overview</h1>
+<div class="cards">
+  <div class="card"><b>{{ counters.raw_items }}</b>raw items today</div>
+  <div class="card"><b>{{ counters.candidates }}</b>candidates today</div>
+  <div class="card"><b>{{ counters.novel }}</b>novel today</div>
+  <div class="card"><b>{{ counters.breaks }}</b>breaks today</div>
+  <div class="card"><b>${{ '%.2f' % counters.spent }} / ${{ '%.2f' % counters.cap }}</b>spend today</div>
+</div>
+<h2>Families x Tier 1 models</h2>
+{% if models and matrix %}
+<table>
+  <tr><th>Family</th>{% for m in models %}<th>{{ m }}</th>{% endfor %}</tr>
+  {% for f in matrix %}
+  <tr><td>#{{ f.id }} {{ f.label or '' }}</td>
+    {% for rate in f.cells %}<td class="{{ bucket(rate) }}">{{ rate | pct }}</td>{% endfor %}
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">No tested families yet.</p>{% endif %}
+<h2>Model robustness</h2>
+<p class="muted">Share of tested families that broke the model (lower is more robust).</p>
+<table>
+  <tr><th>Model</th><th>Families broken</th><th>Share</th></tr>
+  {% for r in robustness %}
+  <tr><td>{{ r.model }}</td><td>{{ r.broke }} / {{ r.total }}</td><td class="{{ bucket(r.share) }}">{{ r.share | pct }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

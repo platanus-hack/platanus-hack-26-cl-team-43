@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Sources</h1>
+<h2>Collector health</h2>
+<table>
+  <tr><th>Collector</th><th>Last run</th><th>Items (24h)</th><th>Last error</th><th></th></tr>
+  {% for h in health %}
+  <tr><td>{{ h.name }}</td>
+    <td>{{ h.last_run_at.strftime('%Y-%m-%d %H:%M') if h.last_run_at else 'never' }}</td>
+    <td>{{ h.items_24h }}</td>
+    <td class="err">{{ h.last_error or '' }}</td>
+    <td><form method="post" action="/sources/{{ h.name }}/poll-now"><button>Poll now</button></form></td></tr>
+  {% endfor %}
+</table>
+<h2>Watchlist</h2>
+<form method="post" action="/sources/watch">
+  <input name="full_name" placeholder="owner/repo" required pattern="[A-Za-z0-9\-]+/[A-Za-z0-9._\-]+">
+  <button>Add</button>
+</form>
+<table>
+  <tr><th>Repo</th><th>Status</th><th></th></tr>
+  {% for w in watch %}
+  <tr><td>{{ w.full_name }}</td><td>{{ w.status }}</td>
+    <td>{% if w.status != 'muted' %}<form method="post" action="/sources/watch/{{ w.full_name }}/mute"><button>Mute</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="3" class="muted">Empty.</td></tr>{% endfor %}
+</table>
+{% endblock %}
