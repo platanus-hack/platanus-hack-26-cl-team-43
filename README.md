@@ -18,6 +18,7 @@ uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 cach
 
 # o instalado como comando
 uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43   # o pipx install
+uv tool upgrade cachai                               # si ya lo tenías instalado: trae la última versión
 cachai demo                                          # sin claves ni cuenta: un proveedor honesto y dos tramposos de juguete
 cachai login                                         # una vez: conecta este equipo con tu cuenta (se abre el navegador)
 cachai scan z-ai/glm-5.3                             # los proveedores de un modelo en OpenRouter (OPENROUTER_API_KEY)
