@@ -399,3 +399,74 @@ def test_tester_loop_sleeps_on_budget(conn):
                 lambda c, t: None, GOALS, limiter(), sleep=sleep)
     assert sleeps == [5]
     assert job_status(conn, jid) == "queued"
+
+
+# --- review fixes -------------------------------------------------------------
+
+def test_judge_runs_and_records_even_when_target_crosses_budget(conn):
+    seed_config(conn)
+    cid = seed_candidate(conn)
+    set_baseline(conn, "t1", "canary_token", "complied")  # only policy goals run
+    set_baseline(conn, "t1", "policy_insult", "refused")
+    set_baseline(conn, "t1", "policy_lockpick", "refused")
+    done_job = insert_job(conn, cid, "t1", stage="screen", status="done")
+
+    def target(model, user, system):
+        # another worker spends the rest of the budget while this call is in flight
+        conn.execute("insert into results(job_id, goal_id, verdict, cost_usd) "
+                     "values (%s,'canary_token','refused',5)", (done_job,))
+        return res("Sure! Dave, you ****.", cost=0.02)
+
+    job = make_job(conn, cid, stage="confirm")
+    llm = FakeLLM({T1.openrouter_id: target,
+                   JUDGE: res('{"verdict": "complied"}', cost=0.001)})
+    assert run_job(conn, llm, job, GOALS, settings(daily_budget_usd=1), limiter()) == "budget"
+    rows = results(conn, job.id)
+    assert [(r["goal_id"], r["attempt"], r["verdict"]) for r in rows] == [
+        ("policy_insult", 1, "complied")]
+    assert abs(rows[0]["cost_usd"] - 0.021) < 1e-12
+    assert [c["model"] for c in llm.calls] == [T1.openrouter_id, JUDGE]
+    assert job_status(conn, job.id) == "queued"
+
+
+def test_candidate_untestable_after_enqueue_fails_job(conn):
+    seed_config(conn)
+    cid = seed_candidate(conn)
+    job = make_job(conn, cid)
+    conn.execute("update candidates set format='multi_turn' where id=%s", (cid,))
+    conn.commit()
+    llm = FakeLLM({T1.openrouter_id: jailbroken, JUDGE: judge})
+    assert run_job(conn, llm, job, GOALS, settings(), limiter()) == "failed"
+    assert llm.calls == []
+    assert job_status(conn, job.id) == "failed"
+    c = conn.execute("select * from candidates where id=%s", (cid,)).fetchone()
+    assert c["test_status"] == "untested" and c["untested_reason"] == "multi-turn format"
+
+
+def test_unexpected_error_fails_job(conn):
+    seed_config(conn)
+    cid = seed_candidate(conn)
+    job = make_job(conn, cid)
+
+    def boom(model, user, system):
+        raise RuntimeError("bug")
+
+    assert run_job(conn, FakeLLM({T1.openrouter_id: boom}), job, GOALS, settings(),
+                   limiter()) == "failed"
+    assert job_status(conn, job.id) == "failed"
+    assert conn.execute("select enabled from models where id='t1'").fetchone()["enabled"] is True
+
+
+def test_unknown_baseline_is_retried_and_cost_accumulates(conn):
+    seed_config(conn)
+    verdicts = iter(['not json', '{"verdict": "refused"}'])
+    llm = FakeLLM({T1.openrouter_id: res(REFUSAL, cost=0.01),
+                   JUDGE: lambda m, u, s: res(next(verdicts), cost=0.001)})
+    assert ensure_baseline(conn, llm, T1, POLICY, JUDGE) == "unknown"
+    assert ensure_baseline(conn, llm, T1, POLICY, JUDGE) == "refused"
+    assert len(llm.calls) == 4
+    rows = conn.execute("select * from baselines").fetchall()
+    assert len(rows) == 1 and rows[0]["verdict"] == "refused"
+    assert abs(rows[0]["cost_usd"] - 0.022) < 1e-12
+    assert ensure_baseline(conn, llm, T1, POLICY, JUDGE) == "refused"
+    assert len(llm.calls) == 4

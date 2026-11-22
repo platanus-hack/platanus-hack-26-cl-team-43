@@ -7,7 +7,7 @@ from datetime import timedelta
 from typing import Literal
 
 from radar.llm.base import LLM, LLMError
-from radar.testing.assemble import CANARY_SYSTEM, CandidateRow, assemble
+from radar.testing.assemble import CANARY_SYSTEM, CandidateRow, assemble, testability
 from radar.testing.budget import (
     BudgetExhausted, ProviderRateLimiter, check_budget, santiago_today,
 )
@@ -39,12 +39,12 @@ def _call(conn, llm: LLM, model_id: str, user: str, system: str | None,
     return llm.chat(model_id, user, system=system)
 
 
-def _judge(conn, llm: LLM, judge_model: str, goal: Goal, judged_goal: str, token: str | None,
-           output: str, cap_usd: float | None,
-           limiter: ProviderRateLimiter | None) -> tuple[Verdict, float]:
+def _judge(llm: LLM, judge_model: str, goal: Goal, judged_goal: str, token: str | None,
+           output: str, limiter: ProviderRateLimiter | None) -> tuple[Verdict, float]:
+    # No budget check: once a target call has returned, its cost must be recorded,
+    # so its (tiny) judge call always runs.
     if goal.kind == "canary":
         return judge_canary(output, token), 0.0
-    check_budget(conn, cap_usd)
     if limiter is not None:
         limiter.acquire(judge_model)
     return judge_policy(llm, judge_model, judged_goal, goal.rubric, output)
@@ -55,6 +55,8 @@ def ensure_baseline(conn, llm: LLM, model: ModelSpec, goal: Goal, judge_model: s
                     limiter: ProviderRateLimiter | None = None) -> Verdict:
     """The model's verdict on the bare goal (no jailbreak), cached per Santiago day.
 
+    An "unknown" row is kept (its cost counts) but is re-run on the next call.
+
     Raises BudgetExhausted or LLMError from the target call; the caller commits.
     """
     today = santiago_today()
@@ -62,7 +64,7 @@ def ensure_baseline(conn, llm: LLM, model: ModelSpec, goal: Goal, judge_model: s
         "select verdict from baselines where model_id = %s and goal_id = %s and date = %s",
         (model.id, goal.id, today),
     ).fetchone()
-    if row:
+    if row and row["verdict"] != "unknown":
         return row["verdict"]
     token = _new_token() if goal.kind == "canary" else None
     system = CANARY_SYSTEM.format(token=token) if token else None
@@ -71,12 +73,13 @@ def ensure_baseline(conn, llm: LLM, model: ModelSpec, goal: Goal, judge_model: s
     if res.provider_blocked:
         verdict: Verdict = "refused"
     else:
-        verdict, judge_cost = _judge(conn, llm, judge_model, goal, goal.text, token,
-                                     res.text, cap_usd, limiter)
+        verdict, judge_cost = _judge(llm, judge_model, goal, goal.text, token,
+                                     res.text, limiter)
         cost += judge_cost
     conn.execute(
         "insert into baselines(model_id, goal_id, date, verdict, cost_usd) "
-        "values (%s,%s,%s,%s,%s) on conflict do nothing",
+        "values (%s,%s,%s,%s,%s) on conflict (model_id, goal_id, date) do update "
+        "set verdict = excluded.verdict, cost_usd = baselines.cost_usd + excluded.cost_usd",
         (model.id, goal.id, today, verdict, cost),
     )
     return verdict
@@ -117,8 +120,8 @@ def _run_attempt(conn, llm: LLM, job: Job, model: ModelSpec, cand: CandidateRow,
     if res.provider_blocked:
         verdict: Verdict = "refused"
     else:
-        verdict, judge_cost = _judge(conn, llm, judge_model, goal, a.judged_goal, a.token,
-                                     res.text, cap_usd, limiter)
+        verdict, judge_cost = _judge(llm, judge_model, goal, a.judged_goal, a.token,
+                                     res.text, limiter)
         cost += judge_cost
     conn.execute(
         "insert into results(job_id, goal_id, attempt, verdict, output_trunc, cost_usd, latency_ms) "
@@ -149,6 +152,9 @@ def run_job(conn, llm: LLM, job: Job, goals: list[Goal], settings,
     stored = {(r["goal_id"], r["attempt"]): r["verdict"] for r in conn.execute(
         "select goal_id, attempt, verdict from results where job_id = %s", (job.id,))}
     attempts = 1 if job.stage == "screen" else CONFIRM_ATTEMPTS
+
+    if (reason := testability(cand)) is not None:
+        return _fail_untestable(conn, job, reason)
 
     def baseline(goal: Goal) -> Verdict:
         v = ensure_baseline(conn, llm, model, goal, judge_model, cap_usd=cap, limiter=limiter)
@@ -201,6 +207,27 @@ def run_job(conn, llm: LLM, job: Job, goals: list[Goal], settings,
         fail(conn, job.id)
         conn.commit()
         return "failed"
+    except Exception:
+        log.exception("job %s: unexpected error, marking failed", job.id)
+        conn.rollback()
+        reason = testability(cand)
+        if reason is not None:
+            return _fail_untestable(conn, job, reason)
+        fail(conn, job.id)
+        conn.commit()
+        return "failed"
+
+
+def _fail_untestable(conn, job: Job, reason: str) -> Outcome:
+    """The candidate became untestable after it was queued."""
+    log.warning("job %s: candidate %s is untestable (%s)", job.id, job.candidate_id, reason)
+    fail(conn, job.id)  # before the status update, which would otherwise say 'tested'
+    conn.execute(
+        "update candidates set test_status = 'untested', untested_reason = %s where id = %s",
+        (reason, job.candidate_id),
+    )
+    conn.commit()
+    return "failed"
 
 
 def tester_loop(conn_factory: Callable[[], object], llm: LLM, settings,
