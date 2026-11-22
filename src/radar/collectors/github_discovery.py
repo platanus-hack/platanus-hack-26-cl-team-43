@@ -2,11 +2,16 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 from radar.collectors.base import Cursor, RawItem
-from radar.collectors.github_client import GitHubClient
+from radar.collectors.github_client import GitHubClient, GitHubError
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _license(repo: dict) -> str | None:
+    spdx = (repo.get("license") or {}).get("spdx_id")
+    return None if spdx in (None, "NOASSERTION") else spdx
 
 
 class GitHubDiscovery:
@@ -34,6 +39,8 @@ class GitHubDiscovery:
                 "/search/repositories",
                 params={"q": f"{query} pushed:>{since}", "sort": "updated", "per_page": 50},
             )
+            if resp.status >= 400:
+                raise GitHubError(f"search failed for {query!r}: {resp.status}", resp.status)
             for repo in (resp.json or {}).get("items", []):
                 repos.setdefault(repo["full_name"], repo)
 
@@ -45,7 +52,7 @@ class GitHubDiscovery:
                 (full_name,),
             )
             readme = self.client.get(f"/repos/{full_name}/readme", raw=True)
-            if readme.status == 404 or not readme.json:
+            if readme.status != 200 or not readme.json:
                 continue
             pushed = repo.get("pushed_at")
             items.append(
@@ -55,7 +62,7 @@ class GitHubDiscovery:
                     url=repo["html_url"],
                     content_text=readme.json,
                     author=(repo.get("owner") or {}).get("login"),
-                    license=((repo.get("license") or {}).get("spdx_id")),
+                    license=_license(repo),
                     published_at=datetime.fromisoformat(pushed.replace("Z", "+00:00"))
                     if pushed
                     else None,

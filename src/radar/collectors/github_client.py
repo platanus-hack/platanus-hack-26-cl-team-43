@@ -7,9 +7,15 @@ import httpx
 BASE_URL = "https://api.github.com"
 
 
-class GitHubRateLimited(Exception):
-    def __init__(self, message: str, retry_after: float | None = None):
+class GitHubError(Exception):
+    def __init__(self, message: str, status: int | None = None):
         super().__init__(message)
+        self.status = status
+
+
+class GitHubRateLimited(GitHubError):
+    def __init__(self, message: str, retry_after: float | None = None):
+        super().__init__(message, status=429)
         self.retry_after = retry_after
 
 
@@ -49,6 +55,8 @@ class GitHubClient:
             raise GitHubRateLimited(
                 f"GitHub rate limited on {path}", float(retry) if retry else None
             )
+        if resp.status_code >= 500:
+            raise GitHubError(f"GitHub {resp.status_code} on {path}", resp.status_code)
         body: Any = None
         if resp.status_code != 304:
             if raw:

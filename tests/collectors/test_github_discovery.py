@@ -4,7 +4,7 @@ import httpx
 import pytest
 import respx
 
-from radar.collectors.github_client import GitHubClient, GitHubRateLimited
+from radar.collectors.github_client import GitHubClient, GitHubError, GitHubRateLimited
 from radar.collectors.github_discovery import GitHubDiscovery
 
 NOW = datetime(2026, 11, 21, 12, 0, tzinfo=timezone.utc)
@@ -82,3 +82,57 @@ def test_etag_not_modified():
     r = GitHubClient("tok").get("/x", etag='W/"1"')
     assert r.status == 304
     assert route.calls[0].request.headers["if-none-match"] == 'W/"1"'
+
+
+@respx.mock
+def test_rate_limit_429_retry_after():
+    respx.get("https://api.github.com/x").respond(429, headers={"retry-after": "30"}, json={})
+    with pytest.raises(GitHubRateLimited) as ei:
+        GitHubClient("tok").get("/x")
+    assert ei.value.retry_after == 30.0
+
+
+@respx.mock
+def test_search_500_raises_and_runner_keeps_cursor(conn):
+    from radar.collectors.runner import load_cursor, run_collector, save_cursor
+
+    save_cursor(conn, "github_discovery", {"since": "2026-11-01T00:00:00+00:00"})
+    respx.get("https://api.github.com/search/repositories").respond(500, json={})
+    with pytest.raises(GitHubError):
+        _make(conn).poll({})
+    assert run_collector(conn, _make(conn)) == 0
+    assert load_cursor(conn, "github_discovery") == {"since": "2026-11-01T00:00:00+00:00"}
+
+
+@respx.mock
+def test_search_422_raises(conn):
+    respx.get("https://api.github.com/search/repositories").respond(422, json={"message": "bad"})
+    with pytest.raises(GitHubError):
+        _make(conn).poll({})
+
+
+@respx.mock
+def test_readme_403_skips_item_keeps_repo(conn):
+    respx.get("https://api.github.com/search/repositories").respond(200, json=_search_payload())
+    respx.get("https://api.github.com/repos/a/b/readme").respond(403, text="DMCA blocked")
+    items, _ = _make(conn).poll({})
+    assert items == []
+    assert conn.execute("select count(*) n from watch_repos").fetchone()["n"] == 1
+
+
+@respx.mock
+def test_readme_502_raises(conn):
+    respx.get("https://api.github.com/search/repositories").respond(200, json=_search_payload())
+    respx.get("https://api.github.com/repos/a/b/readme").respond(502, text="bad gateway")
+    with pytest.raises(GitHubError):
+        _make(conn).poll({})
+
+
+@respx.mock
+def test_noassertion_license_is_none(conn):
+    payload = _search_payload()
+    payload["items"][0]["license"] = {"spdx_id": "NOASSERTION"}
+    respx.get("https://api.github.com/search/repositories").respond(200, json=payload)
+    respx.get("https://api.github.com/repos/a/b/readme").respond(200, text="x")
+    items, _ = _make(conn).poll({})
+    assert items[0].license is None
