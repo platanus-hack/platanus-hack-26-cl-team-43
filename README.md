@@ -10,16 +10,6 @@ Platanus Hack 26: Santiago ft. Buk · Track: 🛡️ AI Security · team-43
 
 **¿Cachai qué modelo te están sirviendo?** Las evaluaciones de seguridad de un modelo se hacen sobre un modelo y una configuración concretos. Cuando ese modelo lo sirve un tercero, nadie comprueba que lo que responde siga siendo lo que se evaluó. Cachai lo audita desde afuera: le manda a cada endpoint pruebas generadas en el momento, que el proveedor no puede reconocer, compara las respuestas con una referencia y escribe una ficha que separa lo que el proveedor declara de lo que se midió.
 
-## Entregables
-
-| Entregable | Dónde |
-|---|---|
-| Página del proyecto | https://cachai-ai.vercel.app |
-| Auditor (`cachai scan`) | [`src/cachai/`](src/cachai/), con 21 tests en [`tests/`](tests/) |
-| Diseño y arquitectura | [`docs/arquitectura.md`](docs/arquitectura.md): modelo de amenaza, decisiones con alternativas descartadas, plan de medición y riesgos |
-| Experimento de línea base | [`results/linea-base/`](results/linea-base/): benchmark de prompts fijos contra el juego ciego de Cachai, con un proveedor tramposo propio |
-| Guía de uso | [`docs/cachai-auditor.md`](docs/cachai-auditor.md) |
-
 ## El problema
 
 Un modelo abierto no llega a producción desde su autor: llega a través de un proveedor de inferencia, y decenas de proveedores sirven el mismo modelo con el mismo nombre. GLM-5.3 tiene 47 endpoints en OpenRouter y 14 no declaran con qué cuantización lo sirven (API pública de OpenRouter, 21-11-2026). Quien usa el modelo ve el nombre, no lo que hay detrás.
