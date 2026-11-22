@@ -1,5 +1,3 @@
-# Cachai
-
 <img src="./project-logo.png" alt="Project Logo" width="200" />
 
 Platanus Hack 26: Santiago ft. Buk · Track: 🛡️ AI Security · team-43
