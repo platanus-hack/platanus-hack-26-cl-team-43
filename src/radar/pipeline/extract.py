@@ -126,7 +126,7 @@ def _extract_chunk(llm: LLM, model: str, chunk: str) -> list[ExtractedPrompt]:
                 continue
             out.append(ExtractedPrompt(
                 text=text, confidence=float(p["confidence"]),
-                technique=list(p.get("technique") or []),
+                technique=[t for t in (p.get("technique") or []) if t in TECHNIQUES],
                 targets=list(p.get("targets") or []),
                 format=p.get("format") or "single_turn",
                 goal_slot=p.get("goal_slot"), embedded_goal=p.get("embedded_goal"),

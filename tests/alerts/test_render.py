@@ -26,7 +26,9 @@ def test_alert_never_contains_prompt_text(conn):
         assert "f.md" not in body and "a/b" not in body
     digest = render_digest(conn, since=datetime.now(timezone.utc) - timedelta(days=1),
                            base_url="https://x")
-    assert LONG_PROMPT[:30] not in digest.text
+    for body in (digest.subject, digest.text):
+        for i in range(len(LONG_PROMPT) - 30):
+            assert LONG_PROMPT[i:i + 30] not in body
     assert digest.subject == "[Jailbreak Radar] Daily digest"
 
 
@@ -65,3 +67,38 @@ def test_digest_counts_and_events(conn):
     d = render_digest(conn, datetime.now(timezone.utc) - timedelta(days=1), "https://x")
     assert "New candidates: 1" in d.text and "t1: 1" in d.text
     assert f"https://x/candidates/{a}" in d.text and "severity 1" in d.text
+
+
+def test_alert_ignores_unknown_technique_tags_and_novelty(conn):
+    setup(conn)
+    cid = candidate(conn, technique=(LONG_PROMPT[:80], "roleplay"), novelty=None)
+    brk(conn, cid, "t1")
+    msg = render_alert(conn, _decision(conn, cid), "https://x")
+    for body in (msg.subject, msg.text):
+        for i in range(80 - 30 + 1):
+            assert LONG_PROMPT[i:i + 30] not in body
+    assert "roleplay" in msg.text and "None" not in msg.text and "known family" in msg.text
+
+
+def test_whatsapp_body_has_no_prompt_text(conn):
+    from types import SimpleNamespace
+    from urllib.parse import parse_qs
+
+    import httpx
+
+    from radar.alerts.channels import send_whatsapp
+    setup(conn)
+    cid = candidate(conn, text=LONG_PROMPT, embedded_goal="EMBEDDED GOAL TEXT",
+                    technique=(LONG_PROMPT[:80],))
+    brk(conn, cid, "t1")
+    msg = render_alert(conn, _decision(conn, cid), "https://x")
+    seen = {}
+
+    def h(req):
+        seen["body"] = parse_qs(req.content.decode())["Body"][0]
+        return httpx.Response(201, json={})
+    s = SimpleNamespace(twilio_sid="s", twilio_token="t", twilio_whatsapp_from="+1")
+    send_whatsapp(s, "+2", msg, httpx.Client(transport=httpx.MockTransport(h)))
+    for i in range(len(LONG_PROMPT) - 30):
+        assert LONG_PROMPT[i:i + 30] not in seen["body"]
+    assert "EMBEDDED GOAL TEXT" not in seen["body"]

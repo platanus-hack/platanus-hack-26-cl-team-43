@@ -76,7 +76,7 @@ def dispatch(conn, settings, d: AlertDecision, msg: AlertMessage) -> int:
 def dispatch_digest(conn, settings, msg: AlertMessage) -> int:
     """Email the digest to active subscribers; alerts.candidate_id is NOT NULL so nothing is recorded."""
     rows = conn.execute(
-        "select email from subscribers where active and email is not null "
+        "select id, email from subscribers where active and email is not null "
         "and 'email' = any(channels) order by id"
     ).fetchall()
     sent = 0
@@ -85,5 +85,5 @@ def dispatch_digest(conn, settings, msg: AlertMessage) -> int:
             send_email(settings, r["email"], msg)
             sent += 1
         except Exception as e:  # noqa: BLE001
-            log.warning("digest to %s failed: %s", r["email"], _short_error(e))
+            log.warning("digest to subscriber %s failed: %s", r["id"], _short_error(e))
     return sent

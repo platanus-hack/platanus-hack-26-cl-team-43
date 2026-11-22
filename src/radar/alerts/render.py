@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from radar.alerts.rules import AlertDecision
+from radar.pipeline.extract import TECHNIQUES
 
 SANTIAGO = ZoneInfo("America/Santiago")
 
@@ -40,11 +41,16 @@ def render_alert(conn, d: AlertDecision, base_url: str) -> AlertMessage:
     prefix = "" if d.tier == 1 else "[open model] "
     subject = (f"{prefix}[Jailbreak Radar] New jailbreak broke {n} {kind} "
                f"model{'' if n == 1 else 's'}")
-    family = ("new family" if c["novelty"] == "novel"
-              else f"variant of family #{c['family_id']}")
+    if c["novelty"] == "novel":
+        family = "new family"
+    elif c["novelty"] == "variant" and c["family_id"] is not None:
+        family = f"variant of family #{c['family_id']}"
+    else:
+        family = "known family"
+    techniques = [t for t in (c["technique"] or []) if t in TECHNIQUES]
     first_seen = c["first_seen_at"].astimezone(SANTIAGO).strftime("%Y-%m-%d %H:%M")
     lines = [
-        f"Techniques: {', '.join(c['technique'] or []) or 'unknown'}",
+        f"Techniques: {', '.join(techniques) or 'unknown'}",
         f"Family: {family}",
         "Newly broken models:",
         *[f"  - {m}: {_pct(r)}" for m, r in d.newly_broken],
