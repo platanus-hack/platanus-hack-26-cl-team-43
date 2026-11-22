@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cachai en vivo</title>
+<meta name="description" content="Dos proveedores dicen servir el mismo modelo y uno hace trampa. Cachai los audita en vivo.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#111112;--alto:#19191b;--tinta:#f1f0ec;--tenue:#a3a29c;--apagado:#77766f;--linea:rgba(241,240,236,.14);--alerta:#f06363;--bien:#7fd1a3;
+--disp:"Inter Tight","Helvetica Neue",Arial,sans-serif;--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--tinta);font-family:var(--disp);font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+code,.mono{font-family:var(--mono)}
+.col{max-width:1120px;margin:0 auto;padding:0 clamp(16px,4vw,48px)}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;height:68px;border-bottom:1px solid var(--linea)}
+.logo{font-weight:700;font-size:22px;letter-spacing:-.04em;text-decoration:none}
+.vivo{display:inline-flex;align-items:center;gap:8px;font:500 12.5px/1 var(--mono);color:var(--tenue)}
+.vivo i{width:8px;height:8px;border-radius:50%;background:var(--alerta);box-shadow:0 0 0 4px rgba(240,99,99,.18)}
+h1{font-size:clamp(32px,5.2vw,60px);line-height:1.02;letter-spacing:-.045em;font-weight:600;margin:clamp(36px,7vw,72px) 0 18px;max-width:17ch;text-wrap:balance}
+.texto{color:var(--tenue);font-size:clamp(16px,1.4vw,19px);max-width:60ch;margin:0;text-wrap:pretty}
+.texto b{color:var(--tinta);font-weight:500}
+.controles{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;margin:32px 0 22px}
+.seg{display:inline-flex;gap:2px;padding:4px;border-radius:999px;background:rgba(241,240,236,.07);max-width:100%;overflow-x:auto;scrollbar-width:none}
+.seg::-webkit-scrollbar{display:none}
+.seg button{flex:none;height:34px;padding:0 16px;border:0;border-radius:999px;background:none;color:var(--tenue);font:500 14px/1 var(--disp);cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--tinta);color:var(--bg)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:46px;padding:0 22px;border-radius:999px;font:600 15px/1 var(--disp);border:1px solid var(--linea);background:none;color:var(--tinta);cursor:pointer;white-space:nowrap}
+.btn.primario{background:var(--tinta);color:var(--bg);border-color:var(--tinta)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:focus-visible,.seg button:focus-visible,.copiar:focus-visible{outline:2px solid var(--tinta);outline-offset:3px}
+.nota{font-size:13.5px;color:var(--apagado)}
+.provs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.prov{border:1px solid var(--linea);border-radius:18px;background:var(--alto);padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0;transition:border-color .3s}
+.prov.mal{border-color:rgba(240,99,99,.65)}
+.prov .cab{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.prov h2{margin:0;font-size:20px;font-weight:600;letter-spacing:-.02em}
+.insignia{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;border:1px solid var(--linea);font:500 12px/1 var(--mono);color:var(--tenue);white-space:nowrap}
+.insignia.mal{color:var(--alerta);border-color:rgba(240,99,99,.5)}
+.insignia.bien{color:var(--bien);border-color:rgba(127,209,163,.45)}
+.url{display:flex;align-items:center;gap:6px;min-width:0;font:400 12.5px/1.3 var(--mono);color:var(--apagado)}
+.url span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.copiar{flex:none;display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:50%;background:none;color:var(--tenue);cursor:pointer}
+.copiar:hover{background:rgba(241,240,236,.1);color:var(--tinta)}
+.copiar svg{width:14px;height:14px}
+.copiar .ok{display:none}.copiar.hecho .cp{display:none}.copiar.hecho .ok{display:block}
+.barra{height:6px;border-radius:999px;background:rgba(241,240,236,.08);overflow:hidden}
+.barra i{display:block;height:100%;width:0;background:var(--tinta);border-radius:inherit;transition:width .25s}
+.prov.mal .barra i{background:var(--alerta)}
+.cifras{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;font-size:13.5px;color:var(--tenue)}
+.cifras b{display:block;color:var(--tinta);font:500 15px/1.3 var(--mono)}
+.motivos{margin:0;padding:0;list-style:none;font-size:13.5px;color:var(--tenue);display:flex;flex-direction:column;gap:6px}
+.motivos li::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--alerta);margin-right:8px;vertical-align:2px}
+.revela{margin-top:22px;border:1px solid var(--linea);border-radius:18px;padding:20px 22px;display:none;gap:6px;flex-direction:column}
+.revela.on{display:flex}
+.revela strong{font-size:clamp(20px,2.4vw,26px);letter-spacing:-.02em;font-weight:600}
+.tuyo{margin:clamp(48px,8vw,88px) 0 0;padding:clamp(36px,6vw,64px) 0;border-top:1px solid var(--linea);display:flex;flex-direction:column;gap:16px}
+.tuyo h3{margin:0;font-size:clamp(24px,3vw,34px);letter-spacing:-.03em;font-weight:600}
+.codigo{position:relative;border:1px solid var(--linea);border-radius:14px;background:var(--alto)}
+.codigo pre{margin:0;padding:18px 52px 18px 18px;overflow-x:auto;font:400 13px/1.8 var(--mono);white-space:pre}
+.codigo .copiar{position:absolute;top:10px;right:10px}
+.codigo .c{color:var(--apagado)}
+.error{color:var(--alerta);font-size:14px;min-height:21px;margin-top:10px}
+footer{padding:28px 0 40px;border-top:1px solid var(--linea);font-size:13.5px;color:var(--apagado)}
+@media (max-width:820px){.provs{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="col">
+<header>
+  <a class="logo" href="https://cachai-ai.vercel.app">cachai</a>
+  <span class="vivo"><i></i>demo en vivo</span>
+</header>
+
+<h1>Dos proveedores dicen servir el mismo modelo. Uno hace trampa.</h1>
+<p class="texto">Los tres endpoints responden como <b>Qwen2.5 1.5B</b> y hablan la API de OpenAI. En cada ronda, A o B se elige al azar para hacer trampa. Mandarles un par de preguntas no alcanza para notarlo. <b>Cachai</b> les manda las mismas pruebas, generadas en el momento, y compara cada respuesta con la del oficial.</p>
+
+<div class="controles">
+  <div class="seg" role="group" aria-label="Trampa del proveedor" id="trampas"></div>
+  <button class="btn" type="button" id="ronda">Nueva ronda</button>
+  <button class="btn primario" type="button" id="auditar">Auditar con Cachai</button>
+</div>
+<p class="nota" id="estado">Ronda 1. La trampa elegida se aplica en la próxima ronda.</p>
+
+<div class="provs" id="provs"></div>
+<div class="error" id="error" role="status"></div>
+
+<div class="revela" id="revela" role="status" aria-live="polite">
+  <strong id="revela-t"></strong>
+  <span class="texto" id="revela-d"></span>
+</div>
+
+<section class="tuyo">
+  <h3>Audítalo desde tu máquina.</h3>
+  <p class="texto">Son APIs reales. Cachai se corre con un comando, sin instalar nada más que <code>uv</code>, contra estas mismas URLs.</p>
+  <div class="codigo"><pre id="cmd"></pre><button class="copiar" type="button" data-copia="cmd" aria-label="Copiar el comando"><svg class="cp" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6"/><path d="M10.5 5.5v-1.4a1.6 1.6 0 0 0-1.6-1.6H4.1a1.6 1.6 0 0 0-1.6 1.6v4.8a1.6 1.6 0 0 0 1.6 1.6h1.4"/></svg><svg class="ok" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg></button></div>
+  <p class="nota">Aquí la auditoría es rápida (unas 24 pruebas, sin tool calls, porque los modelos corren en CPU). El comando corre las 48 pruebas completas. El proveedor tramposo es nuestro y solo se audita a sí mismo.</p>
+</section>
+</div>
+<footer><div class="col">Cachai · Platanus Hack 26 · <a href="https://github.com/platanus-hack/platanus-hack-26-cl-team-43">código en GitHub</a></div></footer>
+
+<script>
+(function(){
+  var base = location.origin;
+  var PROVS = [["oficial","Oficial","oficial"],["A","Proveedor A","a"],["B","Proveedor B","b"]];
+  var ICON = document.querySelector('.codigo .copiar').innerHTML;
+  var total = 0, cuenta = {}, corriendo = false, trampaSel = null;
+  var $ = function(id){ return document.getElementById(id); };
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+  // tarjetas de los proveedores
+  $('provs').innerHTML = PROVS.map(function(p){
+    var url = base + '/' + p[2] + '/v1';
+    return '<article class="prov" id="prov-' + p[0] + '">' +
+      '<div class="cab"><h2>' + p[1] + '</h2><span class="insignia" id="ins-' + p[0] + '">' + (p[0] === 'oficial' ? 'referencia' : 'sin auditar') + '</span></div>' +
+      '<div class="url"><span id="url-' + p[0] + '">' + esc(url) + '</span><button class="copiar" type="button" data-copia="url-' + p[0] + '" aria-label="Copiar la URL">' + ICON + '</button></div>' +
+      '<div class="barra" aria-hidden="true"><i id="bar-' + p[0] + '"></i></div>' +
+      '<div class="cifras" id="cif-' + p[0] + '"></div>' +
+      '<ul class="motivos" id="mot-' + p[0] + '"></ul></article>';
+  }).join('');
+
+  $('cmd').innerHTML = '<span class="c"># las 48 pruebas completas contra los mismos tres endpoints</span>\n' +
+    'uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 \\\n  cachai scan --no-openrouter \\\n' +
+    '  -e oficial=' + esc(base) + '/oficial/v1 \\\n  -e A=' + esc(base) + '/a/v1 \\\n  -e B=' + esc(base) + '/b/v1';
+
+  // copiar
+  function copia(texto, hecho){
+    function respaldo(){ var t = document.createElement('textarea'); t.value = texto; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select(); try { document.execCommand('copy'); hecho(); } catch(e){} t.remove(); }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(texto).then(hecho, respaldo); else respaldo();
+  }
+  document.addEventListener('click', function(e){
+    var b = e.target.closest('.copiar'); if (!b) return;
+    var t = $(b.dataset.copia).textContent.split('\n').filter(function(l){ return l.trim().charAt(0) !== '#'; }).join('\n').trim();
+    copia(t, function(){ b.classList.add('hecho'); setTimeout(function(){ b.classList.remove('hecho'); }, 1600); });
+  });
+
+  function limpiar(){
+    PROVS.forEach(function(p){
+      $('prov-' + p[0]).classList.remove('mal');
+      $('bar-' + p[0]).style.width = '0';
+      $('cif-' + p[0]).innerHTML = ''; $('mot-' + p[0]).innerHTML = '';
+      var i = $('ins-' + p[0]); i.className = 'insignia'; i.textContent = p[0] === 'oficial' ? 'referencia' : 'sin auditar';
+    });
+    $('revela').classList.remove('on'); $('error').textContent = '';
+  }
+
+  function pintarEstado(s){
+    $('estado').textContent = 'Ronda ' + s.ronda + '. Trampa de esta ronda: ' + s.trampas[s.trampa] + '. Quién la hace, A o B, se revela al terminar la auditoría.';
+    var seg = $('trampas');
+    if (!seg.children.length) {
+      seg.innerHTML = Object.keys(s.trampas).map(function(k){
+        return '<button type="button" data-trampa="' + k + '" aria-pressed="false">' + {"cuantizado":"Cuantizado a 4 bits","modelo-chico":"Modelo más chico","prompt-oculto":"Prompt oculto"}[k] + '</button>';
+      }).join('');
+      seg.addEventListener('click', function(e){
+        var b = e.target.closest('button'); if (!b) return;
+        trampaSel = b.dataset.trampa; marcar();
+        $('estado').textContent = 'Elegiste «' + b.textContent + '». Arma una nueva ronda para aplicarla.';
+      });
+    }
+    if (!trampaSel) trampaSel = s.trampa;
+    marcar();
+  }
+  function marcar(){ [].forEach.call($('trampas').children, function(b){ b.setAttribute('aria-pressed', b.dataset.trampa === trampaSel ? 'true' : 'false'); }); }
+
+  function cargar(){ return fetch('/api/estado').then(function(r){ return r.json(); }).then(function(s){ pintarEstado(s); return s; }); }
+  cargar();
+
+  $('ronda').addEventListener('click', function(){
+    if (corriendo) return;
+    fetch('/api/ronda', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({trampa: trampaSel})})
+      .then(function(r){ return r.json(); }).then(function(s){
+        if (s.error) { $('error').textContent = s.error; return; }
+        limpiar(); pintarEstado(s);
+      });
+  });
+
+  function cifras(e){
+    var t = e.token_deltas && e.token_deltas.length ? (e.hidden_tokens ? '+' + e.hidden_tokens : 'igual') : '—';
+    return '<div>Tokens de prompt<b>' + t + '</b></div>' +
+      '<div>Tareas correctas<b>' + e.tasks_ok + '/' + e.tasks_n + '</b></div>' +
+      '<div>Texto libre igual al oficial<b>' + e.free_agree + '/' + e.free_n + '</b></div>' +
+      '<div>Filtra el secreto<b>' + e.canary_leaks + '/' + e.canary_n + '</b></div>';
+  }
+
+  $('auditar').addEventListener('click', function(){
+    if (corriendo) return;
+    corriendo = true; limpiar();
+    $('auditar').disabled = $('ronda').disabled = true;
+    $('auditar').textContent = 'Auditando…';
+    var es = new EventSource('/api/auditar'), terminado = false;
+    function fin(){ corriendo = false; es.close(); $('auditar').disabled = $('ronda').disabled = false; $('auditar').textContent = 'Auditar con Cachai'; }
+    es.addEventListener('inicio', function(ev){
+      var d = JSON.parse(ev.data); total = d.pruebas; cuenta = {};
+      $('estado').textContent = 'Juego ciego con semilla ' + d.semilla + ': ' + d.pruebas + ' pruebas a cada endpoint, y al oficial dos veces (la segunda mide el ruido).';
+      PROVS.forEach(function(p){ $('ins-' + p[0]).textContent = 'auditando'; });
+    });
+    es.addEventListener('respuesta', function(ev){
+      var d = JSON.parse(ev.data), k = d.endpoint === 'oficial (piso)' ? null : d.endpoint;
+      if (!k) return;
+      cuenta[k] = (cuenta[k] || 0) + 1;
+      $('bar-' + k).style.width = Math.min(100, 100 * cuenta[k] / total) + '%';
+    });
+    es.addEventListener('ficha', function(ev){
+      var d = JSON.parse(ev.data), acerto = false;
+      d.ficha.endpoints.forEach(function(e){
+        var k = e.target; if (!$('prov-' + k)) return;
+        $('bar-' + k).style.width = '100%';
+        $('cif-' + k).innerHTML = cifras(e);
+        var ins = $('ins-' + k);
+        if (e.is_reference) { ins.textContent = 'referencia'; return; }
+        if (e.distinguible) {
+          ins.textContent = 'DISTINGUIBLE'; ins.className = 'insignia mal'; $('prov-' + k).classList.add('mal');
+          $('mot-' + k).innerHTML = e.flags.map(function(f){ return '<li>' + esc(f) + '</li>'; }).join('');
+          if (k === d.tramposo) acerto = true;
+        } else { ins.textContent = 'sin desviación'; ins.className = 'insignia bien'; }
+      });
+      var otro = d.tramposo === 'A' ? 'B' : 'A';
+      var otroMarcado = d.ficha.endpoints.some(function(e){ return e.target === otro && e.distinguible; });
+      $('revela-t').textContent = 'El tramposo era el proveedor ' + d.tramposo + '. ' + (acerto && !otroMarcado ? 'Cachai lo encontró.' : acerto ? 'Cachai lo marcó, pero también marcó al honesto.' : 'Esta vez Cachai no lo distinguió.');
+      $('revela-d').textContent = 'Su trampa: ' + d.trampa_label + '. Auditoría de ' + d.segundos + ' s, juego ciego con semilla ' + d.ficha.semilla + ', umbral p < 0,01.';
+      $('revela').classList.add('on');
+      terminado = true;
+    });
+    es.addEventListener('error', function(ev){
+      if (ev.data) { $('error').textContent = 'Falló la auditoría: ' + JSON.parse(ev.data).mensaje; terminado = true; }
+      else if (!terminado) { cargar().then(function(s){ $('error').textContent = s.auditando ? 'Hay otra auditoría en curso. Espera unos segundos y vuelve a intentar.' : 'Se cortó la conexión con la demo.'; }); }
+      fin();
+    });
+    es.addEventListener('fin', fin);
+  });
+})();
+</script>
+</body>
+</html>

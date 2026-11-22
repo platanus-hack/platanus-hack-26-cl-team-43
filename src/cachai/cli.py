@@ -205,6 +205,17 @@ def cmd_toy(args) -> None:
     uvicorn.run(create_toy(), host="127.0.0.1", port=args.port, log_level="warning")
 
 
+def cmd_serve(args) -> None:
+    import uvicorn
+
+    os.environ.setdefault("CACHAI_OLLAMA_URL", args.ollama_url)
+    os.environ["PORT"] = str(args.port)
+    from cachai.serve import create_app
+
+    print(f"demo en vivo en http://{args.host}:{args.port}  (Ollama: {args.ollama_url})")
+    uvicorn.run(create_app(), host=args.host, port=args.port, log_level="warning")
+
+
 def cmd_villain(args) -> None:
     import uvicorn
 
@@ -300,6 +311,14 @@ def main(argv: list[str] | None = None) -> None:
                        "un proveedor honesto y dos tramposos de juguete")
     _audit_options(p)
     p.set_defaults(fn=cmd_demo, out="audit/demo")
+
+    p = sub.add_parser("serve", help="la demo en vivo: tres proveedores (uno tramposo) sobre "
+                       "Qwen2.5 en Ollama, y una página que los audita")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
+    p.add_argument("--ollama-url", default=os.environ.get("CACHAI_OLLAMA_URL",
+                                                         "http://127.0.0.1:11434/v1"))
+    p.set_defaults(fn=cmd_serve)
 
     p = sub.add_parser("villain", help="proveedor tramposo propio, para la demo")
     p.add_argument("--upstream", required=True, help="URL base del proveedor real (…/v1)")
