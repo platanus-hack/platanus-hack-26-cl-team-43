@@ -199,3 +199,27 @@ def test_ficha_slug_is_a_lowercase_url_safe_name():
                     reference="oficial", suite="ciego", seed=7, declared=None, spent_usd=0)
     slug = ficha.slug(f)
     assert slug.startswith("ficha-z-ai-glm-5-3-") and slug == slug.lower()
+
+
+def test_rate_limit_is_retried_not_counted_as_failure(monkeypatch):
+    """Un 429 habla del límite de la cuenta, no del modelo: la prueba se repite."""
+    probes = suite.build(5, n_tasks=4)
+    calls, waits = [], []
+
+    def fake_ask(target, probe_id, messages, *, http, tools=None, max_tokens=256):
+        calls.append((probe_id, max_tokens))
+        first = sum(pid == probe_id for pid, _ in calls) == 1
+        if first and probe_id == probes[0].id:
+            return scan.Reply(target=target.name, probe=probe_id,
+                              error="429: Rate limit exceeded", error_kind="other")
+        return scan.Reply(target=target.name, probe=probe_id, text="ok")
+
+    monkeypatch.setattr(scan, "ask", fake_ask)
+    out = scan._run_target(Target("ref", "m"), probes, None, scan.Spend(1.0), None,
+                           extra_tokens=512, sleep=waits.append)
+    assert all(r.ok for r in out.values()) and len(out) == len(probes)
+    assert waits == [scan.RATE_LIMIT_WAIT_S]
+    # el margen de tokens no se aplica a las pruebas de conteo
+    asked = dict(calls)
+    for p in probes:
+        assert asked[p.id] == p.max_tokens + (0 if p.kind == "tokens" else 512)

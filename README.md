@@ -26,6 +26,20 @@ cachai scan                                          # lee ./cachai.toml
 
 `cachai demo` audita en memoria a un proveedor honesto, a uno que agrega un prompt oculto y a uno que responde con un modelo más chico con el mismo nombre, y marca a los dos tramposos. Más casos (servidor propio, autor contra revendedores, auditoría semanal en GitHub Actions) en [`examples/`](examples/).
 
+### La demo en vivo
+
+**[demo-production-8abb87fe.up.railway.app](https://demo-production-8abb87fe.up.railway.app)**: tres APIs que dicen servir Qwen2.5 1.5B (`/oficial/v1`, `/a/v1` y `/b/v1`). En cada ronda, A o B hace trampa al azar: sirve la versión cuantizada a 4 bits, un modelo tres veces más chico o agrega un prompt oculto, siempre con el mismo nombre. «Auditar con Cachai» corre 24 pruebas ciegas contra las tres, muestra la ficha y recién al final revela quién era el tramposo.
+
+Las URLs son APIs reales, así que también se auditan desde cualquier máquina:
+
+```bash
+D=https://demo-production-8abb87fe.up.railway.app
+uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 cachai scan qwen2.5-1.5b-instruct \
+  --no-openrouter -e oficial=$D/oficial/v1 -e A=$D/a/v1 -e B=$D/b/v1
+```
+
+Corre en CPU, con los modelos servidos por nosotros en Ollama; el tramposo es nuestro y solo se audita a sí mismo. Para levantarla en local: `cachai serve` con un Ollama que tenga los tres modelos ([`deploy/demo/`](deploy/demo/)).
+
 ### Dónde se puede usar
 
 Cachai solo necesita lo mismo que cualquier cliente: una API compatible con la de OpenAI. No pide acceso al modelo ni que el proveedor colabore.
@@ -139,11 +153,30 @@ Un proveedor tramposo propio (un proxy hacia el mismo modelo) aplica cuatro tram
 
 ### Modelos reales servidos por nosotros
 
-La misma línea base con Qwen2.5 1.5B servido con Ollama: la referencia en Q8 y proveedores propios que sirven Q4, Q2 o el 0.5B con el mismo nombre (`uv run cachai experimento --ollama`). En una primera repetición local, el Q4 acertó las mismas tareas que la referencia y solo se delató en el texto libre: coincidió en 12 de 30 respuestas, contra 30 de 30 del piso de ruido. La corrida de 20 repeticiones está en curso a 2026-11-22.
+La misma línea base con un modelo real: Qwen2.5 1.5B servido con Ollama. La referencia sirve la versión Q8 y seis proveedores propios dicen servir lo mismo: uno honesto y cinco que sirven otra cosa con el mismo nombre. Cada celda son 20 auditorías con el juego ciego y semillas distintas (48 pruebas por proveedor). Se corre con `uv run cachai experimento --ollama` y el detalle está en [`results/linea-base/ollama-qwen2.5-t20.md`](results/linea-base/ollama-qwen2.5-t20.md).
+
+| Lo que sirve el proveedor | Marcado como distinguible | Qué lo delató |
+|---|---|---|
+| Lo mismo que la referencia (control) | 0/20 (IC95 0-16 %) | Nada |
+| Agrega un prompt oculto | 20/20 (IC95 84-100 %) | Tokens de prompt de más y coincidencia con la referencia |
+| La versión cuantizada a 4 bits (Q4) | 20/20 (IC95 84-100 %) | Solo la coincidencia con la referencia |
+| La versión cuantizada a 2 bits (Q2) | 20/20 (IC95 84-100 %) | Coincidencia; exactitud en 14 de 20 |
+| Un modelo tres veces más chico (0.5B) | 20/20 (IC95 84-100 %) | Coincidencia; filtra el secreto en 19 de 20 |
+| Desvía el 30 % del tráfico al 0.5B | 8/20 (IC95 22-61 %) | Coincidencia |
+
+- **Sin falsas alarmas**: el proveedor honesto no salió marcado en ninguna de las 20 auditorías, y el piso de ruido (la referencia consultada otra vez) coincidió 30 de 30 en todas.
+- **La cuantización a 4 bits no se ve en la exactitud**: el Q4 acierta casi lo mismo que la referencia y en ninguna de las 20 auditorías esa diferencia alcanzó para marcarlo. Lo delató que sus respuestas coincidieron con las de la referencia en 9 a 15 de 30, contra 30 de 30 del piso de ruido.
+- **El límite, otra vez, es el desvío parcial**: con 48 pruebas, desviar el 30 % del tráfico se escapa en 12 de 20 auditorías. Sube con más pruebas, como en el modelo de juguete.
+- **Alcance**: un modelo chico servido en CPU con Ollama, todos los proveedores en la misma máquina. Mide al auditor con un modelo real cuya verdad conocemos; no es un hallazgo sobre ningún proveedor.
 
 ### Medición contra proveedores reales
 
-En curso a 2026-11-22. Se agrega en `results/proveedores/` con el mismo formato de ficha.
+Una primera corrida, preliminar: `cachai scan z-ai/glm-5.3` sobre OpenRouter el 22-11-2026, con los cinco endpoints más baratos de GLM-5.3 contra el del autor (USD 0,05). La ficha, las respuestas crudas y cómo leerlas están en [`results/proveedores/`](results/proveedores/).
+
+- **Ningún endpoint agrega un prompt oculto**: los cinco cuentan los mismos tokens de prompt que la referencia. Las tool calls cumplen el esquema en todos.
+- **Cuatro de los cinco no se distinguen de la referencia en las tareas** (19 o 20 de 20 correctas).
+- **SiliconFlow corta las respuestas en la mitad exacta del límite pedido**, en los cuatro tipos de prueba (128 de 256, 32 de 64, 24 de 48, 4 de 8). Como GLM-5.3 razona antes de responder, la respuesta queda trunca y la ficha lo marca con 9 de 20. Es una diferencia real del endpoint, no evidencia de otro modelo, y no verificamos si el corte es del proveedor o del adaptador de OpenRouter.
+- **Alcance**: la referencia quedó incompleta. Z.AI limita las cuentas nuevas de OpenRouter a 20 pedidos por minuto y respondió 30 de 48 pruebas, así que esta corrida no tiene piso de ruido ni comparación de texto libre. Desde entonces el auditor espera y repite ante un 429, y `--extra-tokens` da margen a los modelos que razonan siempre.
 
 ## Lo que no prometemos
 
@@ -167,15 +200,18 @@ src/cachai/        el auditor
   toy.py             modelo de juguete con reglas fijas, para probar sin claves
   experiment.py      experimento de línea base: benchmark fijo contra juego ciego
   providers.py       atajos de proveedores compatibles con OpenAI (URL y variable de la clave)
-  cli.py             cachai demo · scan · endpoints · experimento
-tests/             27 tests de punta a punta, sin red ni claves
+  serve.py           la demo en vivo: tres proveedores, uno tramposo, y la auditoría por SSE (demo.html)
+  cli.py             cachai demo · scan · endpoints · serve · experimento
+tests/             28 tests de punta a punta, sin red ni claves
 examples/          configuraciones listas para copiar (OpenRouter, APIs directas, servidor propio, CI)
 results/linea-base/  resultados del experimento (JSON y Markdown)
+results/proveedores/  primera corrida contra proveedores reales (ficha y respuestas crudas)
+deploy/demo/       imagen de la demo en vivo: Ollama con los modelos y cachai serve (Railway)
 ```
 
 ```bash
 uv sync
-uv run pytest -q                                   # 27 tests, sin red ni claves
+uv run pytest -q                                   # 28 tests, sin red ni claves
 uv run cachai experimento --toy --reps 30          # la línea base, sin claves (~2 min)
 uv run cachai endpoints z-ai/glm-5.3               # lo que declara cada proveedor, sin clave
 uv run cachai scan z-ai/glm-5.3 --providers 6 --max-usd 2   # necesita OPENROUTER_API_KEY

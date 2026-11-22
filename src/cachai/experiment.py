@@ -229,7 +229,9 @@ def markdown(res: dict) -> str:
                          + ", ".join(f"{k} {v}" for k, v in sorted(c["controles"].items())))
     floor_rows = [r for r in res["filas"] if "piso_marcado" in r]
     if floor_rows:
-        seen = {(r["tramposo"], r["juego"], r["rep"]): r for r in floor_rows}
+        # por semilla: al juntar corridas hechas por partes, el número de repetición se repite
+        seen = {(r["tramposo"], r["juego"], r["rep"] if r.get("semilla") is None else r["semilla"]): r
+                for r in floor_rows}
         marked = sum(r["piso_marcado"] for r in seen.values())
         lines += ["", f"Piso de ruido (el mismo modelo que la referencia, en otra llamada): marcado "
                   f"{marked}/{len(seen)} veces; coincidencia por corrida: "

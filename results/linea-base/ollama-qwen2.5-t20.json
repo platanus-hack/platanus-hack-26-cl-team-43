@@ -1,0 +1,2268 @@
+{
+ "fecha": "2026-11-22T06:01:20+00:00",
+ "upstream": "Qwen2.5 servido con Ollama en Railway (CPU)",
+ "modelo": "qwen2.5:1.5b-instruct-q8_0",
+ "modelo_barato": "qwen2.5:0.5b-instruct-q8_0",
+ "proveedor_fijado": null,
+ "repeticiones": 20,
+ "tareas": 20,
+ "gasto_usd": 0.0,
+ "condiciones": [
+  "honesto",
+  "prompt-oculto",
+  "cuantizado-q4",
+  "cuantizado-q2",
+  "sustituido-0.5b",
+  "desvia-30-a-0.5b"
+ ],
+ "filas": [
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 1,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 1,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "12/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "15/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 1,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "10/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 1,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "0/20",
+   "tokens": "sin excedente",
+   "coincide": "0/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 1,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "5/20",
+   "tokens": "sin excedente",
+   "coincide": "6/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 1,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "8/20",
+   "tokens": "sin excedente",
+   "coincide": "20/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 2,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "13/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 2,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "14/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "17/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 2,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "14/20",
+   "tokens": "sin excedente",
+   "coincide": "15/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 2,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "3/20",
+   "tokens": "sin excedente",
+   "coincide": "3/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 2,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "7/20",
+   "tokens": "sin excedente",
+   "coincide": "6/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 2,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "13/20",
+   "tokens": "sin excedente",
+   "coincide": "25/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 3,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "14/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 3,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "12/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "13/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 3,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "sin excedente",
+   "coincide": "10/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 3,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "0/20",
+   "tokens": "sin excedente",
+   "coincide": "0/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 3,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "6/20",
+   "tokens": "sin excedente",
+   "coincide": "6/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 3,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "12/20",
+   "tokens": "sin excedente",
+   "coincide": "22/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 4,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 4,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "11/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 4,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "9/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 4,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "1/20",
+   "tokens": "sin excedente",
+   "coincide": "1/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 4,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "8/20",
+   "tokens": "sin excedente",
+   "coincide": "5/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 4,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "9/20",
+   "tokens": "sin excedente",
+   "coincide": "27/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 5,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 5,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "14/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 5,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "14/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 5,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "4/20",
+   "tokens": "sin excedente",
+   "coincide": "3/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 5,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "7/20",
+   "tokens": "sin excedente",
+   "coincide": "7/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 5,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "22/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 6,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 6,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "9/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "16/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 6,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "9/20",
+   "tokens": "sin excedente",
+   "coincide": "12/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 6,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "0/20",
+   "tokens": "sin excedente",
+   "coincide": "0/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 6,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "4/20",
+   "tokens": "sin excedente",
+   "coincide": "5/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 6,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "7/20",
+   "tokens": "sin excedente",
+   "coincide": "19/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 7,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 7,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "12/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 7,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "13/20",
+   "tokens": "sin excedente",
+   "coincide": "15/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 7,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "0/20",
+   "tokens": "sin excedente",
+   "coincide": "0/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 7,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "7/20",
+   "tokens": "sin excedente",
+   "coincide": "6/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 7,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "8/20",
+   "tokens": "sin excedente",
+   "coincide": "23/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 8,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 8,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "13/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 8,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "sin excedente",
+   "coincide": "14/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 8,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "0/20",
+   "tokens": "sin excedente",
+   "coincide": "0/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 8,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "6/20",
+   "tokens": "sin excedente",
+   "coincide": "5/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 8,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "23/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 9,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 9,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "8/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "15/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 9,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "10/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 9,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "3/20",
+   "tokens": "sin excedente",
+   "coincide": "2/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 9,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "3/20",
+   "tokens": "sin excedente",
+   "coincide": "3/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 9,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "9/20",
+   "tokens": "sin excedente",
+   "coincide": "26/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 10,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "13/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 10,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "12/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "14/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 10,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "12/20",
+   "tokens": "sin excedente",
+   "coincide": "12/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 10,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 1,
+   "ref_errores": 0,
+   "tareas": "2/20",
+   "tokens": "sin excedente",
+   "coincide": "2/29",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 10,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "6/20",
+   "tokens": "sin excedente",
+   "coincide": "6/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 10,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "13/20",
+   "tokens": "sin excedente",
+   "coincide": "23/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 11,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 11,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "14/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 11,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "11/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 11,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "falla",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "2/20",
+   "tokens": "sin excedente",
+   "coincide": "2/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 11,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "4/20",
+   "tokens": "sin excedente",
+   "coincide": "3/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 11,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "6/20",
+   "tokens": "sin excedente",
+   "coincide": "19/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 12,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "14/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 12,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "11/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 12,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "13/20",
+   "tokens": "sin excedente",
+   "coincide": "13/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 12,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "2/20",
+   "tokens": "sin excedente",
+   "coincide": "2/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 12,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "5/20",
+   "tokens": "sin excedente",
+   "coincide": "5/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 12,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "12/20",
+   "tokens": "sin excedente",
+   "coincide": "23/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 13,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "12/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 13,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "18/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 13,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "sin excedente",
+   "coincide": "13/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 13,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 1,
+   "ref_errores": 0,
+   "tareas": "3/20",
+   "tokens": "sin excedente",
+   "coincide": "3/29",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 13,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "2/20",
+   "tokens": "sin excedente",
+   "coincide": "4/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 13,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "23/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 14,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "14/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 14,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "14/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "17/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 14,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "13/20",
+   "tokens": "sin excedente",
+   "coincide": "15/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 14,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "2/20",
+   "tokens": "sin excedente",
+   "coincide": "2/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 14,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "5/20",
+   "tokens": "sin excedente",
+   "coincide": "6/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 14,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "13/20",
+   "tokens": "sin excedente",
+   "coincide": "26/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 15,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "13/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 15,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "12/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "15/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 15,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "12/20",
+   "tokens": "sin excedente",
+   "coincide": "13/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 15,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 1,
+   "ref_errores": 0,
+   "tareas": "1/20",
+   "tokens": "sin excedente",
+   "coincide": "1/29",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 15,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "8/20",
+   "tokens": "sin excedente",
+   "coincide": "7/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 15,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "13/20",
+   "tokens": "sin excedente",
+   "coincide": "23/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 16,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 16,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "16/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 16,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "9/20",
+   "tokens": "sin excedente",
+   "coincide": "11/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 16,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 1,
+   "ref_errores": 0,
+   "tareas": "1/20",
+   "tokens": "sin excedente",
+   "coincide": "0/29",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 16,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "4/20",
+   "tokens": "sin excedente",
+   "coincide": "4/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 0,
+   "semilla": 16,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "7/20",
+   "tokens": "sin excedente",
+   "coincide": "18/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 17,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 17,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "9/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "13/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 17,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "8/20",
+   "tokens": "sin excedente",
+   "coincide": "12/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 17,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "3/20",
+   "tokens": "sin excedente",
+   "coincide": "3/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 17,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "6/20",
+   "tokens": "sin excedente",
+   "coincide": "5/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 1,
+   "semilla": 17,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "sin excedente",
+   "coincide": "24/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 18,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "12/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 18,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "13/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 18,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "9/20",
+   "tokens": "sin excedente",
+   "coincide": "11/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 18,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "falla",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "4/20",
+   "tokens": "sin excedente",
+   "coincide": "4/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 18,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "7/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 2,
+   "semilla": 18,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "sin excedente",
+   "coincide": "22/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 19,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "13/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 19,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "12/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "13/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 19,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "12/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 19,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "2/20",
+   "tokens": "sin excedente",
+   "coincide": "2/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 19,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "exactitud",
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "3/20",
+   "tokens": "sin excedente",
+   "coincide": "3/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 3,
+   "semilla": 19,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "11/20",
+   "tokens": "sin excedente",
+   "coincide": "26/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 20,
+   "proveedor": "honesto",
+   "detectado": false,
+   "controles": [],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "30/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 20,
+   "proveedor": "prompt-oculto",
+   "detectado": true,
+   "controles": [
+    "tokens",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "excedente constante de 18 tokens",
+   "coincide": "16/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 20,
+   "proveedor": "cuantizado-q4",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "10/20",
+   "tokens": "sin excedente",
+   "coincide": "13/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 20,
+   "proveedor": "cuantizado-q2",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "2/20",
+   "tokens": "sin excedente",
+   "coincide": "1/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 20,
+   "proveedor": "sustituido-0.5b",
+   "detectado": true,
+   "controles": [
+    "filtra",
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "4/20",
+   "tokens": "sin excedente",
+   "coincide": "5/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "rep": 4,
+   "semilla": 20,
+   "proveedor": "desvia-30-a-0.5b",
+   "detectado": true,
+   "controles": [
+    "coincide"
+   ],
+   "errores": 0,
+   "ref_errores": 0,
+   "tareas": "9/20",
+   "tokens": "sin excedente",
+   "coincide": "22/30",
+   "piso_coincide": "30/30",
+   "piso_marcado": false
+  }
+ ],
+ "resumen": [
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "proveedor": "honesto",
+   "detectados": 0,
+   "n": 20,
+   "ic95": [
+    0.0,
+    0.161
+   ],
+   "controles": {},
+   "con_errores": 0
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "proveedor": "prompt-oculto",
+   "detectados": 20,
+   "n": 20,
+   "ic95": [
+    0.839,
+    1.0
+   ],
+   "controles": {
+    "tokens": 20,
+    "coincide": 20
+   },
+   "con_errores": 0
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "proveedor": "cuantizado-q4",
+   "detectados": 20,
+   "n": 20,
+   "ic95": [
+    0.839,
+    1.0
+   ],
+   "controles": {
+    "coincide": 20
+   },
+   "con_errores": 0
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "proveedor": "cuantizado-q2",
+   "detectados": 20,
+   "n": 20,
+   "ic95": [
+    0.839,
+    1.0
+   ],
+   "controles": {
+    "exactitud": 14,
+    "coincide": 20,
+    "falla": 2
+   },
+   "con_errores": 4
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "proveedor": "sustituido-0.5b",
+   "detectados": 20,
+   "n": 20,
+   "ic95": [
+    0.839,
+    1.0
+   ],
+   "controles": {
+    "filtra": 19,
+    "coincide": 20,
+    "exactitud": 2
+   },
+   "con_errores": 0
+  },
+  {
+   "tramposo": "reconoce el juego fijo",
+   "juego": "ciego",
+   "proveedor": "desvia-30-a-0.5b",
+   "detectados": 8,
+   "n": 20,
+   "ic95": [
+    0.219,
+    0.613
+   ],
+   "controles": {
+    "coincide": 8
+   },
+   "con_errores": 0
+  }
+ ]
+}

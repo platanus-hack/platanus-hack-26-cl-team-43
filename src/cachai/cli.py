@@ -143,6 +143,7 @@ def _audit(model: str, targets: list[Target], reference: str, http: httpx.Client
           + ("juego público" if seed is None else f"juego ciego, semilla {seed}"))
     replies, spend = scan.run(
         targets, probes, http=http, max_usd=args.max_usd,
+        extra_tokens=args.extra_tokens,
         on_reply=lambda r: print("." if r.ok else "x", end="", flush=True))
     print()
     cards = checks.score(probes, replies, reference, floor)
@@ -167,6 +168,8 @@ def cmd_demo(args) -> None:
     """Un mundo en memoria: el modelo de juguete, un proveedor honesto y dos tramposos."""
     import warnings
 
+    # starlette avisa que su TestClient pasará a httpx2; la demo no depende de eso
+    warnings.filterwarnings("ignore", message=r".*starlette\.testclient.*")
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     from fastapi.testclient import TestClient
 
@@ -189,7 +192,10 @@ def cmd_demo(args) -> None:
           "proveedor honesto,\nuno que agrega un prompt oculto y uno que responde con un "
           "modelo más chico con el mismo nombre.\n")
     _audit("toy-large", targets, "referencia", router, args)
-    print("\nSiguiente paso: cachai scan con tus endpoints (ver examples/ en el repo).")
+    print("\nSiguiente paso: auditar tus endpoints. Para tener el comando instalado:\n"
+          "  uv tool install git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43\n"
+          "  cachai scan z-ai/glm-5.3            # necesita OPENROUTER_API_KEY\n"
+          "Más ejemplos: https://github.com/platanus-hack/platanus-hack-26-cl-team-43/tree/main/examples")
 
 
 def cmd_toy(args) -> None:
@@ -198,6 +204,17 @@ def cmd_toy(args) -> None:
     from cachai.toy import create_toy
 
     uvicorn.run(create_toy(), host="127.0.0.1", port=args.port, log_level="warning")
+
+
+def cmd_serve(args) -> None:
+    import uvicorn
+
+    os.environ.setdefault("CACHAI_OLLAMA_URL", args.ollama_url)
+    os.environ["PORT"] = str(args.port)
+    from cachai.serve import create_app
+
+    print(f"demo en vivo en http://{args.host}:{args.port}  (Ollama: {args.ollama_url})")
+    uvicorn.run(create_app(), host=args.host, port=args.port, log_level="warning")
 
 
 def cmd_villain(args) -> None:
@@ -255,6 +272,9 @@ def _audit_options(p) -> None:
     p.add_argument("--max-usd", type=float, default=SCAN_DEFAULTS["max_usd"],
                    help="tope de gasto de la auditoría en USD")
     p.add_argument("--timeout", type=float, default=120)
+    p.add_argument("--extra-tokens", type=int, default=0,
+                   help="tokens de salida de más por prueba, para modelos que razonan "
+                        "siempre y gastan el límite antes de responder")
     p.add_argument("--out", default=SCAN_DEFAULTS["out"])
 
 
@@ -295,6 +315,14 @@ def main(argv: list[str] | None = None) -> None:
                        "un proveedor honesto y dos tramposos de juguete")
     _audit_options(p)
     p.set_defaults(fn=cmd_demo, out="audit/demo")
+
+    p = sub.add_parser("serve", help="la demo en vivo: tres proveedores (uno tramposo) sobre "
+                       "Qwen2.5 en Ollama, y una página que los audita")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
+    p.add_argument("--ollama-url", default=os.environ.get("CACHAI_OLLAMA_URL",
+                                                         "http://127.0.0.1:11434/v1"))
+    p.set_defaults(fn=cmd_serve)
 
     p = sub.add_parser("villain", help="proveedor tramposo propio, para la demo")
     p.add_argument("--upstream", required=True, help="URL base del proveedor real (…/v1)")
