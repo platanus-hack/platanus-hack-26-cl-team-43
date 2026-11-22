@@ -1,0 +1,26 @@
+discovery_queries:
+  - jailbreak llm
+  - topic:jailbreak
+  - topic:llm-jailbreak
+  - topic:prompt-injection
+  - '"DAN" prompt chatgpt'
+
+code_search_markers:
+  - ignore all previous instructions
+  - developer mode enabled
+  - GODMODE
+  - you are DAN
+  - "[INSERT PROMPT HERE]"
+
+seed_watchlist:
+  - verazuo/jailbreak_llms
+  - elder-plinius/L1B3RT4S
+  - 0xk1h0/ChatGPT_DAN
+
+hf_keywords:
+  - jailbreak
+  - red-team
+  - redteam
+  - adversarial
+  - prompt-injection
+  - harmful
