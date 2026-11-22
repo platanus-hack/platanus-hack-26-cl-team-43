@@ -8,6 +8,91 @@ A small web dashboard shows the feed, the per-model results, sources and spend.
 One process runs everything: an APScheduler (collectors, raw-item processing every
 minute, daily digest at 09:00 America/Santiago), a tester thread, and the web server.
 
+## Before going live: what you need to do
+
+The code is built and tested (`uv run pytest`), but it has never run against the real
+APIs. These steps need your accounts and keys, so nobody can do them for you. Do them
+in order; `docs/demo.md` has the stage script and fallbacks.
+
+### 1. Get the keys
+
+| Variable | Where to get it | Required? |
+|---|---|---|
+| `GITHUB_TOKEN` | GitHub → Settings → Developer settings → fine-grained token, public repos read-only | yes |
+| `OPENROUTER_API_KEY` | openrouter.ai → Keys. Add credits; a 401/402 pauses all testing | yes |
+| `HF_TOKEN` | huggingface.co → Settings → Access Tokens (read) | optional; without it, or with a bad one, some datasets are silently skipped |
+| `RESEND_API_KEY`, `EMAIL_FROM` | resend.com → API Keys; `EMAIL_FROM` must use a domain verified there | needed for login links and email alerts |
+| `TWILIO_SID`, `TWILIO_TOKEN`, `TWILIO_WHATSAPP_FROM` | Twilio console → Messaging → Try WhatsApp (sandbox number) | needed for WhatsApp alerts |
+| `SECRET_KEY` | `python -c "import secrets; print(secrets.token_urlsafe(48))"` | yes, at least 32 characters, or the app won't start |
+
+Login to the dashboard is by email magic link, so **without Resend nobody can log in**.
+
+### 2. Fill in `.env`
+
+```sh
+cp .env.example .env
+```
+
+- Add the keys above.
+- `EXTRACTOR_MODEL` and `JUDGE_MODEL` are empty in the template. Set both to a cheap,
+  fast OpenRouter model id that supports JSON-schema output (a Haiku-class model).
+  Check the exact id on openrouter.ai/models.
+- `ALLOWED_EMAILS`: the team's emails, comma-separated.
+- `BASE_URL`: the public URL once deployed (alert links point there).
+- `DAILY_BUDGET_USD`: start at 20. It caps extraction and testing together.
+
+### 3. Check the model list
+
+`config/models.yaml` was filled from OpenRouter's catalog on 2026-11-21. Confirm these
+two choices on openrouter.ai/models and correct them if needed:
+
+- `google/gemini-4-neon`, picked as the "Gemini Pro" slot because Gemini 4 has no "Pro" model
+- `openai/gpt-6.2-astra`, the non-pro variant
+
+A model id that returns "not found" is switched off automatically. Changing its
+`openrouter_id` in the yaml and restarting turns it back on.
+
+### 4. Run it locally with real keys
+
+Follow **Local setup** below. Then:
+
+1. Log in at `http://localhost:8000/login` (the magic link arrives by email).
+2. Open `/sources`. Every collector should have a recent run and no error. A GitHub
+   or OpenRouter key problem shows up there or in the server log.
+3. Within a few minutes, `/feed` should show new candidates moving from `queued` to
+   a result.
+4. Check the spend on `/`: it should stay well under the cap.
+
+### 5. Set up alerts
+
+1. On every team phone, join the Twilio WhatsApp sandbox: send the `join <code>` message
+   shown in the Twilio console to the sandbox number.
+2. Add each person as a subscriber with `min_severity = 0`, so they also get the
+   "[open model]" alerts the demo may rely on. The exact SQL is in `docs/demo.md` §1.
+   Phones go in E.164 format (`+569...`).
+
+### 6. Prepare the demo repo
+
+Details are in `docs/demo.md` §2–3.
+
+1. Create a public GitHub repo for the demo and add it on `/sources` (it becomes a `seed`
+   repo).
+2. Choose a public, known jailbreak *template* with a fill-in slot and nothing harmful
+   in its own text.
+3. Dry-run it the day before on a separate scratch repo (not a branch: only the default
+   branch is read). Note which models it breaks. If no frontier model breaks, the
+   "[open model]" alert is the fallback.
+
+### 7. Deploy and rehearse
+
+1. Create a hosted Postgres with `pgvector` (Supabase or Neon) and set `DATABASE_URL`.
+2. Build and deploy the Docker image (see **Deploy** below) with the full `.env`.
+3. Run `radar seed-corpus` once against the hosted database.
+4. Rehearse the stage script in `docs/demo.md` §4 against the deployed instance. Fill in
+   the timings table in §7.
+5. Don't restart or redeploy in the 15 minutes before going on stage: a test
+   interrupted by a restart only resumes after 15 minutes.
+
 ## Local setup
 
 Requires Docker and [uv](https://docs.astral.sh/uv/).
