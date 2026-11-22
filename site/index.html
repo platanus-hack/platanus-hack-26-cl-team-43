@@ -152,6 +152,7 @@ footer .equipo{display:flex;flex-wrap:wrap;gap:4px 16px}
   .base th,.base td{padding-inline:7px;white-space:normal}
   .base th:first-child,.base td:first-child{padding-left:14px}
   .base th{font-size:11.5px;vertical-align:bottom}
+  .base.ancha th:nth-child(3),.base.ancha td:nth-child(3),.base.ancha th:nth-child(6),.base.ancha td:nth-child(6){display:none}
 }
 @media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto} *{transition:none!important} }
 </style>
@@ -284,6 +285,47 @@ footer .equipo{display:flex;flex-wrap:wrap;gap:4px 16px}
         <div class="pie-tarjeta"><span>Cada celda cuenta las auditorías que marcaron al proveedor, sobre 30 con semillas distintas.</span><span>El upstream es un modelo de juguete con reglas fijas: prueba que el mecanismo funciona, no es un hallazgo sobre ningún proveedor.</span></div>
       </div>
       <p class="texto"><b>Un benchmark fijo no detecta a un proveedor que lo reconoce:</b> 0 de 120 auditorías con trampa. El juego ciego lo marca en todas, salvo el desvío parcial con 20 tareas, que con 80 pasa de 6 a 30 de 30.</p>
+    </div>
+  </section>
+
+  <section class="fila" id="resultados">
+    <div class="pila">
+      <h2 class="h2">Medido con modelos reales.</h2>
+      <div class="dos">
+        <p class="texto">Primero contra <b>un modelo real cuya verdad conocemos</b>: Qwen2.5 1.5B servido por nosotros, con seis proveedores propios que dicen servir lo mismo. Uno es honesto y cinco sirven otra cosa con el mismo nombre.</p>
+        <p class="texto">Después contra <b>proveedores reales</b>: los cinco endpoints más baratos de GLM-5.3 en OpenRouter, comparados con el del autor. 364 respuestas, ningún error, 0,16 dólares.</p>
+      </div>
+      <div class="tarjeta">
+        <div class="cab"><span class="archivo">results/linea-base/ollama-qwen2.5-t20.md</span><span class="insignia">20 auditorías por celda</span></div>
+        <div class="rueda"><table class="base">
+          <thead><tr><th>Lo que sirve el proveedor</th><th>Marcado como distinguible</th><th>Qué lo delató</th></tr></thead>
+          <tbody>
+            <tr><td>Lo mismo que la referencia (control honesto)</td><td>0/20</td><td>Nada</td></tr>
+            <tr><td>Agrega un prompt oculto</td><td>20/20</td><td>Tokens de prompt de más y coincidencia</td></tr>
+            <tr><td>La versión cuantizada a 4 bits</td><td>20/20</td><td>Solo la coincidencia con la referencia</td></tr>
+            <tr><td>La versión cuantizada a 2 bits</td><td>20/20</td><td>Coincidencia y exactitud</td></tr>
+            <tr><td>Un modelo tres veces más chico</td><td>20/20</td><td>Coincidencia y secreto filtrado</td></tr>
+            <tr><td>Desvía el 30 % del tráfico al modelo chico</td><td class="aviso">8/20</td><td>Coincidencia</td></tr>
+          </tbody>
+        </table></div>
+        <div class="pie-tarjeta"><span>La cuantización a 4 bits acierta casi lo mismo que la referencia: la exactitud nunca la marcó. La delató que sus respuestas dejaron de coincidir con las de la referencia.</span><span>Un modelo chico en CPU, todos los proveedores en la misma máquina. Mide al auditor, no es un hallazgo sobre ningún proveedor.</span></div>
+      </div>
+      <div class="tarjeta">
+        <div class="cab"><span class="archivo">results/proveedores/ · z-ai/glm-5.3</span><span class="insignia">22 de noviembre de 2026</span></div>
+        <div class="rueda"><table class="base ancha">
+          <thead><tr><th>Endpoint</th><th>Declarado</th><th>Prompt oculto</th><th>Tareas correctas</th><th>Tool calls válidas</th><th>Resultado</th></tr></thead>
+          <tbody>
+            <tr><td>Z.AI (el autor, referencia)</td><td>fp8</td><td></td><td>20/20</td><td class="aviso">5/8</td><td>referencia</td></tr>
+            <tr><td>Wafer (us)</td><td>fp4</td><td>No</td><td>20/20</td><td>8/8</td><td>sin desviación detectada</td></tr>
+            <tr><td>Wafer (fp4)</td><td>fp4</td><td>No</td><td>20/20</td><td>8/8</td><td>sin desviación detectada</td></tr>
+            <tr><td>Decart</td><td>fp4</td><td>No</td><td>20/20</td><td>8/8</td><td>sin desviación detectada</td></tr>
+            <tr><td>SiliconFlow</td><td>fp8</td><td>No</td><td>19/20</td><td class="aviso">5/8</td><td>sin desviación detectada</td></tr>
+            <tr><td>Novita</td><td>fp8</td><td>No</td><td>20/20</td><td class="aviso">5/8</td><td>sin desviación detectada</td></tr>
+          </tbody>
+        </table></div>
+        <div class="pie-tarjeta"><span>El endpoint del autor, SiliconFlow y Novita devuelven un objeto anidado de la tool call como texto. La ficha no marca a nadie porque la que falla es la referencia.</span><span>Una auditoría, una semilla. Este modelo no repite sus propias frases a temperatura 0, así que el control que delata una cuantización aquí no dice nada.</span></div>
+      </div>
+      <p class="texto"><b>Ningún endpoint agrega un prompt oculto ni se distingue de la referencia.</b> La ficha completa, las respuestas crudas y cómo leerlas están en <a href="https://github.com/platanus-hack/platanus-hack-26-cl-team-43/tree/main/results/proveedores">results/proveedores</a>.</p>
     </div>
   </section>
 

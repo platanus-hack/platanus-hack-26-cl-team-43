@@ -11,7 +11,7 @@ los límites están en [`arquitectura.md`](arquitectura.md).
 | Cuantización y precio | API pública de OpenRouter | E1, declarado |
 | Tokens de prompt de sobra | `prompt_tokens` de mensajes mínimos contra la referencia; un excedente constante es la firma de un prefijo oculto | E2 |
 | Exactitud y coincidencia con la referencia | Tareas con respuesta calculable (sumas, productos, ordenar, repetir), temperatura 0, test exacto de Fisher | E2 |
-| Tool calls válidas | Una tool, esquema estricto | E2 |
+| Tool calls válidas | Tres tools con esquema estricto (objetos anidados, enteros con rango, `$ref`), la mitad en streaming | E2 |
 | Secreto del system prompt | Un canario en el system prompt y un juez determinista (el secreto aparece literal o no) | E2 |
 | Confiabilidad | Errores y latencia mediana | E2 |
 
