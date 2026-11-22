@@ -107,6 +107,6 @@ def fingerprint(messages: list[dict]) -> str:
     return "\n".join(str(m.get("content") or "") for m in messages)
 
 
-def public_fingerprints() -> frozenset[str]:
+def public_fingerprints(n_tasks: int = 20) -> frozenset[str]:
     """Lo que un proveedor tramposo puede memorizar del juego público."""
-    return frozenset(fingerprint(p.as_messages()) for p in build(None))
+    return frozenset(fingerprint(p.as_messages()) for p in build(None, n_tasks))

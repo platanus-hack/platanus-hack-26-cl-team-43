@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 860" width="1280" height="860" font-family="Poppins, Inter, Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#68ddfd"/><stop offset="1" stop-color="#9e8cfc"/></linearGradient>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8a8984"/>
+    </marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f87171"/>
+    </marker>
+    <marker id="c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#68ddfd"/>
+    </marker>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Anton&amp;family=Poppins:wght@400;500;600;700&amp;display=swap');
+      .title{font-family:Anton, Impact, sans-serif;font-size:38px;fill:#ededed;letter-spacing:.01em}
+      .sub{font-size:13.5px;fill:#a1a09a}
+      .t{font-size:13px;fill:#ededed}
+      .s{font-size:11.5px;fill:#a1a09a}
+      .h{font-size:15px;font-weight:700;fill:#ededed}
+      .k{font-size:11px;font-weight:700;fill:url(#g);letter-spacing:.14em}
+      .red{font-size:12.5px;font-weight:600;fill:#f87171}
+      .cy{font-size:11.5px;fill:#68ddfd}
+      .ln{stroke:#8a8984;stroke-width:1.5;fill:none}
+      .box{fill:#121211;stroke:#2c2c2a;stroke-width:1}
+      .step{fill:#161615;stroke:#9e8cfc;stroke-width:1.2}
+      .num{font-family:Anton, Impact, sans-serif;font-size:22px;fill:url(#g)}
+    </style>
+  </defs>
+
+  <rect width="1280" height="860" fill="#0a0a0a"/>
+
+  <!-- título -->
+  <text x="40" y="62" class="title">CACHAI · <tspan fill="url(#g)">AUDITOR</tspan> DE PROVEEDORES DE TOKENS</text>
+  <text x="40" y="90" class="sub">Las mismas pruebas, generadas en el momento, a cada endpoint y a una referencia. Controles deterministas, sin juez LLM. Una ficha por endpoint con su evidencia.</text>
+
+  <!-- AUDITOR -->
+  <rect x="40" y="118" width="560" height="470" rx="14" fill="#0e0e0d" stroke="url(#g)" stroke-width="1.6"/>
+  <text x="62" y="146" class="k">AUDITOR · src/radar/audit/ · LO CORRE EL COMPRADOR</text>
+
+  <g>
+    <rect x="62" y="162" width="516" height="62" rx="8" class="step"/>
+    <text x="80" y="200" class="num">1</text>
+    <text x="108" y="187" class="h">Lo declarado (E1) · endpoints.py</text>
+    <text x="108" y="208" class="s">cuantización y precio de cada endpoint · API pública de OpenRouter</text>
+  </g>
+  <g>
+    <rect x="62" y="234" width="516" height="62" rx="8" class="step"/>
+    <text x="80" y="272" class="num">2</text>
+    <text x="108" y="259" class="h">Juego ciego · suite.py</text>
+    <text x="108" y="280" class="s">semilla nueva en cada auditoría · 38 pruebas con respuesta calculable</text>
+  </g>
+  <g>
+    <rect x="62" y="306" width="516" height="62" rx="8" class="step"/>
+    <text x="80" y="344" class="num">3</text>
+    <text x="108" y="331" class="h">Las mismas pruebas a todos · client.py · scan.py</text>
+    <text x="108" y="352" class="s">proveedor fijado · temperatura 0 · tope de gasto · un error es un dato</text>
+  </g>
+  <g>
+    <rect x="62" y="378" width="516" height="62" rx="8" class="step"/>
+    <text x="80" y="416" class="num">4</text>
+    <text x="108" y="403" class="h">Controles deterministas · checks.py</text>
+    <text x="108" y="424" class="s">tokens · exactitud · tool calls · canario · Fisher exacto, α = 0,01</text>
+  </g>
+  <g>
+    <rect x="62" y="450" width="516" height="62" rx="8" class="step"/>
+    <text x="80" y="488" class="num">5</text>
+    <text x="108" y="475" class="h">Ficha por endpoint · ficha.py</text>
+    <text x="108" y="496" class="s">E1 declarado · E2 medido · límites · semilla · SHA-256 de las respuestas crudas</text>
+  </g>
+  <path d="M320,224 V234 M320,296 V306 M320,368 V378 M320,440 V450" class="ln" marker-end="url(#a)"/>
+
+  <text x="62" y="540" class="t">Veredicto: «distinguible de la referencia» o «sin desviación detectada».</text>
+  <text x="62" y="562" class="s">Nunca «es el mismo modelo». Nunca un certificado de privacidad.</text>
+
+  <!-- OpenRouter -->
+  <rect x="660" y="262" width="190" height="78" rx="10" class="box"/>
+  <text x="678" y="292" class="h">OpenRouter</text>
+  <text x="678" y="313" class="s">provider.only</text>
+  <text x="678" y="330" class="s">sin fallback</text>
+  <path d="M578,337 H660" class="ln" marker-end="url(#a)"/>
+  <text x="606" y="328" class="s">pruebas</text>
+  <path d="M600,193 C640,193 640,280 660,285" class="ln" marker-end="url(#a)"/>
+  <text x="612" y="186" class="s">lee</text>
+
+  <!-- PROVEEDORES -->
+  <rect x="900" y="118" width="340" height="360" rx="14" fill="#0e0e0d" stroke="#3a3a37" stroke-width="1.2" stroke-dasharray="6 5"/>
+  <text x="922" y="146" class="k">FUERA DE NUESTRO CONTROL</text>
+  <text x="922" y="172" class="h">Proveedores del mismo modelo</text>
+  <rect x="922" y="188" width="296" height="40" rx="7" class="box"/>
+  <text x="938" y="213" class="t">Referencia · first-party (o consenso)</text>
+  <rect x="922" y="236" width="296" height="40" rx="7" class="box"/>
+  <text x="938" y="261" class="t">Endpoint A · cuantización declarada</text>
+  <rect x="922" y="284" width="296" height="40" rx="7" class="box"/>
+  <text x="938" y="309" class="t">Endpoint B · sin cuantización declarada</text>
+  <text x="938" y="346" class="s">… GLM-5.3: 47 endpoints, precios 4,7× distintos</text>
+  <text x="922" y="380" class="red">El adversario puede:</text>
+  <text x="922" y="402" class="s">inyectar un system prompt · desviar tráfico a un</text>
+  <text x="922" y="420" class="s">modelo más barato · romper las tool calls ·</text>
+  <text x="922" y="438" class="s">reconocer las auditorías y portarse bien solo ahí</text>
+  <path d="M850,301 H900" class="ln" marker-end="url(#a)"/>
+
+  <!-- salida de la ficha -->
+  <rect x="660" y="408" width="190" height="104" rx="10" class="box"/>
+  <text x="678" y="436" class="h">Publicación</text>
+  <text x="678" y="458" class="s">results/ (JSON, MD,</text>
+  <text x="678" y="475" class="s">evidencia JSONL)</text>
+  <text x="678" y="496" class="s">blog de CachAI</text>
+  <path d="M578,481 H660" class="ln" marker-end="url(#a)"/>
+
+  <!-- LABORATORIO -->
+  <rect x="40" y="616" width="760" height="204" rx="14" fill="#0e0e0d" stroke="#9e8cfc" stroke-width="1.2"/>
+  <text x="62" y="644" class="k">LABORATORIO · experiment.py · MIDE AL AUDITOR</text>
+  <text x="62" y="670" class="t">Una referencia y cinco proxies propios hacia el mismo upstream (juguete u OpenRouter):</text>
+  <g font-size="12" fill="#ededed">
+    <rect x="62" y="684" width="128" height="34" rx="6" class="box"/><text x="76" y="706">honesto (control)</text>
+    <rect x="198" y="684" width="118" height="34" rx="6" class="box"/><text x="212" y="706">prompt oculto</text>
+    <rect x="324" y="684" width="110" height="34" rx="6" class="box"/><text x="338" y="706">desvía 30 %</text>
+    <rect x="442" y="684" width="116" height="34" rx="6" class="box"/><text x="456" y="706">desvía 100 %</text>
+    <rect x="566" y="684" width="212" height="34" rx="6" class="box"/><text x="580" y="706">prompt oculto + desvía 30 %</text>
+  </g>
+  <text x="62" y="746" class="t">Los tramposos se portan bien si reconocen la auditoría:</text>
+  <text x="62" y="768" class="s">por los prompts exactos del juego fijo, o además por las plantillas del juego ciego (el límite).</text>
+  <text x="62" y="796" class="cy">30 auditorías por celda · juego fijo contra ciego · IC95 de Wilson</text>
+  <path d="M500,616 V588" class="ln" stroke-dasharray="4 4" marker-end="url(#c)"/>
+  <text x="510" y="606" class="cy">usa el mismo auditor</text>
+
+  <!-- MEDICIÓN -->
+  <rect x="830" y="616" width="410" height="204" rx="14" fill="#0e0e0d" stroke="#2c2c2a" stroke-width="1"/>
+  <text x="852" y="644" class="k">MEDICIÓN</text>
+  <text x="852" y="672" class="t">M1 · 21 tests sin red ni claves</text>
+  <text x="852" y="698" class="t">M2 · línea base con el juguete</text>
+  <text x="872" y="718" class="s">benchmark fijo: 0/120 con trampa</text>
+  <text x="872" y="736" class="s">juego ciego: 30/30 (desvío 30 %: 6/30 → 30/30 con 80 tareas)</text>
+  <text x="872" y="754" class="s">control honesto: 0/90 falsas alarmas</text>
+  <text x="852" y="780" class="t">M3 · piso de ruido real · en curso</text>
+  <text x="852" y="804" class="t">M4 · proveedores reales · en curso</text>
+</svg>

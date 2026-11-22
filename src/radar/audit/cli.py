@@ -138,6 +138,28 @@ def cmd_villain(args) -> None:
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
 
 
+def cmd_experimento(args) -> None:
+    from radar.audit import experiment
+
+    if args.toy:
+        up = experiment.toy_upstream()
+        stem = f"juguete-t{args.tasks}"
+    else:
+        if not (args.model and args.small_model and args.provider):
+            sys.exit("sin --toy hacen falta --model, --small-model y --provider")
+        key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not key:
+            sys.exit("OPENROUTER_API_KEY no está definida")
+        up = experiment.openrouter_upstream(args.model, args.small_model, args.provider, key)
+        stem = f"{args.model}@{args.provider}-t{args.tasks}".replace("/", "_")
+    res = experiment.run(up, reps=args.reps, n_tasks=args.tasks, seed0=args.seed,
+                         max_usd=args.max_usd, timeout=args.timeout,
+                         log=lambda m: print(m, file=sys.stderr))
+    j, m = experiment.write(res, Path(args.out), stem)
+    print(m.read_text())
+    print(f"resultados en {j} y {m}")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="cachai", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -178,6 +200,20 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--evade", action="store_true",
                    help="se porta bien con los prompts del juego público")
     p.set_defaults(fn=cmd_villain)
+
+    p = sub.add_parser("experimento",
+                       help="línea base: benchmark fijo contra juego ciego, con tramposos propios")
+    p.add_argument("--toy", action="store_true", help="contra el modelo de juguete, sin claves")
+    p.add_argument("--model", help="modelo honesto en OpenRouter (p. ej. z-ai/glm-5.3)")
+    p.add_argument("--small-model", help="modelo barato al que desvían los tramposos")
+    p.add_argument("--provider", help="tag del proveedor de referencia en OpenRouter")
+    p.add_argument("--reps", type=int, default=20, help="repeticiones por celda")
+    p.add_argument("--tasks", type=int, default=20)
+    p.add_argument("--seed", type=int, default=1, help="semilla de la primera repetición ciega")
+    p.add_argument("--max-usd", type=float, default=5.0)
+    p.add_argument("--timeout", type=float, default=120)
+    p.add_argument("--out", default="results/linea-base")
+    p.set_defaults(fn=cmd_experimento)
 
     p = sub.add_parser("toy", help="modelo de juguete local, para probar sin claves")
     p.add_argument("--port", type=int, default=9101)

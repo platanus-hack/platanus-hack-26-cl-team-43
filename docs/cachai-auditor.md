@@ -80,6 +80,19 @@ uv run cachai scan toy-large --no-openrouter --reference oficial \
 
 Lo que se mida contra el juguete no es un hallazgo: sirve para probar el auditor.
 
+## Experimento de línea base
+
+`cachai experimento` mide al auditor contra cinco proveedores propios (uno honesto y cuatro tramposos que se portan bien cuando reconocen la auditoría), con el juego fijo y con el ciego:
+
+```bash
+uv run cachai experimento --toy --reps 30                 # sin claves, ~2 min
+uv run cachai experimento --toy --reps 30 --tasks 80
+uv run cachai experimento --model z-ai/glm-5.3 --small-model deepseek/deepseek-v4.1-flash \
+  --provider z-ai/fp8 --reps 10 --max-usd 5               # contra OpenRouter, con tope de gasto
+```
+
+Resultados en `results/linea-base/` y su lectura en [`arquitectura.md`](arquitectura.md#6-hallazgos).
+
 ## Estado (21-nov, 23:50)
 
 - Corre de punta a punta contra el juguete y el tramposo; 16 tests propios.

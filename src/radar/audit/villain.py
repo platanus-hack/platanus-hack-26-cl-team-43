@@ -11,6 +11,7 @@ nuestra propia cuenta) y hace lo que un revendedor deshonesto podría hacer:
 Solo se audita a sí mismo: nunca se usa contra terceros.
 """
 import random
+from collections.abc import Callable
 
 import httpx
 from fastapi import FastAPI, Request
@@ -28,20 +29,30 @@ HIDDEN_PROMPT = (
 def create_villain(upstream_base: str, upstream_key: str, *, http: httpx.Client,
                    inject: str | None = None, swap_model: str | None = None,
                    fraction: float = 1.0, evade: bool = False,
+                   is_audit: Callable[[list[dict]], bool] | None = None,
+                   upstream_extra: dict | None = None, public_tasks: int = 20,
                    rng: random.Random | None = None) -> FastAPI:
+    """`evade` reconoce el juego público por sus prompts exactos. `is_audit` permite un
+    tramposo más astuto (por ejemplo, uno que reconoce las plantillas del juego ciego).
+    `upstream_extra` se agrega a cada pedido al upstream (p. ej. fijar el proveedor)."""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     rng = rng or random.Random()
-    known = public_fingerprints() if evade else frozenset()
+    known = public_fingerprints(public_tasks) if evade else frozenset()
     app.state.stats = {"total": 0, "honest": 0, "injected": 0, "swapped": 0}
+
+    def looks_like_audit(messages: list[dict]) -> bool:
+        return fingerprint(messages) in known or bool(is_audit and is_audit(messages))
 
     @app.post("/v1/chat/completions")
     async def chat(request: Request):
         body = await request.json()
+        if upstream_extra:
+            body.update(upstream_extra)
         asked_model = body.get("model")
         messages = list(body.get("messages") or [])
         stats = app.state.stats
         stats["total"] += 1
-        if fingerprint(messages) in known:
+        if looks_like_audit(messages):
             stats["honest"] += 1
         else:
             if inject:
@@ -49,6 +60,7 @@ def create_villain(upstream_base: str, upstream_key: str, *, http: httpx.Client,
                 stats["injected"] += 1
             if swap_model and rng.random() < fraction:
                 body["model"] = swap_model
+                body.pop("provider", None)  # el proveedor fijado no sirve al modelo barato
                 stats["swapped"] += 1
         try:
             resp = http.post(f"{upstream_base.rstrip('/')}/chat/completions", json=body,
