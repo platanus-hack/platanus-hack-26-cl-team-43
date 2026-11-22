@@ -1,0 +1,12 @@
+# OpenRouter ids resolved from https://openrouter.ai/api/v1/models on 2026-11-21.
+models:
+  # Tier 1
+  - {id: claude-opus, openrouter_id: anthropic/claude-opus-5.5, tier: 1, enabled: true}
+  - {id: gpt, openrouter_id: openai/gpt-6.2-astra, tier: 1, enabled: true}
+  - {id: gemini-pro, openrouter_id: google/gemini-4-neon, tier: 1, enabled: true}
+  - {id: grok, openrouter_id: x-ai/grok-4.7, tier: 1, enabled: true}
+  # Tier 2
+  - {id: llama, openrouter_id: meta-llama/llama-4-maverick, tier: 2, enabled: true}
+  - {id: qwen, openrouter_id: qwen/qwen4-max, tier: 2, enabled: true}
+  - {id: deepseek, openrouter_id: deepseek/deepseek-v4-pro-0813, tier: 2, enabled: true}
+  - {id: mistral, openrouter_id: mistralai/mistral-large-4-0, tier: 2, enabled: true}
