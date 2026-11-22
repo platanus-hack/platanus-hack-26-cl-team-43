@@ -17,7 +17,7 @@ Platanus Hack 26: Santiago ft. Buk · Track: 🛡️ AI Security · team-43
 | Entregable | Dónde |
 |---|---|
 | Página del proyecto | https://cachai-ai.vercel.app |
-| Auditor (`cachai scan`) | [`src/radar/audit/`](src/radar/audit/), con 21 tests en [`tests/audit/`](tests/audit/) |
+| Auditor (`cachai scan`) | [`src/cachai/`](src/cachai/), con 21 tests en [`tests/`](tests/) |
 | Diseño y arquitectura | [`docs/arquitectura.md`](docs/arquitectura.md): modelo de amenaza, decisiones con alternativas descartadas, plan de medición y riesgos |
 | Experimento de línea base | [`results/linea-base/`](results/linea-base/): benchmark de prompts fijos contra el juego ciego de Cachai, con un proveedor tramposo propio |
 | Guía de uso | [`docs/cachai-auditor.md`](docs/cachai-auditor.md) |
@@ -76,7 +76,7 @@ En curso a 2026-11-22. Se agrega en `results/proveedores/` con el mismo formato 
 ## Cómo está hecho
 
 ```
-src/radar/audit/   el auditor
+src/cachai/        el auditor
   endpoints.py       lo que declara cada endpoint en OpenRouter (E1) y cuáles auditar
   suite.py           juego público (fijo) y ciego (con semilla): 38 pruebas con respuesta calculable
   client.py          una llamada a un endpoint: proveedor fijado, temperatura 0, nunca lanza
@@ -86,16 +86,13 @@ src/radar/audit/   el auditor
   villain.py         proveedor tramposo propio para la demo: prompt oculto, desvío, evasión
   toy.py             modelo de juguete con reglas fijas, para probar sin claves
   experiment.py      experimento de línea base: benchmark fijo contra juego ciego
-  publish.py         publica la ficha en el blog de CachAI
-tests/audit/       21 tests de punta a punta, sin red ni claves
+tests/             21 tests de punta a punta, sin red ni claves
 results/linea-base/  resultados del experimento (JSON y Markdown)
 ```
 
-Del resto del repo, el auditor reutiliza la clasificación de errores de OpenRouter y el canario con su juez determinista del Jailbreak Radar (`src/radar/llm`, `src/radar/testing`), y publica las fichas en el blog de CachAI (`cachai/`).
-
 ```bash
 uv sync
-uv run pytest -q tests/audit                       # 21 tests, sin red ni claves
+uv run pytest -q                                   # 21 tests, sin red ni claves
 uv run cachai experimento --toy --reps 30          # la línea base, sin claves (~2 min)
 uv run cachai endpoints z-ai/glm-5.3               # lo que declara cada proveedor, sin clave
 uv run cachai scan z-ai/glm-5.3 --providers 6 --max-usd 2   # necesita OPENROUTER_API_KEY
@@ -120,12 +117,3 @@ La demo en vivo con el proveedor tramposo y el ensayo sin claves están en [`doc
   La cuña: auditoría continua, del lado del comprador, con pruebas que el proveedor no puede reconocer de antemano y con el nivel de evidencia de cada dato a la vista.
 - **Mercado.** El gasto empresarial en modelos e inferencia fue de USD 94,2 mil millones a septiembre de 2026 (Menlo Ventures). Estimamos que USD 3,8 a 4,5 mil millones al año van a modelos abiertos por API; cobrando entre 0,5 y 1 % del gasto del comprador, el techo sería de USD 20 a 45 millones al año. Las dos últimas cifras son estimaciones nuestras.
 - **Validación.** Un comprador dijo que lo compraría para elegir proveedores, que no conoce ningún certificado en el que confíe y que hace falta un estándar propio, no una ISO. Un proveedor contó que pierde ventas porque le piden certificaciones que no tiene. Es una entrevista por lado: no está validado cuánto pagarían ni quién firma la compra.
-
-## Otros componentes del repo
-
-| Carpeta | Qué es | Autor | Documentación |
-|---|---|---|---|
-| raíz (`src/radar`, `config/`, `tests/`) | **Jailbreak Radar**: recolecta prompts de jailbreak públicos, los prueba contra modelos y alerta | Mauricio | [`docs/radar.md`](docs/radar.md) |
-| [`cachai/`](cachai/) | **CachAI**: plataforma multiagente que audita modelos nuevos y publica reportes en un blog | Federico | [`cachai/README.md`](cachai/README.md) |
-
-Las dos partes corren por separado, cada una con su propia base de datos. Ambas usan el puerto 8000 por defecto; por eso CachAI se levanta con `API_PORT=8001`.

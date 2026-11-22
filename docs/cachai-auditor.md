@@ -1,17 +1,8 @@
 # Cachai auditor: cómo se usa
 
 Audita los endpoints que sirven un mismo modelo open-weight y escribe una ficha por
-corrida. La idea y sus límites están en el repo de research
-(`docs/README-cachai-auditor.md`). Código en `src/radar/audit/`, tests en `tests/audit/`.
-
-## Qué reutiliza de lo que ya había
-
-| Pieza existente | Para qué se usa acá |
-|---|---|
-| Jailbreak Radar: clasificación de errores de OpenRouter (`radar.llm.openrouter`) | Distinguir modelo inexistente, clave sin crédito y fallas del proveedor |
-| Jailbreak Radar: canario y su juez determinista (`radar.testing`) | Medir si el endpoint filtra el secreto del system prompt, sin juez LLM |
-| CachAI de Fede: blog y `POST /api/posts` | Publicar la ficha como reporte (`--publish`) |
-| CachAI de Fede: `litellm/config.yaml` ya apunta a 50x | 50x entra como un `--direct` más |
+corrida. Código en `src/cachai/` y tests en `tests/`. El diseño, el modelo de amenaza y
+los límites están en [`arquitectura.md`](arquitectura.md).
 
 ## Qué mide
 
@@ -21,7 +12,7 @@ corrida. La idea y sus límites están en el repo de research
 | Tokens de prompt de sobra | `prompt_tokens` de mensajes mínimos contra la referencia; un excedente constante es la firma de un prefijo oculto | E2 |
 | Exactitud y coincidencia con la referencia | Tareas con respuesta calculable (sumas, productos, ordenar, repetir), temperatura 0, test exacto de Fisher | E2 |
 | Tool calls válidas | Una tool, esquema estricto | E2 |
-| Secreto del system prompt | Canario del Radar | E2 |
+| Secreto del system prompt | Un canario en el system prompt y un juez determinista (el secreto aparece literal o no) | E2 |
 | Confiabilidad | Errores y latencia mediana | E2 |
 
 Un endpoint queda **distinguible de la referencia** si tiene excedente de tokens o si
@@ -43,8 +34,7 @@ uv run cachai scan deepseek/deepseek-v4.1-flash --only wafer/us,sail-research/fp
 - Por defecto el juego de pruebas es ciego: se genera con una semilla que queda en la
   ficha. `--seed N` lo repite; `--public` usa el juego fijo.
 - La ficha queda en `audit/fichas/` (JSON, Markdown y las respuestas crudas en JSONL,
-  con su SHA-256). `--publish` la sube al blog de CachAI; necesita `INTERNAL_API_TOKEN`
-  y `CACHAI_API_URL` (por defecto `http://localhost:8001`).
+  con su SHA-256).
 
 ## Demo con el proveedor tramposo
 
@@ -93,9 +83,9 @@ uv run cachai experimento --model z-ai/glm-5.3 --small-model deepseek/deepseek-v
 
 Resultados en `results/linea-base/` y su lectura en [`arquitectura.md`](arquitectura.md#6-hallazgos).
 
-## Estado (21-nov, 23:50)
+## Estado (22-nov)
 
-- Corre de punta a punta contra el juguete y el tramposo; 16 tests propios.
+- Corre de punta a punta contra el juguete y el tramposo; 21 tests (`uv run pytest -q`).
 - `cachai endpoints` está probado contra la API real de OpenRouter.
 - **Nunca corrió contra proveedores reales**: no había clave en `.env`. Falta confirmar
   con una llamada que OpenRouter devuelve `prompt_tokens` nativos con el proveedor
@@ -104,4 +94,5 @@ Resultados en `results/linea-base/` y su lectura en [`arquitectura.md`](arquitec
 - Un proveedor que además falsee el `usage` no deja excedente de tokens; ahí solo queda
   la prueba de comportamiento.
 - Una sustitución del 30 % con 20 tareas no siempre se detecta por exactitud sola; por
-  eso hay una prueba que suma todos los controles. `--tasks 80` da más potencia.
+  eso hay una prueba que suma todos los controles. Medido con el juguete: 6/30 con 20
+  tareas y 30/30 con `--tasks 80`.

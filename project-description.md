@@ -43,6 +43,6 @@ El villano es un proveedor tramposo propio: un proxy que agrega un prompt oculto
 
 ## Qué hay en el repo
 
-- **Cachai auditor** (`src/radar/audit/`): el comando `cachai`, los controles y el proveedor tramposo.
-- **Jailbreak Radar** (`src/radar/`): recolecta prompts de jailbreak públicos y los prueba contra modelos. El auditor reutiliza su cliente y su prueba de canario.
-- **Blog de reportes** (`cachai/`): plataforma donde se publican las fichas.
+- **Auditor** (`src/cachai/`): el comando `cachai`, los controles, la ficha y el proveedor tramposo de la demo.
+- **Experimento de línea base** (`results/linea-base/`): benchmark de prompts fijos contra el juego ciego.
+- **Diseño** (`docs/arquitectura.md`): modelo de amenaza, decisiones, medición y riesgos.

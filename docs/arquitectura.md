@@ -68,13 +68,13 @@ El adversario es el proveedor. Controla el servidor, ve cada petición y puede c
 
 Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, que mide al auditor contra proveedores tramposos propios; y la **ficha**, que publica lo medido con su evidencia.
 
-**Auditor** (`src/radar/audit/`)
+**Auditor** (`src/cachai/`)
 1. **Lo declarado** (`endpoints.py`): lee de la API pública de OpenRouter la cuantización y el precio de cada endpoint del modelo, y elige cuáles auditar (el first-party más los más baratos, o los que se pidan).
 2. **Juego de pruebas** (`suite.py`): con una semilla, genera 38 pruebas con respuesta calculable: 6 mensajes mínimos para contar tokens, 20 tareas (suma, producto, ordenar, repetir), 4 tool calls con esquema estricto y 8 canarios (un secreto en el system prompt y un pedido de revelarlo). Sin semilla genera el juego público, siempre igual.
 3. **Cliente** (`client.py`): una llamada por prueba, con el proveedor fijado (`provider.only`, `allow_fallbacks: false`), temperatura 0 y semilla 7. **Nunca lanza**: un error vuelve dentro de la respuesta y se clasifica (clave inválida, sin crédito, falla del proveedor).
 4. **Ejecución** (`scan.py`): los endpoints se auditan en paralelo (hasta cuatro a la vez), con un tope de gasto compartido. Una clave inválida detiene ese endpoint en vez de reintentar.
-5. **Controles** (`checks.py`): de respuestas crudas a una medición por endpoint. Tokens: excedente constante o variable frente a la referencia. Tareas: exactitud con intervalo de Wilson y coincidencia con la referencia. Tool calls: validez estricta. Canario: el juez determinista del Jailbreak Radar. Cada comparación con la referencia es un **test exacto de Fisher a dos colas** con α = 0,01 fijado antes de medir; si ningún control individual dispara, una prueba combinada suma todas las fallas.
-6. **Ficha** (`ficha.py`): JSON y Markdown con lo declarado (E1), lo medido (E2), el motivo de cada marca, los límites, la semilla y el SHA-256 de las respuestas crudas, que se guardan en JSONL. `publish.py` la sube al blog de CachAI.
+5. **Controles** (`checks.py`): de respuestas crudas a una medición por endpoint. Tokens: excedente constante o variable frente a la referencia. Tareas: exactitud con intervalo de Wilson y coincidencia con la referencia. Tool calls: validez estricta. Canario: un juez determinista (el secreto aparece literal en la respuesta o no). Cada comparación con la referencia es un **test exacto de Fisher a dos colas** con α = 0,01 fijado antes de medir; si ningún control individual dispara, una prueba combinada suma todas las fallas.
+6. **Ficha** (`ficha.py`): JSON y Markdown con lo declarado (E1), lo medido (E2), el motivo de cada marca, los límites, la semilla y el SHA-256 de las respuestas crudas, que se guardan en JSONL.
 
 **Laboratorio** (`villain.py`, `toy.py`, `experiment.py`)
 - `villain.py`: proveedor tramposo propio, un proxy compatible con la API de OpenAI que reenvía a un upstream real o al juguete. Puede inyectar un system prompt, desviar una fracción del tráfico a un modelo más barato (reescribiendo el nombre del modelo en la respuesta) y portarse bien cuando reconoce una auditoría: por los prompts exactos del juego público o por las plantillas del ciego.
@@ -99,7 +99,7 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 
 | Medición | Qué es | Métrica y estado |
 |---|---|---|
-| **M1. Tests** | 21 tests de punta a punta en memoria, sin red ni claves (`tests/audit/`) | Todos pasan antes de cada cambio. **Medido**: 21/21. |
+| **M1. Tests** | 21 tests de punta a punta en memoria, sin red ni claves (`tests/`) | Todos pasan antes de cada cambio. **Medido**: 21/21. |
 | **M2. Línea base con el juguete** | Benchmark fijo contra juego ciego, cinco proveedores (uno honesto), 30 repeticiones por celda, 20 y 80 tareas | Detección por trampa con IC95 de Wilson; falsas alarmas del honesto. **Medido** (§6). |
 | **M3. Piso de ruido real** | La misma línea base con un modelo real en OpenRouter: el proxy honesto mide cuántas falsas alarmas da el no determinismo | Falsas alarmas del honesto ≤ 1/30 para aceptar α = 0,01. **En curso.** |
 | **M4. Proveedores reales** | `cachai scan` sobre los endpoints de un modelo con varios proveedores | Fichas con su evidencia en `results/proveedores/`. **En curso.** |

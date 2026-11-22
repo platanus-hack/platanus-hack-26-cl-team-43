@@ -1,2 +1,0 @@
-CREATE DATABASE radar;
-CREATE DATABASE radar_test;
