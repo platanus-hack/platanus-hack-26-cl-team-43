@@ -30,7 +30,7 @@ class GitHubResponse:
 class GitHubClient:
     def __init__(self, token: str, http: httpx.Client | None = None):
         self._token = token
-        self._http = http or httpx.Client(base_url=BASE_URL, timeout=30)
+        self._http = http or httpx.Client(base_url=BASE_URL, timeout=30, follow_redirects=True)
 
     def get(
         self,
