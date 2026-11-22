@@ -105,18 +105,21 @@ def login(http: httpx.Client, base: str | None = None, *, browser: bool = True,
         open_browser(url)
     say("Esperando la autorización…")
     deadline = time.monotonic() + wait_s
+    failures = 0  # un corte de red o un 5xx suelto no cancela el login; varios seguidos sí
     while time.monotonic() < deadline:
         try:
             r = http.post(f"{base}/api/cli/canje", json={"verificador": verifier})
+            status, problem = r.status_code, f"respondió {r.status_code}"
         except httpx.HTTPError as e:
-            sys.exit(f"no se pudo hablar con {base}: {type(e).__name__}")
-        if r.status_code == 200:
+            status, problem = 599, f"no respondió ({type(e).__name__})"
+        if status == 200:
             data = r.json()
             cred = {"servidor": base, "clave": data["clave"], "email": data.get("email", "")}
             save(cred)
             return cred
-        if r.status_code != 404:
-            sys.exit(f"{base} respondió {r.status_code}: {r.text[:200]}")
+        failures = failures + 1 if status >= 500 else 0
+        if failures >= 10 or (status != 404 and status < 500):
+            sys.exit(f"{base} {problem}. Probá de nuevo con `cachai login`")
         sleep(2)
     sys.exit("se acabó el tiempo sin autorización. Volvé a correr `cachai login`")
 

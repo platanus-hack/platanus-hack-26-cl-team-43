@@ -207,3 +207,24 @@ def test_sin_base_la_demo_corre_sin_cuentas(monkeypatch):
     # una base que no responde no tira la demo
     c = TestClient(create_app(database_url="postgresql://nadie:x@127.0.0.1:1/nada"))
     assert c.get("/api/config").json() == {"cuentas": False}
+
+
+def test_login_aguanta_un_corte_y_se_rinde_si_el_servidor_no_vuelve(tmp_path, monkeypatch):
+    import httpx
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) <= 3:
+            return httpx.Response(502, text="reiniciando")
+        return httpx.Response(200, json={"clave": "cachai_x", "email": "ana@ejemplo.cl"})
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    cred = sesion.login(http, "http://s", browser=False, sleep=lambda s: None, say=lambda m: None)
+    assert cred["clave"] == "cachai_x" and len(calls) == 4
+
+    down = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(502)))
+    with pytest.raises(SystemExit, match="respondió 502"):
+        sesion.login(down, "http://s", browser=False, sleep=lambda s: None, say=lambda m: None)
