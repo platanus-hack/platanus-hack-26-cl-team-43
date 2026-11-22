@@ -85,19 +85,27 @@ def refresh_candidate_status(conn, candidate_id: int) -> None:
                      (candidate_id,))
 
 
-def _fail_disabled_model_jobs(conn) -> None:
+def _fail_disabled_model_jobs(conn) -> set[tuple[int, int]]:
+    """Fail queued jobs of disabled models; returns the (candidate_id, tier) pairs touched."""
     rows = conn.execute(
-        "update test_jobs set status = 'failed', locked_at = null "
-        "where status = 'queued' and model_id in (select id from models where not enabled) "
-        "returning candidate_id"
+        "update test_jobs j set status = 'failed', locked_at = null from models m "
+        "where m.id = j.model_id and not m.enabled and j.status = 'queued' "
+        "returning j.candidate_id, m.tier"
     ).fetchall()
     for cid in {r["candidate_id"] for r in rows}:
         refresh_candidate_status(conn, cid)
+    return {(r["candidate_id"], r["tier"]) for r in rows}
 
 
-def claim_next(conn) -> Job | None:
-    """Lock and mark running the next due job (also reclaims stale running jobs). Commits."""
-    _fail_disabled_model_jobs(conn)
+def claim_next(conn, closed: set[tuple[int, int]] | None = None) -> Job | None:
+    """Lock and mark running the next due job (also reclaims stale running jobs). Commits.
+
+    Jobs of disabled models are failed on the way; pass `closed` to collect the
+    (candidate_id, tier) pairs they belonged to.
+    """
+    swept = _fail_disabled_model_jobs(conn)
+    if closed is not None:
+        closed |= swept
     row = conn.execute(
         "select j.id, j.candidate_id, j.model_id, m.tier, j.stage, j.attempts "
         "from test_jobs j join models m on m.id = j.model_id "

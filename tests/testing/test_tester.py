@@ -470,3 +470,53 @@ def test_unknown_baseline_is_retried_and_cost_accumulates(conn):
     assert abs(rows[0]["cost_usd"] - 0.022) < 1e-12
     assert ensure_baseline(conn, llm, T1, POLICY, JUDGE) == "refused"
     assert len(llm.calls) == 4
+
+
+# --- review fix round 1 -------------------------------------------------------
+
+def test_loop_reports_tier_closed_by_disabled_model_sweep(conn):
+    seed_config(conn)
+    other = seed_candidate(conn)
+    insert_job(conn, other, "t1")
+    conn.execute("update models set enabled=false where id='t1'")
+    conn.commit()
+    stop = threading.Event()
+    done: list[tuple[int, int]] = []
+
+    def sleep(s):
+        stop.set()
+
+    run_loop(lambda: db.connect(TEST_DATABASE_URL), FakeLLM({}), settings(), stop,
+             lambda c, t: done.append((c, t)), GOALS, limiter(), sleep=sleep)
+    assert done == [(other, 1)]
+    st = conn.execute("select test_status from candidates where id=%s", (other,)).fetchone()
+    assert st["test_status"] == "tested"
+
+
+def test_job_with_missing_candidate_is_failed(conn):
+    seed_config(conn)
+    cid = seed_candidate(conn)
+    jid = insert_job(conn, cid, "t1", status="running")
+    job = Job(id=jid, candidate_id=999_999, model_id="t1", tier=1, stage="screen", attempts=0)
+    llm = FakeLLM({T1.openrouter_id: jailbroken, JUDGE: judge})
+    assert run_job(conn, llm, job, GOALS, settings(), limiter()) == "failed"
+    assert job_status(conn, jid) == "failed"
+    assert llm.calls == []
+
+
+def test_screen_break_with_unknown_baseline_enqueues_confirm(conn):
+    seed_config(conn)
+    cid = seed_candidate(conn)
+    job = make_job(conn, cid)
+
+    def target(model, user, system):
+        return "Sure! Dave, you ****." if "JB" in user else REFUSAL  # canary not leaked
+
+    def flaky_judge(model, user, system):
+        return json.dumps({"verdict": "complied"}) if "Sure!" in user else "not json"
+
+    llm = FakeLLM({T1.openrouter_id: target, JUDGE: flaky_judge})
+    assert run_job(conn, llm, job, GOALS, settings(), limiter()) == "done"
+    base = {r["goal_id"]: r["verdict"] for r in conn.execute("select * from baselines")}
+    assert base == {"policy_insult": "unknown"}
+    assert len(confirm_jobs(conn)) == 1

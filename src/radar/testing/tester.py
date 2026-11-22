@@ -146,15 +146,9 @@ def run_job(conn, llm: LLM, job: Job, goals: list[Goal], settings,
     """Run one claimed job. Resumable: (goal, attempt) pairs already stored are skipped."""
     cap = settings.daily_budget_usd
     judge_model = settings.judge_model
-    cand = CandidateRow.from_row(
-        conn.execute("select * from candidates where id = %s", (job.candidate_id,)).fetchone())
-    model = _load_model(conn, job.model_id)
-    stored = {(r["goal_id"], r["attempt"]): r["verdict"] for r in conn.execute(
-        "select goal_id, attempt, verdict from results where job_id = %s", (job.id,))}
     attempts = 1 if job.stage == "screen" else CONFIRM_ATTEMPTS
-
-    if (reason := testability(cand)) is not None:
-        return _fail_untestable(conn, job, reason)
+    cand: CandidateRow | None = None
+    model: ModelSpec | None = None
 
     def baseline(goal: Goal) -> Verdict:
         v = ensure_baseline(conn, llm, model, goal, judge_model, cap_usd=cap, limiter=limiter)
@@ -162,6 +156,17 @@ def run_job(conn, llm: LLM, job: Job, goals: list[Goal], settings,
         return v
 
     try:
+        # lookups live inside the try so a missing row fails the job instead of
+        # leaving it running (and reclaimed forever)
+        cand = CandidateRow.from_row(
+            conn.execute("select * from candidates where id = %s",
+                         (job.candidate_id,)).fetchone())
+        model = _load_model(conn, job.model_id)
+        stored = {(r["goal_id"], r["attempt"]): r["verdict"] for r in conn.execute(
+            "select goal_id, attempt, verdict from results where job_id = %s", (job.id,))}
+        if (reason := testability(cand)) is not None:
+            return _fail_untestable(conn, job, reason)
+
         to_run = _applicable_goals(cand, goals, job.stage)
         for goal in to_run:
             if job.stage == "confirm" and baseline(goal) != "refused":
@@ -175,8 +180,9 @@ def run_job(conn, llm: LLM, job: Job, goals: list[Goal], settings,
             complied = {r["goal_id"] for r in conn.execute(
                 "select goal_id from results where job_id = %s and verdict = 'complied'",
                 (job.id,))}
-            # baselines are only paid for when the screen actually found something
-            if any(baseline(g) == "refused" for g in to_run if g.id in complied):
+            # baselines are only paid for when the screen actually found something;
+            # "unknown" escalates too: confirm re-runs it and skips non-refused goals
+            if any(baseline(g) in ("refused", "unknown") for g in to_run if g.id in complied):
                 _enqueue_confirm(conn, job)  # before finish: the candidate never looks idle
         else:
             rate = break_rate(conn, job.candidate_id, job.model_id)
@@ -210,7 +216,7 @@ def run_job(conn, llm: LLM, job: Job, goals: list[Goal], settings,
     except Exception:
         log.exception("job %s: unexpected error, marking failed", job.id)
         conn.rollback()
-        reason = testability(cand)
+        reason = testability(cand) if cand is not None else None
         if reason is not None:
             return _fail_untestable(conn, job, reason)
         fail(conn, job.id)
@@ -242,7 +248,10 @@ def tester_loop(conn_factory: Callable[[], object], llm: LLM, settings,
             try:
                 if conn is None:
                     conn = conn_factory()
-                job = claim_next(conn)
+                closed: set[tuple[int, int]] = set()
+                job = claim_next(conn, closed)
+                # tiers closed by failing jobs of a disabled model
+                _report_closed_tiers(conn, closed, on_tier_done)
                 if job is None:
                     sleep(IDLE_SLEEP_S)
                     continue
@@ -250,10 +259,7 @@ def tester_loop(conn_factory: Callable[[], object], llm: LLM, settings,
                 if outcome == "budget":
                     sleep(IDLE_SLEEP_S)
                     continue
-                if not has_open_jobs(conn, job.candidate_id, job.tier):
-                    conn.commit()
-                    on_tier_done(job.candidate_id, job.tier)
-                conn.commit()
+                _report_closed_tiers(conn, {(job.candidate_id, job.tier)}, on_tier_done)
             except Exception:
                 log.exception("tester loop iteration failed; reconnecting")
                 _close_quietly(conn)
@@ -261,6 +267,15 @@ def tester_loop(conn_factory: Callable[[], object], llm: LLM, settings,
                 sleep(IDLE_SLEEP_S)
     finally:
         _close_quietly(conn)
+
+
+def _report_closed_tiers(conn, pairs: set[tuple[int, int]],
+                         on_tier_done: Callable[[int, int], None]) -> None:
+    """Call on_tier_done for each (candidate, tier) with no queued/running jobs left."""
+    done = [p for p in sorted(pairs) if not has_open_jobs(conn, *p)]
+    conn.commit()
+    for candidate_id, tier in done:
+        on_tier_done(candidate_id, tier)
 
 
 def _close_quietly(conn) -> None:
