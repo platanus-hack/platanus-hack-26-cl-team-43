@@ -83,7 +83,7 @@ footer{padding:28px 0 40px;border-top:1px solid var(--linea);font-size:13.5px;co
   <a class="logo" href="https://cachai-ai.vercel.app">cachai</a>
   <div class="barra-sup">
     <span class="vivo"><i></i>demo en vivo</span>
-    <a id="cuenta" href="/panel" hidden>Entrar</a>
+    <a id="cuenta" href="/panel?entrar=1" hidden>Entrar</a>
   </div>
 </header>
 
@@ -190,13 +190,13 @@ footer{padding:28px 0 40px;border-top:1px solid var(--linea);font-size:13.5px;co
     s.src = cfg.clerk_js; s.async = true; s.crossOrigin = 'anonymous';
     s.setAttribute('data-clerk-publishable-key', cfg.clerk_pk);
     s.onload = function(){ window.Clerk.load().then(function(){
-      if (window.Clerk.user) { clerk = window.Clerk; $('cuenta').textContent = 'Mi panel'; }
+      if (window.Clerk.user) { clerk = window.Clerk; $('cuenta').textContent = 'Mi panel'; $('cuenta').href = '/panel'; }
     }); };
     document.head.appendChild(s);
   }).catch(function(){});
   function guardar(d){
     if (!cuentas) return;
-    if (!clerk) { $('guardado').innerHTML = '<a href="/panel">Entra con tu cuenta</a> y tus auditorías quedan guardadas en tu panel.'; return; }
+    if (!clerk) { $('guardado').innerHTML = '<a href="/panel?entrar=1">Entra con tu cuenta</a> y tus auditorías quedan guardadas en tu panel.'; return; }
     clerk.session.getToken().then(function(t){
       return fetch('/api/fichas', {method: 'POST', headers: {'Authorization': 'Bearer ' + t, 'Content-Type': 'application/json'},
         body: JSON.stringify({ficha: d.ficha, segundos: d.segundos})});

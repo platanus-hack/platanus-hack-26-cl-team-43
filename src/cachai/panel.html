@@ -173,7 +173,7 @@ cachai scan z-ai/glm-5.3 --extra-tokens 512</pre></div>
 <script>
 (function(){
   var $ = function(id){ return document.getElementById(id); };
-  var clerk = null;
+  var clerk = null, entrar = '#';
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
   function ver(id){ ['v-espera','v-entrar','v-vacio','v-panel'].forEach(function(v){ $(v).hidden = v !== id; }); }
   function num(n){ return Number(n || 0).toLocaleString('es-CL'); }
@@ -291,11 +291,17 @@ cachai scan z-ai/glm-5.3 --extra-tokens 512</pre></div>
   }
 
   fetch('/api/config').then(function(r){ return r.json(); }).then(function(cfg){
-    $('entrar').href = cfg.entrar + '?redirect_url=' + encodeURIComponent(location.href);
+    entrar = cfg.entrar + '?redirect_url=' + encodeURIComponent(location.origin + '/panel');
+    $('entrar').href = entrar;
     return clerkListo(cfg);
   }).then(function(c){
     clerk = c;
-    if (!clerk.user) { ver('v-entrar'); return; }
+    if (!clerk.user) {
+      // quien llega desde «Iniciar sesión» de la landing va directo a entrar
+      if (new URLSearchParams(location.search).has('entrar')) { location.replace(entrar); return; }
+      ver('v-entrar'); return;
+    }
+    if (location.search) history.replaceState(null, '', '/panel');
     var correo = clerk.user.primaryEmailAddress ? clerk.user.primaryEmailAddress.emailAddress : '';
     $('quien').textContent = correo;
     $('salir').hidden = false;

@@ -54,6 +54,7 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .btn.chico{height:36px;padding:0 14px;font-size:13.5px}
 .btn svg{width:15px;height:15px;flex:none}
 .nav nav a.btn{color:var(--tinta)}
+.nav nav a.btn.primario{color:var(--bg)}
 .insignia{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;border:1px solid var(--linea);font:500 12px/1 var(--mono);color:var(--tenue);white-space:nowrap}
 .insignia.mal{color:var(--alerta);border-color:rgba(240,99,99,.5)}
 .insignia.ref{background:rgba(241,240,236,.08)}
@@ -142,6 +143,8 @@ footer .equipo{display:flex;flex-wrap:wrap;gap:4px 16px}
 
 @media (max-width:760px){
   .nav nav a.sec{display:none}
+  .nav nav{gap:10px}
+  .nav nav .largo{display:none}
   .cifras,.rejilla,.dos{grid-template-columns:minmax(0,1fr)}
   .cifras div{border-right:0;border-bottom:1px solid var(--linea)}
   .cifras div:last-child{border-bottom:0}
@@ -172,7 +175,8 @@ footer .equipo{display:flex;flex-wrap:wrap;gap:4px 16px}
       <a class="sec" href="#uso">Cómo se usa</a>
       <a class="sec" href="#donde">Dónde funciona</a>
       <a class="sec" href="#limites">Límites</a>
-      <a class="btn chico" href="https://github.com/platanus-hack/platanus-hack-26-cl-team-43"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.6l1.9 4 4.4.6-3.2 3 .8 4.3L8 11.4l-3.9 2.1.8-4.3-3.2-3 4.4-.6z"/></svg>Estrella en GitHub</a>
+      <a class="btn chico" href="https://github.com/platanus-hack/platanus-hack-26-cl-team-43"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.6l1.9 4 4.4.6-3.2 3 .8 4.3L8 11.4l-3.9 2.1.8-4.3-3.2-3 4.4-.6z"/></svg><span>Estrella<span class="largo"> en GitHub</span></span></a>
+      <a class="btn chico primario" href="https://cachai.jjato.com/panel?entrar=1">Iniciar sesión</a>
     </nav>
   </div>
 </header>
