@@ -127,9 +127,12 @@ def cmd_experimento(args) -> None:
     if args.toy:
         up = experiment.toy_upstream()
         stem = f"juguete-t{args.tasks}"
+    elif args.ollama:
+        up = experiment.ollama_upstream(args.ollama_url)
+        stem = f"ollama-qwen2.5-t{args.tasks}"
     else:
         if not (args.model and args.small_model and args.provider):
-            sys.exit("sin --toy hacen falta --model, --small-model y --provider")
+            sys.exit("sin --toy ni --ollama hacen falta --model, --small-model y --provider")
         key = os.environ.get("OPENROUTER_API_KEY", "")
         if not key:
             sys.exit("OPENROUTER_API_KEY no está definida")
@@ -182,6 +185,9 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("experimento",
                        help="línea base: benchmark fijo contra juego ciego, con tramposos propios")
     p.add_argument("--toy", action="store_true", help="contra el modelo de juguete, sin claves")
+    p.add_argument("--ollama", action="store_true",
+                   help="contra Qwen2.5 servido por nosotros con Ollama (Q8, Q4, Q2 y 0.5B)")
+    p.add_argument("--ollama-url", default="http://localhost:11434/v1")
     p.add_argument("--model", help="modelo honesto en OpenRouter (p. ej. z-ai/glm-5.3)")
     p.add_argument("--small-model", help="modelo barato al que desvían los tramposos")
     p.add_argument("--provider", help="tag del proveedor de referencia en OpenRouter")

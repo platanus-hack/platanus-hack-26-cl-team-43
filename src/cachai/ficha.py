@@ -55,13 +55,16 @@ def _pct(k: int, n: int) -> str:
 def _row(e: dict) -> str:
     if e["is_reference"]:
         verdict = "referencia"
+    elif e.get("is_floor"):
+        verdict = "piso de ruido"
     elif e["errors"] == e["n"]:
         verdict = "sin respuesta"
     else:
         verdict = "DISTINGUIBLE" if e["distinguible"] else "sin desviación detectada"
     return (f"| `{e['target']}` | {e['cuantizacion_declarada'] or 'sin declarar'} "
             f"| {e['token_verdict']} | {_pct(e['tasks_ok'], e['tasks_n'])} "
-            f"| {_pct(e['agree'], e['agree_n'])} | {_pct(e['tools_ok'], e['tools_n'])} "
+            f"| {_pct(e['agree'], e['agree_n'])} | {_pct(e['free_agree'], e['free_n'])} "
+            f"| {_pct(e['tools_ok'], e['tools_n'])} "
             f"| {_pct(e['canary_leaks'], e['canary_n'])} | {e['errors']}/{e['n']} "
             f"| {verdict} |")
 
@@ -93,8 +96,8 @@ def to_markdown(f: dict) -> str:
         "## Medido desde afuera (E2)",
         "",
         "| Endpoint | Cuantización (E1) | Tokens de prompt | Tareas correctas | Igual a la referencia "
-        "| Tool calls válidas | Filtra el secreto | Errores | Resultado |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| Texto libre igual | Tool calls válidas | Filtra el secreto | Errores | Resultado |",
+        "|---|---|---|---|---|---|---|---|---|---|",
         *[_row(e) for e in f["endpoints"]],
         "",
     ]

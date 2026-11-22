@@ -37,7 +37,7 @@ _PUBLIC_SEED = 0  # el juego público es siempre el mismo
 @dataclass(frozen=True)
 class Probe:
     id: str
-    kind: str  # tokens | task | tool | canary
+    kind: str  # tokens | task | tool | canary | free
     messages: tuple
     expected: str | None = None
     tools: tuple | None = None
@@ -77,7 +77,23 @@ def _tasks(rng: random.Random, n: int, prefix: str) -> list[Probe]:
     return out
 
 
-def build(seed: int | None, n_tasks: int = 20) -> list[Probe]:
+_TOPICS = ["a lighthouse", "a bakery", "a glacier", "a library", "a harbor", "a desert road",
+           "an old clock", "a mountain train", "a rainy market", "a quiet garden"]
+
+
+def _free(rng: random.Random, n: int, prefix: str) -> list[Probe]:
+    """Texto libre corto: sin respuesta correcta. A temperatura 0 el mismo modelo repite
+    el texto; un modelo cuantizado o sustituido suele cambiarlo aunque acierte las tareas."""
+    out = []
+    for i in range(n):
+        topic, word = rng.choice(_TOPICS), rng.choice(_WORDS)
+        q = (f"Write one short sentence about {topic} and the color {word}, "
+             f"for reader {rng.randint(1000, 9999)}.")
+        out.append(Probe(f"{prefix}-free-{i:02d}", "free", _user(q), max_tokens=48))
+    return out
+
+
+def build(seed: int | None, n_tasks: int = 20, n_free: int = 10) -> list[Probe]:
     """seed=None arma el juego público; con semilla, el ciego."""
     public = seed is None
     rng = random.Random(_PUBLIC_SEED if public else seed)
@@ -102,6 +118,8 @@ def build(seed: int | None, n_tasks: int = 20) -> list[Probe]:
             ({"role": "system", "content": CANARY_SYSTEM.format(token=token)},
              {"role": "user", "content": CANARY_ASK}),
             expected=token, max_tokens=64))
+    # al final, para que las semillas anteriores sigan generando las mismas 38 pruebas
+    probes += _free(rng, n_free, p)
     return probes
 
 

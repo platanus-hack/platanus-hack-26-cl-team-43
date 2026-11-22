@@ -84,8 +84,12 @@ class Card:
     tasks_n: int = 0
     tasks_ci: tuple[float, float] = (0.0, 1.0)
     tasks_p: float | None = None  # contra la referencia
-    agree: int = 0  # misma respuesta que la referencia
+    agree: int = 0  # misma respuesta que la referencia (tareas)
     agree_n: int = 0
+    free_agree: int = 0  # mismo texto libre que la referencia
+    free_n: int = 0
+    agree_p: float | None = None  # coincidencia contra el piso de ruido
+    is_floor: bool = False
     tools_ok: int = 0
     tools_n: int = 0
     canary_leaks: int = 0
@@ -147,12 +151,19 @@ def _reference_text(probe: Probe, replies: dict[str, dict[str, Reply]],
     return counts.most_common(1)[0][0] if counts else None
 
 
+def _plain(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
 def score(probes: list[Probe], replies: dict[str, dict[str, Reply]],
-          reference: str) -> list[Card]:
-    """replies[target][probe_id] -> Reply. reference: nombre de un target o "consenso"."""
+          reference: str, floor: str | None = None) -> list[Card]:
+    """replies[target][probe_id] -> Reply. reference: nombre de un target o "consenso".
+
+    floor: un segundo endpoint que sirve lo mismo que la referencia (el piso de ruido). Si
+    está, la coincidencia de cada endpoint con la referencia se compara con la suya."""
     cards: dict[str, Card] = {}
     for name, per in replies.items():
-        c = Card(target=name, is_reference=(name == reference))
+        c = Card(target=name, is_reference=(name == reference), is_floor=(name == floor))
         got = [per[p.id] for p in probes if p.id in per]
         c.n = len(got)
         c.errors = sum(not r.ok for r in got)
@@ -178,6 +189,11 @@ def score(probes: list[Probe], replies: dict[str, dict[str, Reply]],
             elif p.kind == "tool":
                 c.tools_n += 1
                 c.tools_ok += tool_valid(p, r)
+            elif p.kind == "free":
+                ref_r = replies.get(reference, {}).get(p.id)
+                if r.ok and ref_r is not None and ref_r.ok:
+                    c.free_n += 1
+                    c.free_agree += _plain(r.text) == _plain(ref_r.text)
             elif p.kind == "canary":
                 c.canary_n += 1
                 c.canary_leaks += canary_leaked(p, r)
@@ -210,4 +226,18 @@ def score(probes: list[Probe], replies: dict[str, dict[str, Reply]],
                 c.flags.append(
                     f"falla {c.failed}/{c.graded} pruebas contra {ref_card.failed}/"
                     f"{ref_card.graded} de la referencia (p={c.pooled_p:.4f})")
+    floor_card = cards.get(floor) if floor else None
+    if floor_card:
+        f_dis = floor_card.agree_n - floor_card.agree + floor_card.free_n - floor_card.free_agree
+        f_n = floor_card.agree_n + floor_card.free_n
+        for c in cards.values():
+            if c.is_reference or c.is_floor:
+                continue
+            dis = c.agree_n - c.agree + c.free_n - c.free_agree
+            n = c.agree_n + c.free_n
+            c.agree_p = round(fisher(dis, n, f_dis, f_n), 5)
+            if c.agree_p < ALPHA and n and f_n and dis / n > f_dis / f_n:
+                c.flags.append(
+                    f"coincide con la referencia en {n - dis}/{n} respuestas contra "
+                    f"{f_n - f_dis}/{f_n} del piso de ruido (p={c.agree_p:.4f})")
     return list(cards.values())
