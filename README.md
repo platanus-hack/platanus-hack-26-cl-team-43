@@ -26,6 +26,20 @@ cachai scan                                          # lee ./cachai.toml
 
 `cachai demo` audita en memoria a un proveedor honesto, a uno que agrega un prompt oculto y a uno que responde con un modelo más chico con el mismo nombre, y marca a los dos tramposos. Más casos (servidor propio, autor contra revendedores, auditoría semanal en GitHub Actions) en [`examples/`](examples/).
 
+### La demo en vivo
+
+**[demo-production-8abb87fe.up.railway.app](https://demo-production-8abb87fe.up.railway.app)**: tres APIs que dicen servir Qwen2.5 1.5B (`/oficial/v1`, `/a/v1` y `/b/v1`). En cada ronda, A o B hace trampa al azar: sirve la versión cuantizada a 4 bits, un modelo tres veces más chico o agrega un prompt oculto, siempre con el mismo nombre. «Auditar con Cachai» corre 24 pruebas ciegas contra las tres, muestra la ficha y recién al final revela quién era el tramposo.
+
+Las URLs son APIs reales, así que también se auditan desde cualquier máquina:
+
+```bash
+D=https://demo-production-8abb87fe.up.railway.app
+uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 cachai scan qwen2.5-1.5b-instruct \
+  --no-openrouter -e oficial=$D/oficial/v1 -e A=$D/a/v1 -e B=$D/b/v1
+```
+
+Corre en CPU, con los modelos servidos por nosotros en Ollama; el tramposo es nuestro y solo se audita a sí mismo. Para levantarla en local: `cachai serve` con un Ollama que tenga los tres modelos ([`deploy/demo/`](deploy/demo/)).
+
 ### Dónde se puede usar
 
 Cachai solo necesita lo mismo que cualquier cliente: una API compatible con la de OpenAI. No pide acceso al modelo ni que el proveedor colabore.
@@ -167,10 +181,12 @@ src/cachai/        el auditor
   toy.py             modelo de juguete con reglas fijas, para probar sin claves
   experiment.py      experimento de línea base: benchmark fijo contra juego ciego
   providers.py       atajos de proveedores compatibles con OpenAI (URL y variable de la clave)
-  cli.py             cachai demo · scan · endpoints · experimento
+  serve.py           la demo en vivo: tres proveedores, uno tramposo, y la auditoría por SSE (demo.html)
+  cli.py             cachai demo · scan · endpoints · serve · experimento
 tests/             27 tests de punta a punta, sin red ni claves
 examples/          configuraciones listas para copiar (OpenRouter, APIs directas, servidor propio, CI)
 results/linea-base/  resultados del experimento (JSON y Markdown)
+deploy/demo/       imagen de la demo en vivo: Ollama con los modelos y cachai serve (Railway)
 ```
 
 ```bash

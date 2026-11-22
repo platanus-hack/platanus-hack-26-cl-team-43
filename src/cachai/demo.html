@@ -126,7 +126,7 @@ footer{padding:28px 0 40px;border-top:1px solid var(--linea);font-size:13.5px;co
   }).join('');
 
   $('cmd').innerHTML = '<span class="c"># las 48 pruebas completas contra los mismos tres endpoints</span>\n' +
-    'uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 \\\n  cachai scan --no-openrouter \\\n' +
+    'uvx --from git+https://github.com/platanus-hack/platanus-hack-26-cl-team-43 \\\n  cachai scan qwen2.5-1.5b-instruct --no-openrouter \\\n' +
     '  -e oficial=' + esc(base) + '/oficial/v1 \\\n  -e A=' + esc(base) + '/a/v1 \\\n  -e B=' + esc(base) + '/b/v1';
 
   // copiar
