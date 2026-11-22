@@ -17,6 +17,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "huggingface_hub>=0.25",
     "fastembed>=0.4",
+    "python-dotenv>=1.0",
 ]
 
 [dependency-groups]

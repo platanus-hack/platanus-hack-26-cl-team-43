@@ -76,16 +76,13 @@ def seed_known(conn: psycopg.Connection, embedder: Embedder, rows: Iterable[str]
     return total
 
 
-def run() -> int:
+def run(database_url: str, hf_token: str | None = None) -> int:
     """Entry point for `radar seed-corpus`."""
     from radar import db
-    from radar.settings import Settings
 
-    settings = Settings()
-    conn = db.connect(settings.database_url)
+    conn = db.connect(database_url)
     try:
         with httpx.Client(timeout=60) as http:
-            return seed_known(conn, Embedder(), fetch_rows(http, settings.hf_token),
-                              DATASET_URL)
+            return seed_known(conn, Embedder(), fetch_rows(http, hf_token), DATASET_URL)
     finally:
         conn.close()

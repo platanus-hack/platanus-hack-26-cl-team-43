@@ -59,7 +59,7 @@ def test_stops_at_cursor_date():
     assert [i.external_id for i in items] == ["o/new@abc:gated"]
     assert cursor == {"since": (NOW - timedelta(days=1)).isoformat()}
     kw = api.calls[0]
-    assert kw["sort"] == "last_modified" and kw["direction"] == -1
+    assert kw["sort"] == "last_modified" and "direction" not in kw  # removed in hub 1.x
     assert kw["expand"] == ["lastModified", "gated", "cardData", "sha"]
 
 

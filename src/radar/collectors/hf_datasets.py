@@ -96,7 +96,7 @@ class HFDatasets:
         items: list[RawItem] = []
         for kw in self.keywords:
             results = self.api.list_datasets(
-                search=kw, sort="last_modified", direction=-1, expand=EXPAND)
+                search=kw, sort="last_modified", expand=EXPAND)  # always descending
             for ds in results:
                 modified = _aware(ds.last_modified)
                 if modified <= since:
