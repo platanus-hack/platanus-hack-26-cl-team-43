@@ -274,6 +274,48 @@ def cmd_demo(args) -> None:
           "https://github.com/platanus-hack/platanus-hack-26-cl-team-43/tree/main/examples")
 
 
+DEMO_TRAPS = {"cuantizado": "la versión cuantizada a 4 bits",
+              "modelo-chico": "un modelo tres veces más chico",
+              "prompt-oculto": "un system prompt oculto delante de cada pedido"}
+
+
+def cmd_ronda(args) -> None:
+    """La demo en vivo desde la terminal: armar una ronda, ver su estado o revelar al tramposo."""
+    base = (args.server or sesion.server()).rstrip("/")
+    with httpx.Client(timeout=20) as http:
+        try:
+            if args.revelar:
+                r = http.post(f"{base}/api/revelar")
+            elif args.trampa:
+                r = http.post(f"{base}/api/ronda", json={"trampa": args.trampa})
+            else:
+                r = http.get(f"{base}/api/estado")
+            data = r.json()
+        except (httpx.HTTPError, ValueError) as e:
+            sys.exit(f"no se pudo hablar con {base}: {type(e).__name__}")
+    if r.status_code != 200:
+        sys.exit(f"{base} respondió {r.status_code}: {data.get('error') or data}")
+    if args.revelar:
+        print("\n" + salida.paint(f"El tramposo de la ronda {data['ronda']} era el proveedor "
+                                  f"{data['tramposo']}.", salida.BOLD, salida.RED))
+        salida.fields([("su trampa", data["trampa_label"]),
+                       ("ahora", f"quedó armada la ronda {data['ronda_nueva']}, con otro "
+                                 "tramposo elegido al azar")])
+        return
+    salida.title(f"Demo en vivo, ronda {data['ronda']}")
+    salida.fields([
+        ("modelo", "qwen2.5-1.5b-instruct, el nombre que anuncian los tres"),
+        ("oficial", f"{base}/oficial/v1  (la referencia)"),
+        ("A", f"{base}/a/v1"),
+        ("B", f"{base}/b/v1"),
+        ("trampa", data["trampas"][data["trampa"]]),
+        ("quién", "A o B, elegido al azar. Se sabe con: cachai ronda --revelar"),
+    ])
+    print("\n  Para auditarlos:")
+    print(f"  cachai scan qwen2.5-1.5b-instruct --no-openrouter -e oficial={base}/oficial/v1 "
+          f"-e A={base}/a/v1 -e B={base}/b/v1")
+
+
 def cmd_toy(args) -> None:
     import uvicorn
 
@@ -405,6 +447,15 @@ def main(argv: list[str] | None = None) -> None:
                        "un proveedor honesto y dos tramposos de juguete")
     _audit_options(p)
     p.set_defaults(fn=cmd_demo, out="audit/demo")
+
+    p = sub.add_parser("ronda", help="la demo en vivo desde la terminal: arma una ronda con "
+                       "una trampa, muestra los endpoints o revela al tramposo")
+    p.add_argument("trampa", nargs="?", choices=list(DEMO_TRAPS),
+                   help="arma una ronda nueva con esta trampa; sin esto, muestra la ronda actual")
+    p.add_argument("--revelar", action="store_true",
+                   help="dice quién hacía trampa en la ronda actual y arma otra")
+    p.add_argument("--server", default=None, help="otra demo (por defecto, la pública)")
+    p.set_defaults(fn=cmd_ronda)
 
     p = sub.add_parser("serve", help="la demo en vivo: tres proveedores (uno tramposo) sobre "
                        "Qwen2.5 en Ollama, y una página que los audita")

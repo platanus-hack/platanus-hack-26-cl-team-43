@@ -108,7 +108,7 @@ Son cuatro piezas: el **auditor**, que mide endpoints reales; el **laboratorio**
 
 | Medición | Qué es | Métrica y estado |
 |---|---|---|
-| **M1. Tests** | 71 tests de punta a punta en memoria, sin red ni claves (`tests/`) | Todos pasan antes de cada cambio. **Medido**: 71/71. |
+| **M1. Tests** | 72 tests de punta a punta en memoria, sin red ni claves (`tests/`) | Todos pasan antes de cada cambio. **Medido**: 72/72. |
 | **M2. Línea base con el juguete** | Benchmark fijo contra juego ciego, cinco proveedores (uno honesto), 30 repeticiones por celda, 20 y 80 tareas | Detección por trampa con IC95 de Wilson; falsas alarmas del honesto. **Medido** (§6). |
 | **M3. Modelos reales servidos por nosotros** | Qwen2.5 1.5B servido con Ollama: Q8 como referencia y piso de ruido, y proveedores propios que sirven Q4, Q2, el 0.5B, un prompt oculto o un desvío del 30 %, más uno honesto (`cachai experimento --ollama`, 20 repeticiones) | Falsas alarmas del honesto ≤ 1/20 para aceptar α = 0,01; detección por trampa con IC95. **Medido**: honesto 0/20; prompt oculto, Q4, Q2 y 0.5B 20/20 cada uno; desvío del 30 % 8/20 (IC95 22-61 %); piso de ruido 30/30 en las 20. El Q4 se marcó solo por coincidencia: su exactitud no alcanzó a distinguirse de la referencia ([tabla](../results/linea-base/ollama-qwen2.5-t20.md)). |
 | **M4. Proveedores reales** | `cachai scan` sobre los endpoints de un modelo con varios proveedores | Fichas con su evidencia en `results/proveedores/`. **Medido** en una auditoría de GLM-5.3 (cinco endpoints contra el del autor, 364 respuestas sin errores): sin prompt oculto, ninguno distinguible, y tres de seis endpoints devuelven un objeto anidado de una tool call como texto. El texto libre no tiene potencia con ese modelo (piso de ruido 0 de 10). |

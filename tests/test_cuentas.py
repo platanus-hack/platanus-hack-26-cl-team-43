@@ -228,3 +228,38 @@ def test_login_aguanta_un_corte_y_se_rinde_si_el_servidor_no_vuelve(tmp_path, mo
     down = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(502)))
     with pytest.raises(SystemExit, match="respondió 502"):
         sesion.login(down, "http://s", browser=False, sleep=lambda s: None, say=lambda m: None)
+
+
+def test_ronda_revelar_y_streaming_de_la_demo(monkeypatch, capsys):
+    import httpx
+
+    from cachai import serve
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    c = TestClient(create_app())
+    before = c.get("/api/estado").json()
+    told = c.post("/api/revelar").json()
+    assert told["tramposo"] in ("A", "B") and told["ronda"] == before["ronda"]
+    assert c.get("/api/estado").json()["ronda"] == told["ronda_nueva"] == before["ronda"] + 1
+
+    # el stream sale con el nombre de modelo que pidió el cliente, no con el que se sirvió
+    sse = 'data: {"model": "cachai-q4", "choices": [{"delta": {"content": "hola"}}]}\n\ndata: [DONE]\n'
+    out = serve._rename_stream(sse, "qwen2.5-1.5b-instruct")
+    assert "cachai-q4" not in out and '"qwen2.5-1.5b-instruct"' in out and "data: [DONE]" in out
+
+    # el comando: cachai ronda contra un servidor de mentira
+    def handler(request):
+        if request.url.path == "/api/revelar":
+            return httpx.Response(200, json={"ronda": 3, "tramposo": "B", "trampa": "cuantizado",
+                                             "trampa_label": "sirve la Q4", "ronda_nueva": 4})
+        return httpx.Response(200, json={"ronda": 3, "trampa": "cuantizado",
+                                         "trampas": {"cuantizado": "sirve la Q4"}})
+
+    real = httpx.Client
+    monkeypatch.setattr(cli.httpx, "Client",
+                        lambda **k: real(transport=httpx.MockTransport(handler)))
+    cli.main(["ronda", "cuantizado", "--server", "http://demo"])
+    out = capsys.readouterr().out
+    assert "ronda 3" in out and "http://demo/a/v1" in out and "cachai scan qwen2.5" in out
+    cli.main(["ronda", "--revelar", "--server", "http://demo"])
+    assert "era el proveedor B" in capsys.readouterr().out

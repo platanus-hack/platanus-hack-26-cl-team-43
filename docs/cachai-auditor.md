@@ -88,7 +88,7 @@ Resultados en `results/linea-base/` y su lectura en [`arquitectura.md`](arquitec
 
 ## Estado (22-nov)
 
-- 71 tests de punta a punta, sin red ni claves (`uv run pytest -q`).
+- 72 tests de punta a punta, sin red ni claves (`uv run pytest -q`).
 - Corrió contra proveedores reales: cinco endpoints de GLM-5.3 en OpenRouter contra el del
   autor, 364 respuestas sin errores. La ficha y su lectura están en
   [`results/proveedores/`](../results/proveedores/).

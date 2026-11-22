@@ -26,7 +26,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
 from cachai import checks, ficha, scan, suite
 from cachai.client import Target
@@ -78,6 +78,22 @@ def quick_probes(seed: int) -> list:
     return out
 
 
+def _rename_stream(sse: str, asked: str) -> str:
+    """Un stream de chat con el nombre de modelo que pidió el cliente en cada trozo."""
+    out = []
+    for line in sse.splitlines():
+        if line.startswith("data:") and line[5:].strip() not in ("", "[DONE]"):
+            try:
+                chunk = json.loads(line[5:])
+            except ValueError:
+                chunk = None
+            if isinstance(chunk, dict) and "model" in chunk:
+                chunk["model"] = asked
+                line = "data: " + json.dumps(chunk, ensure_ascii=False)
+        out.append(line)
+    return "\n".join(out) + "\n"
+
+
 def create_app(self_url: str | None = None, database_url: str | None = None,
                verify=None) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -111,6 +127,8 @@ def create_app(self_url: str | None = None, database_url: str | None = None,
             body.pop(k, None)
         try:
             resp = await upstream.post(f"{OLLAMA}/chat/completions", json=body)
+            if body.get("stream") and resp.status_code == 200:
+                return Response(_rename_stream(resp.text, asked), media_type="text/event-stream")
             data = resp.json()
         except (httpx.HTTPError, ValueError) as e:
             return JSONResponse({"error": {"message": f"upstream: {type(e).__name__}"}}, 502)
@@ -138,6 +156,18 @@ def create_app(self_url: str | None = None, database_url: str | None = None,
             return JSONResponse({"error": "trampa desconocida"}, 400)
         state.update(cheater=random.choice("ab"), trap=trap, round=state["round"] + 1)
         return estado()
+
+    @app.post("/api/revelar")
+    def revelar():
+        """Dice quién hacía trampa en esta ronda y arma otra: lo revelado ya no sirve.
+
+        Es para la auditoría desde la terminal, donde no hay una página que lo muestre."""
+        if audit_lock.locked():
+            return JSONResponse({"error": "hay una auditoría en curso"}, 409)
+        was = {"ronda": state["round"], "tramposo": state["cheater"].upper(),
+               "trampa": state["trap"], "trampa_label": TRAPS[state["trap"]]["label"]}
+        state.update(cheater=random.choice("ab"), round=state["round"] + 1)
+        return {**was, "ronda_nueva": state["round"]}
 
     @app.get("/api/auditar")
     async def auditar():

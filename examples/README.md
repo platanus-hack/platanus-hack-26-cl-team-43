@@ -12,6 +12,7 @@ Si todavía no se instaló: `uv tool install git+https://github.com/platanus-hac
 | [`openrouter.toml`](openrouter.toml) | Auditar los proveedores de un modelo abierto en OpenRouter contra el del autor | `OPENROUTER_API_KEY` |
 | [`autor-contra-revendedores.toml`](autor-contra-revendedores.toml) | Comparar la API del autor con las de proveedores que lo revenden, directo y sin OpenRouter | La de cada proveedor |
 | [`servidor-propio.toml`](servidor-propio.toml) | Comprobar que tu vLLM, SGLang u Ollama (o una cuantización nueva) responde igual que la referencia antes de pasar a producción | Opcional |
+| [`demo-en-vivo.toml`](demo-en-vivo.toml) | Auditar la demo en vivo: tres APIs dicen servir Qwen2.5 y una hace trampa (`cachai ronda` la arma y la revela) | Ninguna |
 | [`github-actions/cachai.yml`](github-actions/cachai.yml) | Auditoría semanal automática; el job falla si un endpoint sale distinguible (`--strict`) | `OPENROUTER_API_KEY` y `CACHAI_API_KEY` como secretos |
 
 ## Lo mismo sin archivo

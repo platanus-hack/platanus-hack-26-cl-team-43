@@ -1,0 +1,18 @@
+# La demo en vivo: tres APIs dicen servir Qwen2.5 1.5B y una de A o B hace trampa.
+# Copiar como cachai.toml y correr `cachai scan`. Con `cachai ronda cuantizado` (o modelo-chico,
+# o prompt-oculto) se arma una ronda y con `cachai ronda --revelar` se sabe quién era.
+model = "qwen2.5-1.5b-instruct"
+openrouter = false
+out = "audit/demo-en-vivo"
+
+[[endpoint]]
+name = "oficial"                 # la referencia
+url = "https://cachai.jjato.com/oficial/v1"
+
+[[endpoint]]
+name = "A"
+url = "https://cachai.jjato.com/a/v1"
+
+[[endpoint]]
+name = "B"
+url = "https://cachai.jjato.com/b/v1"

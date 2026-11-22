@@ -26,6 +26,8 @@ cachai scan -e deepseek:deepseek-chat -e together:deepseek-ai/DeepSeek-V3   # AP
 cachai scan                                          # lee ./cachai.toml
 ```
 
+Para actualizar una instalación anterior: `uv tool upgrade cachai` (con pipx, `pipx install --force` y la misma URL; con `uvx`, agregar `--refresh`).
+
 `cachai demo` audita en memoria a un proveedor honesto, a uno que agrega un prompt oculto y a uno que responde con un modelo más chico con el mismo nombre, y marca a los dos tramposos. Más casos (servidor propio, autor contra revendedores, auditoría semanal en GitHub Actions) en [`examples/`](examples/).
 
 ### Tu cuenta y el panel
@@ -52,8 +54,10 @@ Al servidor solo viaja la ficha (los conteos por endpoint y el SHA-256 de la evi
 Las URLs son APIs reales, así que también se auditan desde cualquier máquina:
 
 ```bash
+cachai ronda cuantizado      # arma una ronda: A o B va a servir la versión cuantizada (o modelo-chico, o prompt-oculto)
 D=https://cachai.jjato.com
 cachai scan qwen2.5-1.5b-instruct --no-openrouter -e oficial=$D/oficial/v1 -e A=$D/a/v1 -e B=$D/b/v1
+cachai ronda --revelar       # dice quién hacía trampa y arma otra ronda
 ```
 
 Corre en CPU, con los modelos servidos por nosotros en Ollama; el tramposo es nuestro y solo se audita a sí mismo. Para levantarla en local: `cachai serve` con un Ollama que tenga los tres modelos ([`deploy/demo/`](deploy/demo/)).
@@ -244,8 +248,8 @@ src/cachai/        el auditor
   db.py              las tablas (SQLAlchemy): usuarios, claves, auditorías y mediciones por endpoint
   migrations/        migraciones de Alembic; el servidor las aplica al arrancar
   salida.py          lo que se ve en la terminal: tablas alineadas, color y barra de avance, sin dependencias
-  cli.py             cachai demo · login · scan · cuenta · endpoints · serve · experimento
-tests/             71 tests de punta a punta, sin red ni claves
+  cli.py             cachai demo · login · scan · cuenta · ronda · endpoints · serve · experimento
+tests/             72 tests de punta a punta, sin red ni claves
 examples/          configuraciones listas para copiar (OpenRouter, APIs directas, servidor propio, CI)
 results/linea-base/  resultados del experimento con el juguete y con Qwen2.5 (JSON y Markdown)
 results/proveedores/  auditoría de GLM-5.3 en OpenRouter (fichas, respuestas crudas y cómo leerlas)
@@ -254,7 +258,7 @@ deploy/demo/       imagen de la demo en vivo: Ollama con los modelos y cachai se
 
 ```bash
 uv sync
-uv run pytest -q                                   # 71 tests, sin red ni claves
+uv run pytest -q                                   # 72 tests, sin red ni claves
 uv run cachai experimento --toy --reps 30          # la línea base, sin claves (~2 min)
 uv run cachai endpoints z-ai/glm-5.3               # lo que declara cada proveedor, sin clave
 uv run cachai experimento --ollama --reps 20       # la línea base con Qwen2.5 (necesita Ollama con los modelos)
