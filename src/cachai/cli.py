@@ -163,7 +163,8 @@ def _audit(model: str, targets: list[Target], reference: str, http: httpx.Client
         targets = targets + [replace(ref_t, name=floor, first_party=False)]
     seed = None if args.public else (
         args.seed if args.seed is not None else secrets.randbelow(2**32))
-    probes = suite.build(seed, n_tasks=args.tasks)
+    probes = (suite.quick(seed) if getattr(args, "rapida", False)
+              else suite.build(seed, n_tasks=args.tasks))
     salida.title(f"Auditoría de {model}")
     salida.fields([
         ("endpoints", f"{len(targets) - (1 if floor else 0)}, con {len(probes)} pruebas a cada uno"),
@@ -427,6 +428,9 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--reference", help="nombre del endpoint de referencia, o 'consenso'")
     p.add_argument("--strict", action="store_true",
                    help="sale con código 2 si algún endpoint es distinguible (para CI)")
+    p.add_argument("--rapida", action="store_true",
+                   help="auditoría corta de 24 pruebas, sin tool calls: detecta cuantización, "
+                        "modelo más chico y prompt oculto en menos tiempo")
     p.add_argument("--no-subir", action="store_true",
                    help="no manda la ficha al panel de tu cuenta (queda solo en este equipo)")
     _audit_options(p)

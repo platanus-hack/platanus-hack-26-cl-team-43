@@ -64,18 +64,8 @@ def _accounts(app: FastAPI, database_url: str, verify, public_url: str) -> bool:
 
 
 def quick_probes(seed: int) -> list:
-    """Unas 24 pruebas: tokens, 4 tareas, 4 canarios y 10 de texto libre (sin tool calls,
-    que en CPU son lentas). Alcanza para la cuantización, el modelo chico y el prompt."""
-    out, canaries = [], 0
-    for p in suite.build(seed, n_tasks=4):
-        if p.kind == "tool":
-            continue
-        if p.kind == "canary":
-            canaries += 1
-            if canaries > 4:
-                continue
-        out.append(p)
-    return out
+    """Unas 24 pruebas, sin tool calls: las mismas de `cachai scan --rapida`."""
+    return suite.quick(seed)
 
 
 def _rename_stream(sse: str, asked: str) -> str:

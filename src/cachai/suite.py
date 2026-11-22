@@ -232,3 +232,18 @@ def fingerprint(messages: list[dict]) -> str:
 def public_fingerprints(n_tasks: int = 20) -> frozenset[str]:
     """Lo que un proveedor tramposo puede memorizar del juego público."""
     return frozenset(fingerprint(p.as_messages()) for p in build(None, n_tasks))
+
+
+def quick(seed: int | None) -> list:
+    """La auditoría rápida: tokens, 4 tareas, 4 canarios y 10 de texto libre, sin tool calls
+    (que en CPU son lentas). Alcanza para la cuantización, el modelo chico y el prompt oculto."""
+    out, canaries = [], 0
+    for p in build(seed, n_tasks=4):
+        if p.kind == "tool":
+            continue
+        if p.kind == "canary":
+            canaries += 1
+            if canaries > 4:
+                continue
+        out.append(p)
+    return out

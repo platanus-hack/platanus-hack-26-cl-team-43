@@ -56,11 +56,11 @@ Las URLs son APIs reales, así que también se auditan desde cualquier máquina:
 ```bash
 cachai ronda cuantizado      # arma una ronda: A o B va a servir la versión cuantizada (o modelo-chico, o prompt-oculto)
 D=https://cachai.jjato.com
-cachai scan qwen2.5-1.5b-instruct --no-openrouter -e oficial=$D/oficial/v1 -e A=$D/a/v1 -e B=$D/b/v1
+cachai scan qwen2.5-1.5b-instruct --no-openrouter -e oficial=$D/oficial/v1 -e A=$D/a/v1 -e B=$D/b/v1 --rapida
 cachai ronda --revelar       # dice quién hacía trampa y arma otra ronda
 ```
 
-Corre en CPU, con los modelos servidos por nosotros en Ollama; el tramposo es nuestro y solo se audita a sí mismo. Para levantarla en local: `cachai serve` con un Ollama que tenga los tres modelos ([`deploy/demo/`](deploy/demo/)).
+Con `--rapida` son las mismas 24 pruebas de la página y tarda cerca de un minuto; sin esa opción corre las 52, tool calls incluidas, y tarda unos tres. Corre en CPU, con los modelos servidos por nosotros en Ollama; el tramposo es nuestro y solo se audita a sí mismo. Para levantarla en local: `cachai serve` con un Ollama que tenga los tres modelos ([`deploy/demo/`](deploy/demo/)).
 
 ### Dónde se puede usar
 
@@ -249,7 +249,7 @@ src/cachai/        el auditor
   migrations/        migraciones de Alembic; el servidor las aplica al arrancar
   salida.py          lo que se ve en la terminal: tablas alineadas, color y barra de avance, sin dependencias
   cli.py             cachai demo · login · scan · cuenta · ronda · endpoints · serve · experimento
-tests/             72 tests de punta a punta, sin red ni claves
+tests/             73 tests de punta a punta, sin red ni claves
 examples/          configuraciones listas para copiar (OpenRouter, APIs directas, servidor propio, CI)
 results/linea-base/  resultados del experimento con el juguete y con Qwen2.5 (JSON y Markdown)
 results/proveedores/  auditoría de GLM-5.3 en OpenRouter (fichas, respuestas crudas y cómo leerlas)
@@ -258,7 +258,7 @@ deploy/demo/       imagen de la demo en vivo: Ollama con los modelos y cachai se
 
 ```bash
 uv sync
-uv run pytest -q                                   # 72 tests, sin red ni claves
+uv run pytest -q                                   # 73 tests, sin red ni claves
 uv run cachai experimento --toy --reps 30          # la línea base, sin claves (~2 min)
 uv run cachai endpoints z-ai/glm-5.3               # lo que declara cada proveedor, sin clave
 uv run cachai experimento --ollama --reps 20       # la línea base con Qwen2.5 (necesita Ollama con los modelos)

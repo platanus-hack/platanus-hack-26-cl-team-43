@@ -88,3 +88,12 @@ def test_markdown_a_texto_de_terminal(capsys):
     out = capsys.readouterr().out
     assert "Línea base" in out and "|" not in out and "`" not in out
     assert "  honesto        0/30" in out and "  prompt-oculto  30/30" in out
+
+
+def test_auditoria_rapida_sin_tool_calls():
+    from cachai import suite
+
+    probes = suite.quick(7)
+    kinds = [p.kind for p in probes]
+    assert len(probes) == 24 and "tool" not in kinds and kinds.count("canary") == 4
+    assert [p.id for p in suite.quick(7)] == [p.id for p in probes]
