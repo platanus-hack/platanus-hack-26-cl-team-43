@@ -108,3 +108,63 @@ def test_client_follows_redirects_for_renamed_repo(conn):
     respx.get(f"{API}/repositories/1/commits").respond(200, json=[{"sha": "z"}])
     resp = GitHubClient("tok").get("/repos/old/name/commits")
     assert resp.status == 200 and resp.json[0]["sha"] == "z"
+
+
+@respx.mock
+def test_contents_500_raises_and_runner_keeps_old_cursor(conn):
+    import pytest
+
+    from radar.collectors.github_client import GitHubError
+    from radar.collectors.runner import load_cursor, run_collector, save_cursor
+
+    wl = _make(conn)
+    save_cursor(conn, "github_watchlist", {})
+    conn.commit()
+    respx.get(f"{API}/repos/a/b/commits").respond(200, json=_commit("h1"))
+    respx.get(f"{API}/repos/a/b/git/trees/h1").respond(200, json={"tree": [
+        {"path": "a.md", "type": "blob", "size": 1}, {"path": "b.md", "type": "blob", "size": 1}]})
+    respx.get(f"{API}/repos/a/b/contents/a.md").respond(200, text="AAA")
+    respx.get(f"{API}/repos/a/b/contents/b.md").respond(500)
+    with pytest.raises(GitHubError):
+        GitHubWatchlist(GitHubClient("tok"), conn).poll({})
+    assert run_collector(conn, wl) == 0
+    assert load_cursor(conn, "github_watchlist") == {}
+    assert conn.execute("select count(*) as n from raw_items").fetchone()["n"] == 0
+
+
+@respx.mock
+def test_compare_404_falls_back_to_first_sight(conn):
+    wl = _make(conn)
+    respx.get(f"{API}/repos/a/b/commits").respond(200, json=_commit("s2"))
+    respx.get(f"{API}/repos/a/b/compare/s1...s2").respond(404)
+    respx.get(f"{API}/repos/a/b/git/trees/s2").respond(200, json={"tree": [
+        {"path": "a.md", "type": "blob", "size": 1}]})
+    respx.get(f"{API}/repos/a/b/contents/a.md").respond(200, text="AAA")
+    items, cursor = wl.poll({"a/b": {"sha": "s1", "etag": None}})
+    assert [i.external_id for i in items] == ["a/b@s2:a.md"]
+    assert cursor["a/b"]["sha"] == "s2"
+
+
+@respx.mock
+def test_commits_403_raises(conn):
+    import pytest
+
+    from radar.collectors.github_client import GitHubError
+
+    wl = _make(conn)
+    respx.get(f"{API}/repos/a/b/commits").respond(403, json={"message": "Bad credentials"})
+    with pytest.raises(GitHubError):
+        wl.poll({})
+
+
+@respx.mock
+def test_truncated_tree_logs_warning(conn, caplog):
+    wl = _make(conn)
+    respx.get(f"{API}/repos/a/b/commits").respond(200, json=_commit("h1"))
+    respx.get(f"{API}/repos/a/b/git/trees/h1").respond(200, json={"truncated": True, "tree": [
+        {"path": "a.md", "type": "blob", "size": 1}]})
+    respx.get(f"{API}/repos/a/b/contents/a.md").respond(200, text="AAA")
+    with caplog.at_level("WARNING"):
+        items, _ = wl.poll({})
+    assert len(items) == 1
+    assert any("a/b" in r.message and r.levelname == "WARNING" for r in caplog.records)

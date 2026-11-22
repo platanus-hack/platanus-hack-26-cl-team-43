@@ -1,7 +1,10 @@
+import logging
 from datetime import timedelta
 
 from radar.collectors.base import Cursor, RawItem
-from radar.collectors.github_client import GitHubClient
+from radar.collectors.github_client import GitHubClient, GitHubError
+
+log = logging.getLogger(__name__)
 
 SOURCE = "github_watchlist"
 TEXT_EXTS = (".md", ".txt", ".json", ".yaml", ".yml", ".csv")
@@ -42,6 +45,8 @@ class GitHubWatchlist:
             if resp.status == 304:
                 new_cursor[full] = state
                 continue
+            if resp.status in (401, 403):
+                raise GitHubError(f"GitHub {resp.status} on /repos/{full}/commits", resp.status)
             if resp.status != 200 or not resp.json:
                 # 409 = empty repo, 404 = gone: skip silently, keep any old state
                 if state:
@@ -62,8 +67,15 @@ class GitHubWatchlist:
 
     def _diff_items(self, full, old, new, author) -> list[RawItem]:
         resp = self.client.get(f"/repos/{full}/compare/{old}...{new}")
+        if resp.status == 404:  # old sha gone (force-push): treat as first sight
+            return self._first_sight_items(full, new, author)
+        if resp.status != 200:
+            raise GitHubError(f"GitHub {resp.status} on compare for {full}", resp.status)
+        files = (resp.json or {}).get("files", [])
+        if len(files) >= 300:
+            log.warning("compare for %s returned 300 files; results may be truncated", full)
         out = []
-        for f in (resp.json or {}).get("files", []):
+        for f in files:
             name = f["filename"]
             if not _is_text(name) or not f.get("changes") or not f.get("patch"):
                 continue
@@ -81,6 +93,10 @@ class GitHubWatchlist:
 
     def _first_sight_items(self, full, sha, author) -> list[RawItem]:
         resp = self.client.get(f"/repos/{full}/git/trees/{sha}", params={"recursive": 1})
+        if resp.status != 200:
+            raise GitHubError(f"GitHub {resp.status} on tree for {full}", resp.status)
+        if (resp.json or {}).get("truncated"):
+            log.warning("tree for %s@%s is truncated; some files will be missed", full, sha)
         out = []
         for node in (resp.json or {}).get("tree", []):
             path = node["path"]
@@ -89,7 +105,11 @@ class GitHubWatchlist:
             if node.get("size", 0) > MAX_BYTES:
                 continue
             body = self.client.get(f"/repos/{full}/contents/{path}", params={"ref": sha}, raw=True)
-            if body.status != 200 or not body.json:
+            if body.status == 404:  # deleted between tree and fetch
+                continue
+            if body.status != 200:
+                raise GitHubError(f"GitHub {body.status} on contents {full}/{path}", body.status)
+            if not body.json:
                 continue
             out.append(RawItem(
                 source=SOURCE,
