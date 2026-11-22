@@ -46,6 +46,8 @@ _TEMPLATES = [
     re.compile(r"^Sort these numbers in ascending order: "),
     re.compile(r"^Repeat exactly, with nothing else: "),
     re.compile(r"^Ticket \d{6}: what is the weather in "),
+    re.compile(r"^Create order ORD-\d+ with priority "),
+    re.compile(r"^Incident \d{6}: emit a severity \d+ alert for service "),
     re.compile(r"^(\w+ ){1,6}\d{6}$"),
     re.compile(re.escape(suite.CANARY_ASK)),
     re.compile(r"^Write one short sentence about .+, for reader \d{4}\.$"),

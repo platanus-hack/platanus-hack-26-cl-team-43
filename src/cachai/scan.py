@@ -38,7 +38,8 @@ def _run_target(target: Target, probes: list[Probe], http: httpx.Client, spend: 
         for attempt in range(RATE_LIMIT_RETRIES + 1):
             r = ask(target, p.id, p.as_messages(), http=http,
                     tools=list(p.tools) if p.tools else None,
-                    max_tokens=p.max_tokens + extra)
+                    max_tokens=p.max_tokens + extra,
+                    stream=p.stream)
             # un 429 no dice nada del modelo: se espera y se repite la misma prueba
             if not (r.error or "").startswith("429") or attempt == RATE_LIMIT_RETRIES:
                 break

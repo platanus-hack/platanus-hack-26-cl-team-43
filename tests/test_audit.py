@@ -206,7 +206,7 @@ def test_rate_limit_is_retried_not_counted_as_failure(monkeypatch):
     probes = suite.build(5, n_tasks=4)
     calls, waits = [], []
 
-    def fake_ask(target, probe_id, messages, *, http, tools=None, max_tokens=256):
+    def fake_ask(target, probe_id, messages, *, http, tools=None, max_tokens=256, stream=False):
         calls.append((probe_id, max_tokens))
         first = sum(pid == probe_id for pid, _ in calls) == 1
         if first and probe_id == probes[0].id:

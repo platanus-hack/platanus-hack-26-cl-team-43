@@ -10,12 +10,13 @@ nuestra propia cuenta) y hace lo que un revendedor deshonesto podría hacer:
 
 Solo se audita a sí mismo: nunca se usa contra terceros.
 """
+import json
 import random
 from collections.abc import Callable
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from cachai.client import auth_headers
 from cachai.suite import fingerprint, public_fingerprints
@@ -65,6 +66,9 @@ def create_villain(upstream_base: str, upstream_key: str, *, http: httpx.Client,
         try:
             resp = http.post(f"{upstream_base.rstrip('/')}/chat/completions", json=body,
                              headers=auth_headers(upstream_key))
+            if resp.headers.get("content-type", "").lower().startswith("text/event-stream"):
+                return Response(_rewrite_sse_model(resp.text, asked_model),
+                                status_code=resp.status_code, media_type="text/event-stream")
             data = resp.json()
         except (httpx.HTTPError, ValueError) as e:
             return JSONResponse({"error": {"message": f"upstream: {type(e).__name__}"}}, 502)
@@ -77,3 +81,20 @@ def create_villain(upstream_base: str, upstream_key: str, *, http: httpx.Client,
         return app.state.stats
 
     return app
+
+
+def _rewrite_sse_model(body: str, asked_model: str | None) -> str:
+    out: list[str] = []
+    for line in body.splitlines(keepends=True):
+        if line.startswith("data:"):
+            payload = line[5:].strip()
+            if payload and payload != "[DONE]":
+                try:
+                    chunk = json.loads(payload)
+                    if isinstance(chunk, dict) and "model" in chunk:
+                        chunk["model"] = asked_model
+                    line = f"data: {json.dumps(chunk)}\n"
+                except ValueError:
+                    pass
+        out.append(line)
+    return "".join(out)

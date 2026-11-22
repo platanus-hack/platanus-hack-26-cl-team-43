@@ -35,6 +35,8 @@ PRESETS: dict[str, Preset] = {
                          "https://app.hyperbolic.xyz/settings"),
     "nebius": Preset("https://api.studio.nebius.com/v1", "NEBIUS_API_KEY",
                      "https://studio.nebius.com/settings/api-keys"),
+    "50x": Preset("https://api.ai.50x.energy/v1", "50X_API_KEY",
+                  "https://ai.50x.energy/docs"),
     # el autor del modelo, cuando lo sirve él mismo (buena referencia)
     "deepseek": Preset("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY",
                        "https://platform.deepseek.com/api_keys"),
