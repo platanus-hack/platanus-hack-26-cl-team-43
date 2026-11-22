@@ -35,6 +35,7 @@ El adversario es el proveedor. Controla el servidor, ve cada petición y puede c
 |---|---|---|
 | Inyectar un system prompt propio delante del pedido | Excedente constante de tokens de prompt frente a la referencia, y el canario si el prompt cambia el comportamiento | Medido con el proveedor tramposo propio |
 | Desviar todo el tráfico a un modelo más barato y responder con el nombre pedido | Exactitud y coincidencia con la referencia en tareas con respuesta calculable | Medido |
+| Servir una versión cuantizada que acierta casi lo mismo | Coincidencia del texto libre con la referencia, contra un piso de ruido | Medido con Qwen2.5 servido por nosotros |
 | Desviar solo una fracción del tráfico | Prueba combinada sobre todas las fallas; la potencia crece con el número de tareas | Medido: el 30 % se detecta en 6/30 con 20 tareas y en 30/30 con 80 |
 | Romper las tool calls (parser o plantilla) | Una herramienta con esquema estricto | Implementado, sin medición propia |
 | **Reconocer las auditorías** y portarse bien solo con ellas | Juego ciego: pruebas generadas con una semilla nueva en cada auditoría | Medido: el benchmark fijo lo detecta 0/120 veces; el ciego, 30/30 |
@@ -53,12 +54,13 @@ Se apoya en tres ideas:
 2. **Controles deterministas, sin juez LLM.** Todas las pruebas tienen respuesta calculable. El auditor no puede ser inyectado por la respuesta que audita y da el mismo veredicto cada vez.
 3. **Evidencia con su nivel a la vista.** Cada dato de la ficha dice si lo declara el proveedor (E1), si se midió desde afuera (E2) o si está atestado criptográficamente (E3). Un sello único de «proveedor confiable» mezclaría lo que el proveedor dice con lo que se midió. Hoy el código cubre E1 y E2.
 
-Qué mide en cada endpoint (38 pruebas por auditoría):
+Qué mide en cada endpoint (48 pruebas por auditoría):
 
 | Control | Qué delata | Cómo |
 |---|---|---|
 | Tokens de prompt de sobra | Un prompt oculto | 6 mensajes mínimos; un excedente constante frente a la referencia es la firma de un prefijo agregado |
 | Exactitud y coincidencia con la referencia | Un modelo sustituido o degradado | 20 tareas con respuesta calculable (sumas, productos, ordenar, repetir), a temperatura 0 |
+| Coincidencia del texto libre | Una cuantización o un modelo distinto que acierta igual | 10 frases cortas a temperatura 0. Se compara con lo que coincide la referencia consigo misma en otra llamada (el piso de ruido), no con un 100 % ideal |
 | Tool calls válidas | Un parser o una plantilla distintos | 4 llamadas a una herramienta con esquema estricto |
 | Canario | Que el endpoint filtre el secreto del system prompt | 8 secretos distintos y un juez determinista: el secreto aparece literal en la respuesta o no |
 | Confiabilidad | Un endpoint inestable | Errores y latencia mediana de cada endpoint durante la corrida |
@@ -74,8 +76,8 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 **El auditor** (`cachai scan`) recorre cinco pasos:
 
 1. **Lo declarado** (`endpoints.py`). Lee de la API pública de OpenRouter la cuantización y el precio de cada endpoint del modelo, y elige cuáles auditar.
-2. **Juego ciego** (`suite.py`). Con una semilla nueva genera las 38 pruebas. Sin semilla genera el juego público, siempre igual, que sirve de comparación.
-3. **Las mismas pruebas a todos** (`client.py`, `scan.py`). Las manda a cada endpoint fijado (`provider.only`, sin fallback) y a una referencia, a temperatura 0, en paralelo y con un tope de gasto. Un error no detiene la auditoría: se registra como dato de confiabilidad.
+2. **Juego ciego** (`suite.py`). Con una semilla nueva genera las 48 pruebas. Sin semilla genera el juego público, siempre igual, que sirve de comparación.
+3. **Las mismas pruebas a todos** (`client.py`, `scan.py`). Las manda a cada endpoint fijado (`provider.only`, sin fallback) y a una referencia, a temperatura 0, en paralelo y con un tope de gasto. La referencia se consulta dos veces: la segunda es el piso de ruido. Un error no detiene la auditoría: se registra como dato de confiabilidad.
 4. **Controles** (`checks.py`). Convierte las respuestas crudas en una medición por endpoint y la compara con la referencia. Si ningún control individual dispara, una prueba combinada suma todas las fallas.
 5. **Ficha** (`ficha.py`). JSON y Markdown con lo declarado, lo medido, el motivo de cada marca, los límites, la semilla y el SHA-256 de las respuestas crudas, que se guardan aparte.
 
@@ -104,6 +106,10 @@ Un proveedor tramposo propio (un proxy hacia el mismo modelo) aplica cuatro tram
 - **El límite, medido igual**: un tramposo que además reconoce las plantillas del juego ciego evade a Cachai en todas las condiciones (0/30). Por eso el diseño final audita con una muestra del tráfico real del comprador ([`docs/arquitectura.md`](docs/arquitectura.md#7-lo-que-sigue)).
 - **Alcance**: el upstream es un modelo de juguete con reglas fijas. Prueba que el mecanismo funciona; no es un hallazgo sobre ningún proveedor.
 
+### Modelos reales servidos por nosotros
+
+La misma línea base con Qwen2.5 1.5B servido con Ollama: la referencia en Q8 y proveedores propios que sirven Q4, Q2 o el 0.5B con el mismo nombre (`uv run cachai experimento --ollama`). En una primera repetición local, el Q4 acertó las mismas tareas que la referencia y solo se delató en el texto libre: coincidió en 12 de 30 respuestas, contra 30 de 30 del piso de ruido. La corrida de 20 repeticiones está en curso a 2026-11-22.
+
 ### Medición contra proveedores reales
 
 En curso a 2026-11-22. Se agrega en `results/proveedores/` con el mismo formato de ficha.
@@ -121,7 +127,7 @@ En curso a 2026-11-22. Se agrega en `results/proveedores/` con el mismo formato 
 ```
 src/cachai/        el auditor
   endpoints.py       lo que declara cada endpoint en OpenRouter (E1) y cuáles auditar
-  suite.py           juego público (fijo) y ciego (con semilla): 38 pruebas con respuesta calculable
+  suite.py           juego público (fijo) y ciego (con semilla): 48 pruebas (38 con respuesta calculable y 10 de texto libre)
   client.py          una llamada a un endpoint: proveedor fijado, temperatura 0, nunca lanza
   scan.py            corre las pruebas en paralelo por endpoint, con tope de gasto
   checks.py          controles deterministas, Fisher exacto, Wilson y el veredicto por endpoint

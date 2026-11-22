@@ -5,6 +5,7 @@ import logging
 import os
 import secrets
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -69,6 +70,13 @@ def cmd_scan(args) -> None:
             (t.name for t in targets if t.first_party), checks.CONSENSUS)
         if reference != checks.CONSENSUS and reference not in names:
             sys.exit(f"la referencia {reference!r} no está entre: {', '.join(names)}")
+        floor = None
+        if reference != checks.CONSENSUS and not args.no_floor:
+            # el piso de ruido: la misma referencia por segunda vez; lo que coincide consigo
+            # misma es la vara para la coincidencia de los demás
+            floor = f"{reference} (piso)"
+            ref_t = next(t for t in targets if t.name == reference)
+            targets.append(replace(ref_t, name=floor, first_party=False))
         seed = None if args.public else (
             args.seed if args.seed is not None else secrets.randbelow(2**32))
         probes = suite.build(seed, n_tasks=args.tasks)
@@ -78,7 +86,7 @@ def cmd_scan(args) -> None:
             targets, probes, http=http, max_usd=args.max_usd,
             on_reply=lambda r: print("." if r.ok else "x", end="", flush=True))
         print()
-    cards = checks.score(probes, replies, reference)
+    cards = checks.score(probes, replies, reference, floor)
     f = ficha.build(args.model, targets, cards, replies, reference=reference,
                     suite="publico" if seed is None else "ciego", seed=seed,
                     declared=declared, spent_usd=spend.spent)
@@ -166,6 +174,8 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--public", action="store_true", help="usa el juego público de prompts fijos")
     p.add_argument("--seed", type=int, help="semilla del juego ciego (para volver a correrlo)")
     p.add_argument("--tasks", type=int, default=20)
+    p.add_argument("--no-floor", action="store_true",
+                   help="no consulta la referencia dos veces (sin control de coincidencia)")
     p.add_argument("--max-usd", type=float, default=2.0)
     p.add_argument("--timeout", type=float, default=120)
     p.add_argument("--out", default="audit/fichas")

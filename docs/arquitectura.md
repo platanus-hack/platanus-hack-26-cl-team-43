@@ -33,7 +33,7 @@ El adversario es el proveedor. Controla el servidor, ve cada petición y puede c
 
 - **Caja negra.** Solo hay acceso a la API, como cualquier comprador. Sin pesos ni GPU propia.
 - **Referencia.** Es el endpoint first-party si existe; si no, una referencia elegida o el consenso de los endpoints. La referencia también es un endpoint: se mide equivalencia con ella, no con los pesos.
-- **Costo.** 38 pruebas por endpoint y un tope de gasto por auditoría (`--max-usd`, 2 USD por defecto).
+- **Costo.** 48 pruebas por endpoint, más una segunda pasada a la referencia como piso de ruido, y un tope de gasto por auditoría (`--max-usd`, 2 USD por defecto).
 - **No determinismo.** Temperatura 0 y semilla fija reducen la variación, pero no la eliminan entre hardware distinto.
 - **Ética.** Solo se audita con uso normal de la API desde una cuenta propia. El proveedor tramposo es un proxy nuestro; nunca se ataca a terceros.
 
@@ -42,7 +42,7 @@ El adversario es el proveedor. Controla el servidor, ve cada petición y puede c
 | # | Supuesto | Estado y cómo se verifica |
 |---|---|---|
 | S1 | Con el proveedor fijado (`provider.only`, sin fallback), OpenRouter devuelve los `prompt_tokens` nativos de ese proveedor. | **Supuesto.** Una llamada real por proveedor, comparando el conteo con el tokenizer público. |
-| S2 | Dos endpoints honestos del mismo modelo, a temperatura 0, no se distinguen con p < 0,01 en 38 pruebas. | **Medido solo con el juguete** (el control honesto nunca se marcó: 0/90). Con proveedores reales se mide el piso de ruido con un proxy honesto hacia el mismo endpoint (`cachai experimento` sin `--toy`). |
+| S2 | Dos endpoints honestos del mismo modelo, a temperatura 0, no se distinguen con p < 0,01 en 48 pruebas. | **Medido solo con el juguete** (el control honesto nunca se marcó: 0/90). Con proveedores reales se mide el piso de ruido con un proxy honesto hacia el mismo endpoint (`cachai experimento` sin `--toy`). |
 | S3 | Distintas plantillas de chat cambian el conteo de tokens en una cantidad chica y constante. | **Probable.** Si es así, un excedente legítimo se confundiría con A1: hay que calibrar la diferencia esperada por proveedor antes de marcar (§5, R2). |
 | S4 | El endpoint first-party sirve el modelo declarado. | **Supuesto.** Si no hay first-party o es dudoso, la referencia pasa a ser el consenso. |
 | S5 | El proveedor no distingue una auditoría por la cuenta o la clave. | **Probable** a través de OpenRouter, que media la llamada. En APIs directas el proveedor ve la clave: se audita con la clave del propio comprador. |
@@ -70,10 +70,10 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 
 **Auditor** (`src/cachai/`)
 1. **Lo declarado** (`endpoints.py`): lee de la API pública de OpenRouter la cuantización y el precio de cada endpoint del modelo, y elige cuáles auditar (el first-party más los más baratos, o los que se pidan).
-2. **Juego de pruebas** (`suite.py`): con una semilla, genera 38 pruebas con respuesta calculable: 6 mensajes mínimos para contar tokens, 20 tareas (suma, producto, ordenar, repetir), 4 tool calls con esquema estricto y 8 canarios (un secreto en el system prompt y un pedido de revelarlo). Sin semilla genera el juego público, siempre igual.
+2. **Juego de pruebas** (`suite.py`): con una semilla, genera 48 pruebas: 6 mensajes mínimos para contar tokens, 20 tareas (suma, producto, ordenar, repetir), 4 tool calls con esquema estricto, 8 canarios (un secreto en el system prompt y un pedido de revelarlo) y 10 frases cortas de texto libre. Las de texto libre van al final, así una semilla anterior genera las mismas 38 primeras. Sin semilla genera el juego público, siempre igual.
 3. **Cliente** (`client.py`): una llamada por prueba, con el proveedor fijado (`provider.only`, `allow_fallbacks: false`), temperatura 0 y semilla 7. **Nunca lanza**: un error vuelve dentro de la respuesta y se clasifica (clave inválida, sin crédito, falla del proveedor).
 4. **Ejecución** (`scan.py`): los endpoints se auditan en paralelo (hasta cuatro a la vez), con un tope de gasto compartido. Una clave inválida detiene ese endpoint en vez de reintentar.
-5. **Controles** (`checks.py`): de respuestas crudas a una medición por endpoint. Tokens: excedente constante o variable frente a la referencia. Tareas: exactitud con intervalo de Wilson y coincidencia con la referencia. Tool calls: validez estricta. Canario: un juez determinista (el secreto aparece literal en la respuesta o no). Cada comparación con la referencia es un **test exacto de Fisher a dos colas** con α = 0,01 fijado antes de medir; si ningún control individual dispara, una prueba combinada suma todas las fallas.
+5. **Controles** (`checks.py`): de respuestas crudas a una medición por endpoint. Tokens: excedente constante o variable frente a la referencia. Tareas: exactitud con intervalo de Wilson y coincidencia con la referencia. Coincidencia: cuántas respuestas (tareas y texto libre) son idénticas a las de la referencia, comparado con Fisher contra lo que coincide el piso de ruido (la misma referencia en otra llamada); así el no determinismo del servidor no se cuenta como trampa. Tool calls: validez estricta. Canario: un juez determinista (el secreto aparece literal en la respuesta o no). Cada comparación con la referencia es un **test exacto de Fisher a dos colas** con α = 0,01 fijado antes de medir; si ningún control individual dispara, una prueba combinada suma todas las fallas.
 6. **Ficha** (`ficha.py`): JSON y Markdown con lo declarado (E1), lo medido (E2), el motivo de cada marca, los límites, la semilla y el SHA-256 de las respuestas crudas, que se guardan en JSONL.
 
 **Laboratorio** (`villain.py`, `toy.py`, `experiment.py`)
@@ -101,7 +101,7 @@ Son tres piezas: el **auditor**, que mide endpoints reales; el **laboratorio**, 
 |---|---|---|
 | **M1. Tests** | 21 tests de punta a punta en memoria, sin red ni claves (`tests/`) | Todos pasan antes de cada cambio. **Medido**: 21/21. |
 | **M2. Línea base con el juguete** | Benchmark fijo contra juego ciego, cinco proveedores (uno honesto), 30 repeticiones por celda, 20 y 80 tareas | Detección por trampa con IC95 de Wilson; falsas alarmas del honesto. **Medido** (§6). |
-| **M3. Piso de ruido real** | La misma línea base con un modelo real en OpenRouter: el proxy honesto mide cuántas falsas alarmas da el no determinismo | Falsas alarmas del honesto ≤ 1/30 para aceptar α = 0,01. **En curso.** |
+| **M3. Modelos reales servidos por nosotros** | Qwen2.5 1.5B servido con Ollama: Q8 como referencia y piso de ruido, y proveedores propios que sirven Q4, Q2, el 0.5B, un prompt oculto o un desvío del 30 %, más uno honesto (`cachai experimento --ollama`, 20 repeticiones) | Falsas alarmas del honesto ≤ 1/20 para aceptar α = 0,01; detección por trampa con IC95. **En curso** (una repetición local: honesto sin marca, piso 30/30, Q4 marcado solo por coincidencia 12/30 con exactitud igual a la referencia). |
 | **M4. Proveedores reales** | `cachai scan` sobre los endpoints de un modelo con varios proveedores | Fichas con su evidencia en `results/proveedores/`. **En curso.** |
 
 **Reglas de evidencia**
